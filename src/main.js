@@ -1,4 +1,4 @@
-import './style.css';
+// styles are linked in index.html
 
 const app = document.getElementById('app');
 

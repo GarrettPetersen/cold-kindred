@@ -328,7 +328,7 @@ async function runSimulation() {
 
   // ---------- Step 2: Pair founders and record marriages ----------
   await delay(150);
-  function pairAndMarry(malesArr, femalesArr) {
+  function pairAndMarry(malesArr, femalesArr, marriageRate, partnershipRate) {
     // city-constrained marriage + non-married partnerships
     const byCityM = new Map();
     const byCityF = new Map();
@@ -349,7 +349,7 @@ async function runSimulation() {
       const msAll = mList.slice();
       msAll.sort(() => random() - 0.5);
       fListAll.sort(() => random() - 0.5);
-      const pairCount = Math.floor(Math.min(msAll.length, fListAll.length) * 0.8); // marry ~80%
+      const pairCount = Math.floor(Math.min(msAll.length, fListAll.length) * (typeof marriageRate === 'number' ? marriageRate : 0.8));
       for (let i = 0; i < pairCount; i++) {
         const h = msAll[i];
         const w = fListAll[i];
@@ -360,7 +360,7 @@ async function runSimulation() {
       // Remaining singles in this city form partnerships (~60% of remainder)
       const remainingM = msAll.slice(pairCount);
       const remainingF = fListAll.slice(pairCount);
-      const partnerCount = Math.floor(Math.min(remainingM.length, remainingF.length) * 0.6);
+      const partnerCount = Math.floor(Math.min(remainingM.length, remainingF.length) * (typeof partnershipRate === 'number' ? partnershipRate : 0.6));
       for (let i = 0; i < partnerCount; i++) {
         const h = remainingM[i];
         const w = remainingF[i];
@@ -374,7 +374,7 @@ async function runSimulation() {
     }
     return { couples, partners };
   }
-  const g0 = pairAndMarry(males, females);
+  const g0 = pairAndMarry(males, females, 0.9, 0.6);
   result.steps.push({ name: 'G0 marriages', count: g0.couples.length });
   result.steps.push({ name: 'G0 partnerships', count: g0.partners.length });
   logLine(`G0 marriages: ${g0.couples.length}; partnerships: ${g0.partners.length}`);
@@ -392,7 +392,20 @@ async function runSimulation() {
     let births = 0;
     const birthPairs = couples.concat(partners);
     for (const [father, mother] of birthPairs) {
-      const numKids = Math.floor(random() * 4); // 0..3 kids
+      // Era-based total fertility number (TFN) sampling per couple/partnership
+      const motherBirthYear = year(mother.birthDate);
+      let expected = 0;
+      if (motherBirthYear < 1945) expected = 3.0 + random() * 1.0;       // Silent gen
+      else if (motherBirthYear < 1965) expected = 3.5 + random() * 1.5;  // Boomers higher
+      else if (motherBirthYear < 1985) expected = 2.3 + random() * 1.2;  // Gen X
+      else expected = 1.7 + random() * 0.9;                              // Millennials+
+
+      // Married couples more fertile; partnerships slightly less
+      const isMarriedPair = couples.some(([fh, mw]) => fh.id === father.id && mw.id === mother.id);
+      const baseKids = expected * (isMarriedPair ? 1.0 : 0.75);
+      // Sample integer around expectation (Poisson-ish approximation)
+      let numKids = Math.max(0, Math.round(baseKids + (random() - 0.5)));
+      numKids = Math.min(numKids, 8);
       for (let k = 0; k < numKids; k++) {
         const sex = random() < 0.5 ? 'M' : 'F';
         const firstName = sex === 'M' ? pick(MALE_FIRST) : pick(FEMALE_FIRST);
@@ -400,8 +413,6 @@ async function runSimulation() {
         const birthDate = randomChildBirthDate(year(mother.birthDate));
         // Determine biological father (affair-born children possible only heterosexual)
         let bioFatherId = father.id;
-        // detect if pair is a married couple or a partnership
-        const isMarriedPair = couples.some(([fh, mw]) => fh.id === father.id && mw.id === mother.id);
         const isPartnerPair = !isMarriedPair;
         const fromAffair = isMarriedPair ? (random() < 0.08) : (random() < 0.12);
         if (fromAffair) {
@@ -435,7 +446,10 @@ async function runSimulation() {
     logLine(`G${gen + 1}: births=${births}`);
 
     // Marry within generation for next-gen parents
-    const next = pairAndMarry(genMales, genFemales);
+    // Marriage/partnership rates slightly lower for later generations
+    const marriageRate = Math.max(0.6, 0.9 - gen * 0.07);      // G1: ~0.83, G4: ~0.6
+    const partnershipRate = Math.min(0.7, 0.6 + gen * 0.05);    // G1: ~0.65, G4: ~0.7
+    const next = pairAndMarry(genMales, genFemales, marriageRate, partnershipRate);
     generations[gen + 1] = { males: genMales, females: genFemales, couples: next.couples, partners: next.partners };
     result.steps.push({ name: `G${gen + 1} marriages`, count: next.couples.length });
     result.steps.push({ name: `G${gen + 1} partnerships`, count: next.partners.length });

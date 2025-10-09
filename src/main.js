@@ -726,6 +726,9 @@ async function runSimulation() {
   startBtn.disabled = false;
   runAgainBtn.disabled = false;
 
+  // Build quick lookup before any genealogy rendering
+  const personById = new Map(result.people.map(p => [p.id, p]));
+
   // ----- Player Knowledge Model -----
   const STORAGE_KEY = 'ck:v1:knowledge';
   const emptyKnowledge = () => ({
@@ -910,7 +913,6 @@ async function runSimulation() {
   renderGenealogy();
 
   // Person inspector: build indexes and bind search
-  const personById = new Map(result.people.map(p => [p.id, p]));
   function renderPersonResults(query) {
     const q = (query || '').trim().toLowerCase();
     const matches = q

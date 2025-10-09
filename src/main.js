@@ -445,7 +445,8 @@ async function runSimulation() {
 
   let yearIndex = 0;
   for (let y = START_YEAR; y <= END_YEAR; y++, yearIndex++) {
-    // small delay to visualize progression; keep snappy
+    // announce year transition, then small delay to visualize progression
+    logLine(`— Year ${y} —`);
     await delay(10);
     const b = birthsByYear.get(y) || 0;
     const m = marriagesByYear.get(y) || 0;

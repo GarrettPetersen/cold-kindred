@@ -247,6 +247,53 @@ async function runSimulation() {
     return c ? c.name : 'Unknown';
   }
 
+  // ----- Kinship helpers to prevent close-kin pairing -----
+  function getById(id) {
+    return result.people.find(p => p.id === id) || null;
+  }
+  function bioParentsOf(p) {
+    const s = new Set();
+    if (p.bioFatherId) s.add(p.bioFatherId);
+    else if (p.fatherId) s.add(p.fatherId);
+    if (p.bioMotherId) s.add(p.bioMotherId);
+    else if (p.motherId) s.add(p.motherId);
+    return s;
+  }
+  function bioGrandparentsOf(p) {
+    const gp = new Set();
+    for (const pid of bioParentsOf(p)) {
+      const parent = getById(pid);
+      if (!parent) continue;
+      for (const gpid of bioParentsOf(parent)) gp.add(gpid);
+    }
+    return gp;
+  }
+  function isParentChild(a, b) {
+    return a.id === b.fatherId || a.id === b.motherId || a.id === b.bioFatherId || a.id === b.bioMotherId ||
+           b.id === a.fatherId || b.id === a.motherId || b.id === a.bioFatherId || b.id === a.bioMotherId;
+  }
+  function isSibling(a, b) {
+    if (a.id === b.id) return true;
+    const pa = bioParentsOf(a);
+    const pb = bioParentsOf(b);
+    for (const id of pa) if (pb.has(id)) return true; // share a bio parent (half/step included)
+    return false;
+  }
+  function isCousin(a, b) {
+    const gpa = bioGrandparentsOf(a);
+    const gpb = bioGrandparentsOf(b);
+    for (const id of gpa) if (gpb.has(id)) return true;
+    return false;
+  }
+  function isCloseKin(a, b) {
+    if (!a || !b) return false;
+    if (a.id === b.id) return true;
+    if (isParentChild(a, b)) return true;
+    if (isSibling(a, b)) return true;
+    if (isCousin(a, b)) return true;
+    return false;
+  }
+
   // Period-appropriate job pools and selector
   const JOBS_EARLY = [
     'Farmer','Laborer','Factory Worker','Railroad Worker','Miner','Machinist','Blacksmith','Seamstress','Domestic Worker','Clerk','Secretary','Teacher','Nurse','Salesman','Carpenter','Mechanic','Electrician','Plumber','Construction Worker','Police Officer','Truck Driver','Doctor','Lawyer','Pharmacist'
@@ -387,6 +434,7 @@ async function runSimulation() {
       for (let i = 0; i < pairCount; i++) {
         const h = msAll[i];
         const w = fListAll[i];
+        if (isCloseKin(h, w)) continue; // skip close-kin marriage
         const marriageYear = Math.max(year(h.birthDate), year(w.birthDate)) + 20 + Math.floor(random() * 10);
         marry(h, w, marriageYear);
         couples.push([h, w]);
@@ -398,6 +446,7 @@ async function runSimulation() {
       for (let i = 0; i < partnerCount; i++) {
         const h = remainingM[i];
         const w = remainingF[i];
+        if (isCloseKin(h, w)) continue; // skip close-kin partnership
         h.partnerId = w.id;
         w.partnerId = h.id;
         const yearFormed = Math.max(year(h.birthDate), year(w.birthDate)) + 20 + Math.floor(random() * 10);
@@ -653,7 +702,7 @@ async function runSimulation() {
       if (random() < PROB.affair) {
         // majority heterosexual: pick candidates of opposite sex most of the time
         const preferOpposite = random() < 0.95; // 95% heterosexual
-        const candidates = adults.filter(a => a.id !== p.id && a.id !== p.spouseId && (!preferOpposite || a.sex !== p.sex));
+        const candidates = adults.filter(a => a.id !== p.id && a.id !== p.spouseId && (!preferOpposite || a.sex !== p.sex) && !isCloseKin(p, a));
         if (candidates.length) {
           const other = candidates[Math.floor(random() * candidates.length)];
           const evt = addEvent({ year: y, type: 'AFFAIR', people: [p.id, other.id], details: { cityId: p.cityId } });

@@ -230,9 +230,25 @@ async function runSimulation() {
     return c ? c.name : 'Unknown';
   }
 
-  const JOBS = [
-    'Teacher','Nurse','Software Engineer','Police Officer','Construction Worker','Sales Manager','Accountant','Mechanic','Chef','Graphic Designer','Electrician','Plumber','Truck Driver','Doctor','Lawyer','Scientist','Researcher','Data Analyst','Retail Associate','Waiter','Barista','Pharmacist','Architect','Journalist','Pilot','Flight Attendant','HR Specialist','Product Manager','Marketing Manager','Financial Analyst','Security Guard','Warehouse Worker','Civil Engineer','Social Worker','Librarian','Dentist','Veterinarian','Farmer','Paramedic','Firefighter'
+  // Period-appropriate job pools and selector
+  const JOBS_EARLY = [
+    'Farmer','Laborer','Factory Worker','Railroad Worker','Miner','Machinist','Blacksmith','Seamstress','Domestic Worker','Clerk','Secretary','Teacher','Nurse','Salesman','Carpenter','Mechanic','Electrician','Plumber','Construction Worker','Police Officer','Truck Driver','Doctor','Lawyer','Pharmacist'
   ];
+  const JOBS_MID = [
+    'Factory Worker','Mechanic','Secretary','Teacher','Nurse','Accountant','Sales Manager','Engineer','Electrician','Plumber','Truck Driver','Police Officer','Construction Worker','Doctor','Lawyer','Pharmacist','Librarian','Civil Engineer','Social Worker','Warehouse Worker','Retail Associate','Journalist'
+  ];
+  const JOBS_LATE = [
+    'Teacher','Nurse','Accountant','Sales Manager','Engineer','Electrician','Plumber','Truck Driver','Police Officer','Construction Worker','Doctor','Lawyer','Pharmacist','Librarian','Civil Engineer','Social Worker','Retail Associate','Journalist','Marketing Manager','Financial Analyst','Computer Programmer'
+  ];
+  const JOBS_MODERN = [
+    'Teacher','Nurse','Accountant','Sales Manager','Engineer','Electrician','Plumber','Truck Driver','Police Officer','Construction Worker','Doctor','Lawyer','Pharmacist','Librarian','Civil Engineer','Social Worker','Retail Associate','Journalist','Marketing Manager','Financial Analyst','Computer Programmer','Software Engineer','Data Analyst','Product Manager','HR Specialist','Graphic Designer','Chef','Barista','Pilot','Flight Attendant','Paramedic','Firefighter','Veterinarian','Dentist'
+  ];
+  function pickJobForYear(y) {
+    if (y < 1945) return pick(JOBS_EARLY);
+    if (y < 1980) return pick(JOBS_MID);
+    if (y < 2000) return pick(JOBS_LATE);
+    return pick(JOBS_MODERN);
+  }
 
   function marry(husband, wife, yearOfMarriage) {
     wife.maidenName = wife.lastName;
@@ -591,7 +607,7 @@ async function runSimulation() {
     // Job changes (skip if retired)
     for (const p of adults) {
       if (!p.retired && random() < PROB.jobChange) {
-        const newJob = JOBS[Math.floor(random() * JOBS.length)];
+        const newJob = pickJobForYear(y);
         const evt = addEvent({ year: y, type: 'JOB_CHANGE', people: [p.id], details: { jobTitle: newJob, cityId: p.cityId || null } });
         indexEventByYear(evt);
       }

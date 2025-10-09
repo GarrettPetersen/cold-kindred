@@ -292,7 +292,8 @@ async function runSimulation() {
   const uniqueSurnames = sampleWithoutReplacement(COMMON_SURNAMES, foundersMaleCount + foundersFemaleCount);
   const uniqueMaleFirst = sampleWithoutReplacement(MALE_FIRST.filter(n => FEMALE_FIRST.indexOf(n) === -1), foundersMaleCount);
   const uniqueFemaleFirst = sampleWithoutReplacement(FEMALE_FIRST.filter(n => MALE_FIRST.indexOf(n) === -1), foundersFemaleCount);
-  const uniqueFounderBirthdates = uniqueBirthdates(foundersMaleCount + foundersFemaleCount, 1920, 1935);
+  // Backdate founders into the late 19th century so early-1900 births occur
+  const uniqueFounderBirthdates = uniqueBirthdates(foundersMaleCount + foundersFemaleCount, 1865, 1895);
 
   const males = [];
   const females = [];
@@ -500,6 +501,45 @@ async function runSimulation() {
     
     // Adults for stochastic events
     const adults = result.people.filter(p => p.alive && (y - year(p.birthDate)) >= 18);
+
+    // One-time: extremely high marriage rate in 1900 to model pre-1900 marriages
+    if (y === 1900) {
+      const byCityM = new Map();
+      const byCityF = new Map();
+      for (const p of adults) {
+        if (!p.spouseId) {
+          if (p.sex === 'M') {
+            const arr = byCityM.get(p.cityId) || [];
+            arr.push(p);
+            byCityM.set(p.cityId, arr);
+          } else if (p.sex === 'F') {
+            const arr = byCityF.get(p.cityId) || [];
+            arr.push(p);
+            byCityF.set(p.cityId, arr);
+          }
+        }
+      }
+      let marriedNow = 0;
+      const HIGH_RATE = 0.98; // ~98% marriage rate for eligible pairs
+      for (const [cityId, malesArr] of byCityM.entries()) {
+        const femalesArr = (byCityF.get(cityId) || []).slice();
+        const ms = malesArr.slice();
+        ms.sort(() => random() - 0.5);
+        femalesArr.sort(() => random() - 0.5);
+        const canPair = Math.min(ms.length, femalesArr.length);
+        const pairCount = Math.floor(canPair * HIGH_RATE);
+        for (let i = 0; i < pairCount; i++) {
+          const h = ms[i];
+          const w = femalesArr[i];
+          // Set marriage in 1900 for visibility
+          marry(h, w, 1900);
+          marriedNow++;
+        }
+      }
+      if (marriedNow > 0) {
+        logLine(`Year 1900: backfilled marriages=${marriedNow}`);
+      }
+    }
 
     // Retirements (before processing jobs): only for non-retired adults
     for (const p of adults) {

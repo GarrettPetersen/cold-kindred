@@ -135,6 +135,7 @@ async function runSimulation() {
       bioMotherId: fields.bioMotherId || null,
       cityId: fields.cityId || null,
       city: fields.cityId ? getCityName(fields.cityId) : (fields.city || null),
+      retired: false,
       alive: true
     };
     result.people.push(person);
@@ -254,6 +255,33 @@ async function runSimulation() {
     const m = 1 + Math.floor(random() * 12);
     const d = 1 + Math.floor(random() * 28);
     return isoFromYMD(y, m, d);
+  }
+
+  // Yearly mortality hazard (very rough US-like curve)
+  function mortalityHazard(age) {
+    if (age < 1) return 0.005;            // infant mortality ~0.5%
+    if (age < 5) return 0.0005;           // very low
+    if (age < 15) return 0.0002;          // children
+    if (age < 30) return 0.0007;          // teens/young adults (accidents)
+    if (age < 45) return 0.0010;          // adults
+    if (age < 55) return 0.0020;
+    if (age < 65) return 0.0050;
+    if (age < 75) return 0.0100;          // 1%
+    if (age < 85) return 0.0300;          // 3%
+    if (age < 95) return 0.0800;          // 8%
+    return 0.1600;                        // 16%
+  }
+
+  // Yearly retirement probability by age
+  function retirementProb(age) {
+    if (age < 58) return 0;
+    if (age < 60) return 0.02;   // 2%
+    if (age < 62) return 0.05;   // 5%
+    if (age < 65) return 0.10;   // 10%
+    if (age < 67) return 0.20;   // 20%
+    if (age < 70) return 0.25;   // 25%
+    if (age < 75) return 0.30;   // 30%
+    return 0.50;                 // 50% per year 75+
   }
 
   // ---------- Step 1: Founders (G0) with unique last names, first names, birthdates ----------
@@ -459,6 +487,19 @@ async function runSimulation() {
     // Adults for stochastic events
     const adults = result.people.filter(p => p.alive && (y - year(p.birthDate)) >= 18);
 
+    // Retirements (before processing jobs): only for non-retired adults
+    for (const p of adults) {
+      if (!p.retired) {
+        const age = y - year(p.birthDate);
+        const pr = retirementProb(age);
+        if (pr > 0 && random() < pr) {
+          p.retired = true;
+          const evt = addEvent({ year: y, type: 'RETIREMENT', people: [p.id], details: { cityId: p.cityId, age } });
+          indexEventByYear(evt);
+        }
+      }
+    }
+
     // Moves (family units move together: spouse/partner + minor children)
     const movedIds = new Set();
     for (const p of adults) {
@@ -493,9 +534,9 @@ async function runSimulation() {
       }
     }
 
-    // Job changes
+    // Job changes (skip if retired)
     for (const p of adults) {
-      if (random() < PROB.jobChange) {
+      if (!p.retired && random() < PROB.jobChange) {
         const newJob = JOBS[Math.floor(random() * JOBS.length)];
         const evt = addEvent({ year: y, type: 'JOB_CHANGE', people: [p.id], details: { jobTitle: newJob, cityId: p.cityId || null } });
         indexEventByYear(evt);
@@ -549,6 +590,19 @@ async function runSimulation() {
         indexEventByYear(evt);
         murderCommitted = true;
         logLine(`Year ${y}: A murder occurred.`);
+      }
+    }
+
+    // Mortality: check all alive persons (adults and minors)
+    for (const p of result.people) {
+      if (!p.alive) continue;
+      const age = y - year(p.birthDate);
+      if (age < 0) continue;
+      const hazard = mortalityHazard(age);
+      if (hazard > 0 && random() < hazard) {
+        p.alive = false;
+        const evt = addEvent({ year: y, type: 'DEATH', people: [p.id], details: { cityId: p.cityId, age } });
+        indexEventByYear(evt);
       }
     }
 
@@ -657,6 +711,11 @@ async function runSimulation() {
         const city = evt.details?.cityId ? ` in ${getCityName(evt.details.cityId)}` : '';
         return `Changed job to ${job}${city}`;
       }
+      case 'RETIREMENT': {
+        const city = evt.details?.cityId ? ` in ${getCityName(evt.details.cityId)}` : '';
+        const age = typeof evt.details?.age === 'number' ? ` at ${evt.details.age}` : '';
+        return `Retired${age}${city}`;
+      }
       case 'AFFAIR': {
         const [a, b] = evt.people;
         const otherId = a === povId ? b : a;
@@ -677,6 +736,11 @@ async function runSimulation() {
           const victim = personById.get(victimId);
           return `Murder: ${killer ? killer.firstName + ' ' + killer.lastName : 'Unknown'} -> ${victim ? victim.firstName + ' ' + victim.lastName : 'Unknown'}${city}`;
         }
+      }
+      case 'DEATH': {
+        const city = evt.details?.cityId ? ` in ${getCityName(evt.details.cityId)}` : '';
+        const age = typeof evt.details?.age === 'number' ? ` at ${evt.details.age}` : '';
+        return `Died${age}${city}`;
       }
       default:
         return `${evt.type}`;

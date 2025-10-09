@@ -193,6 +193,14 @@ async function runSimulation() {
     return evt;
   }
 
+  // Yearly events index (must exist before any code calls indexEventByYear)
+  const eventsByYear = new Map();
+  function indexEventByYear(evt) {
+    const list = eventsByYear.get(evt.year) || [];
+    list.push(evt);
+    eventsByYear.set(evt.year, list);
+  }
+
   // Top 10 US cities with approximate population weights
   const CITIES = [
     { id: 1, name: 'New York, NY', weight: 8336817 },
@@ -364,7 +372,10 @@ async function runSimulation() {
         const birthDate = randomChildBirthDate(year(mother.birthDate));
         // Determine biological father (affair-born children possible only heterosexual)
         let bioFatherId = father.id;
-        const fromAffair = (couples.includes([father, mother]) ? (random() < 0.08) : (random() < 0.12));
+        // detect if pair is a married couple or a partnership
+        const isMarriedPair = couples.some(([fh, mw]) => fh.id === father.id && mw.id === mother.id);
+        const isPartnerPair = !isMarriedPair;
+        const fromAffair = isMarriedPair ? (random() < 0.08) : (random() < 0.12);
         if (fromAffair) {
           const maleAdultsSameCity = result.people.filter(p => p.sex === 'M' && p.id !== father.id && (year(birthDate) - year(p.birthDate)) >= 18 && p.cityId === (mother.cityId || father.cityId));
           if (maleAdultsSameCity.length) bioFatherId = maleAdultsSameCity[Math.floor(random() * maleAdultsSameCity.length)].id;
@@ -375,7 +386,7 @@ async function runSimulation() {
           sex,
           birthDate,
           generation: gen + 1,
-          fatherId: couples.includes([father, mother]) ? father.id : father.id, // family father
+          fatherId: father.id, // family father (partner or spouse)
           motherId: mother.id,
           bioFatherId,
           bioMotherId: mother.id,
@@ -384,7 +395,7 @@ async function runSimulation() {
         children.push(child);
         births++;
         // record birth event
-        const outOfWedlock = !(couples.includes([father, mother]));
+        const outOfWedlock = isPartnerPair;
         addEvent({ year: year(birthDate), type: 'BIRTH', people: [child.id], details: { cityId: child.cityId, outOfWedlock, fromAffair: fromAffair && bioFatherId !== father.id } });
         
       }
@@ -420,13 +431,7 @@ async function runSimulation() {
     marriagesByYear.set(m.year, (marriagesByYear.get(m.year) || 0) + 1);
   }
 
-  // Index existing events by year (births, marriages were already added to events)
-  const eventsByYear = new Map();
-  function indexEventByYear(evt) {
-    const list = eventsByYear.get(evt.year) || [];
-    list.push(evt);
-    eventsByYear.set(evt.year, list);
-  }
+  // Index pre-existing events
   for (const e of result.events) indexEventByYear(e);
 
   logLine(`Planned events across ${START_YEAR}–${END_YEAR}: births=${result.people.length}, marriages=${result.marriages.length}`);
@@ -454,15 +459,37 @@ async function runSimulation() {
     // Adults for stochastic events
     const adults = result.people.filter(p => p.alive && (y - year(p.birthDate)) >= 18);
 
-    // Moves
+    // Moves (family units move together: spouse/partner + minor children)
+    const movedIds = new Set();
     for (const p of adults) {
+      if (movedIds.has(p.id)) continue;
       if (random() < PROB.move) {
-        const oldCity = p.city || CITIES[Math.floor(random() * CITIES.length)];
-        let newCity = oldCity;
-        for (let tries = 0; tries < 3 && newCity === oldCity; tries++) newCity = CITIES[Math.floor(random() * CITIES.length)];
-        p.city = newCity;
-        const evt = addEvent({ year: y, type: 'MOVE', people: [p.id], details: { from: oldCity, to: newCity } });
-        indexEventByYear(evt);
+        const fromId = p.cityId || pickWeightedCityId();
+        let toId = fromId;
+        for (let tries = 0; tries < 5 && toId === fromId; tries++) toId = pickWeightedCityId();
+        const unit = [p];
+        if (p.spouseId) {
+          const spouse = result.people.find(q => q.id === p.spouseId && q.alive && (y - year(q.birthDate)) >= 18);
+          if (spouse && spouse.cityId === fromId) unit.push(spouse);
+        }
+        if (p.partnerId) {
+          const partner = result.people.find(q => q.id === p.partnerId && q.alive && (y - year(q.birthDate)) >= 18);
+          if (partner && partner.cityId === fromId) unit.push(partner);
+        }
+        for (const c of result.people) {
+          if (!c.alive) continue;
+          const age = y - year(c.birthDate);
+          if (age < 18 && c.cityId === fromId && (c.fatherId === p.id || c.motherId === p.id)) {
+            unit.push(c);
+          }
+        }
+        for (const mbr of unit) {
+          mbr.cityId = toId;
+          mbr.city = getCityName(toId);
+          movedIds.add(mbr.id);
+          const evt = addEvent({ year: y, type: 'MOVE', people: [mbr.id], details: { fromCityId: fromId, toCityId: toId } });
+          indexEventByYear(evt);
+        }
       }
     }
 

@@ -210,3 +210,32 @@ button.secondary {
     border-radius: 6px;
     padding: 6px 8px;
 }
+
+.gene-controls .row-gap {
+    display: flex;
+    gap: 8px;
+    margin-top: 6px;
+}
+
+.gene-svg {
+    width: 100%;
+    height: 360px;
+    border: 1px solid #e5e5e5;
+    border-radius: 8px;
+    background: #fff;
+}
+
+.gene-node {
+    fill: #f7f9ff;
+    stroke: #3b82f6;
+    stroke-width: 1.2;
+}
+
+.gene-edge {
+    stroke: #999;
+    stroke-width: 1;
+}
+
+.gene-edge.marriage { stroke: #06b6d4; }
+.gene-edge.biological { stroke: #16a34a; }
+.gene-edge.guardian { stroke: #f59e0b; stroke-dasharray: 4 3; }

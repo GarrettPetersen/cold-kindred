@@ -35,6 +35,18 @@ app.innerHTML = `
           <div id="personResults" class="list"></div>
           <div id="personDetail" class="detail"></div>
         </div>
+        <div class="panel">
+          <h2>Genealogy</h2>
+          <div class="gene-controls">
+            <input id="geneSearch" class="input" placeholder="Add by name or ID…" autocomplete="off" />
+            <div class="row-gap">
+              <button id="geneAdd" class="start secondary">Add</button>
+              <button id="geneReveal" class="start secondary">Reveal relative</button>
+              <button id="geneClear" class="start secondary">Clear</button>
+            </div>
+          </div>
+          <svg id="geneSvg" class="gene-svg" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMid meet"></svg>
+        </div>
       </div>
     </section>
   </main>
@@ -53,6 +65,11 @@ const toggleJsonBtn = document.getElementById('toggleJson');
 const personSearchEl = document.getElementById('personSearch');
 const personResultsEl = document.getElementById('personResults');
 const personDetailEl = document.getElementById('personDetail');
+const geneSearchEl = document.getElementById('geneSearch');
+const geneAddBtn = document.getElementById('geneAdd');
+const geneRevealBtn = document.getElementById('geneReveal');
+const geneClearBtn = document.getElementById('geneClear');
+const geneSvg = document.getElementById('geneSvg');
 
 function setStatus(stateText, stateClass) {
   statusEl.textContent = stateText;
@@ -708,6 +725,189 @@ async function runSimulation() {
   setStatus('Done', 'done');
   startBtn.disabled = false;
   runAgainBtn.disabled = false;
+
+  // ----- Player Knowledge Model -----
+  const STORAGE_KEY = 'ck:v1:knowledge';
+  const emptyKnowledge = () => ({
+    knownPeople: new Set(),
+    // edges: { type: 'marriage'|'biological'|'guardian', a: id, b: id }
+    edges: [],
+    simSeed: result.seed
+  });
+  function loadKnowledge() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return emptyKnowledge();
+      const parsed = JSON.parse(raw);
+      // If this save is from a different simulation seed, discard it
+      if (parsed.simSeed !== result.seed) return emptyKnowledge();
+      const k = emptyKnowledge();
+      k.knownPeople = new Set(parsed.knownPeople || []);
+      k.edges = Array.isArray(parsed.edges) ? parsed.edges : [];
+      k.simSeed = parsed.simSeed || result.seed;
+      return k;
+    } catch {
+      return emptyKnowledge();
+    }
+  }
+  function saveKnowledge(k) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      knownPeople: Array.from(k.knownPeople),
+      edges: k.edges,
+      simSeed: result.seed
+    }));
+  }
+  const knowledge = loadKnowledge();
+
+  // Seed demo if empty: reveal one person and their spouse/parents
+  if (knowledge.knownPeople.size === 0 && result.people.length) {
+    const seed = result.people[Math.floor(Math.random() * result.people.length)];
+    knowledge.knownPeople.add(seed.id);
+    if (seed.spouseId) {
+      knowledge.knownPeople.add(seed.spouseId);
+      knowledge.edges.push({ type: 'marriage', a: seed.id, b: seed.spouseId });
+    }
+    if (seed.fatherId) {
+      knowledge.knownPeople.add(seed.fatherId);
+      knowledge.edges.push({ type: 'biological', a: seed.fatherId, b: seed.id });
+    }
+    if (seed.motherId) {
+      knowledge.knownPeople.add(seed.motherId);
+      knowledge.edges.push({ type: 'biological', a: seed.motherId, b: seed.id });
+    }
+    saveKnowledge(knowledge);
+  }
+
+  // ----- Genealogy Rendering (simple layered layout) -----
+  function renderGenealogy() {
+    // Build nodes from knownPeople
+    const nodes = [];
+    const edges = knowledge.edges.filter(e => knowledge.knownPeople.has(e.a) && knowledge.knownPeople.has(e.b));
+    for (const id of knowledge.knownPeople) {
+      const p = personById.get(id);
+      if (!p) continue;
+      nodes.push(p);
+    }
+    // Simple layering by generation; horizontal spacing by index
+    const layers = new Map();
+    for (const n of nodes) {
+      const g = n.generation || 0;
+      const arr = layers.get(g) || [];
+      arr.push(n);
+      layers.set(g, arr);
+    }
+    // Clear SVG
+    while (geneSvg.firstChild) geneSvg.removeChild(geneSvg.firstChild);
+    const marginX = 40, marginY = 40, w = 120, h = 40, gapX = 24, gapY = 80;
+    const pos = new Map();
+    const gens = Array.from(layers.keys()).sort((a, b) => a - b);
+    for (let gi = 0; gi < gens.length; gi++) {
+      const g = gens[gi];
+      const row = layers.get(g);
+      row.sort((a, b) => a.id - b.id);
+      for (let i = 0; i < row.length; i++) {
+        const x = marginX + i * (w + gapX);
+        const y = marginY + gi * (h + gapY);
+        pos.set(row[i].id, { x, y });
+      }
+    }
+    // Draw edges first
+    for (const e of edges) {
+      const a = pos.get(e.a);
+      const b = pos.get(e.b);
+      if (!a || !b) continue;
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      path.setAttribute('x1', String(a.x + w / 2));
+      path.setAttribute('y1', String(a.y + h / 2));
+      path.setAttribute('x2', String(b.x + w / 2));
+      path.setAttribute('y2', String(b.y + h / 2));
+      path.setAttribute('class', `gene-edge ${e.type}`);
+      geneSvg.appendChild(path);
+    }
+    // Draw nodes
+    for (const n of nodes) {
+      const p = pos.get(n.id);
+      if (!p) continue;
+      const gEl = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      rect.setAttribute('x', String(p.x));
+      rect.setAttribute('y', String(p.y));
+      rect.setAttribute('width', String(w));
+      rect.setAttribute('height', String(h));
+      rect.setAttribute('rx', '6');
+      rect.setAttribute('class', 'gene-node');
+      const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      text.setAttribute('x', String(p.x + 8));
+      text.setAttribute('y', String(p.y + 24));
+      text.setAttribute('font-size', '12');
+      text.textContent = `${n.firstName} ${n.lastName}`;
+      gEl.appendChild(rect);
+      gEl.appendChild(text);
+      geneSvg.appendChild(gEl);
+    }
+  }
+
+  function addKnownByQuery(query) {
+    const q = (query || '').trim().toLowerCase();
+    if (!q) return; 
+    const byId = q.match(/^\d+$/) ? Number(q) : null;
+    let candidates = [];
+    if (byId) {
+      const p = personById.get(byId);
+      if (p) candidates = [p];
+    } else {
+      candidates = result.people.filter(p => (`${p.firstName} ${p.lastName}`).toLowerCase().includes(q)).slice(0, 1);
+    }
+    if (candidates.length) {
+      knowledge.knownPeople.add(candidates[0].id);
+      // Auto-connect visible family edges for context (if in knowledge)
+      const p = candidates[0];
+      if (p.spouseId && knowledge.knownPeople.has(p.spouseId)) {
+        knowledge.edges.push({ type: 'marriage', a: p.id, b: p.spouseId });
+      }
+      if (p.fatherId && knowledge.knownPeople.has(p.fatherId)) {
+        knowledge.edges.push({ type: 'biological', a: p.fatherId, b: p.id });
+      }
+      if (p.motherId && knowledge.knownPeople.has(p.motherId)) {
+        knowledge.edges.push({ type: 'biological', a: p.motherId, b: p.id });
+      }
+      saveKnowledge(knowledge);
+      renderGenealogy();
+    }
+  }
+
+  function revealRelative() {
+    // If exactly one node selected, reveal a random close relative
+    const ids = Array.from(knowledge.knownPeople);
+    if (!ids.length) return;
+    const base = personById.get(ids[Math.floor(Math.random() * ids.length)]);
+    const relatives = [];
+    if (base.spouseId) relatives.push({ type: 'marriage', id: base.spouseId, a: base.id, b: base.spouseId });
+    if (base.partnerId) relatives.push({ type: 'guardian', id: base.partnerId, a: base.id, b: base.partnerId });
+    if (base.fatherId) relatives.push({ type: 'biological', id: base.fatherId, a: base.fatherId, b: base.id });
+    if (base.motherId) relatives.push({ type: 'biological', id: base.motherId, a: base.motherId, b: base.id });
+    // children
+    for (const p of result.people) {
+      if (p.fatherId === base.id || p.motherId === base.id) {
+        relatives.push({ type: 'biological', id: p.id, a: base.id, b: p.id });
+      }
+    }
+    if (!relatives.length) return;
+    const pickRel = relatives[Math.floor(Math.random() * relatives.length)];
+    knowledge.knownPeople.add(pickRel.id);
+    knowledge.edges.push({ type: pickRel.type, a: pickRel.a, b: pickRel.b });
+    saveKnowledge(knowledge);
+    renderGenealogy();
+  }
+
+  geneAddBtn.addEventListener('click', () => addKnownByQuery(geneSearchEl.value));
+  geneRevealBtn.addEventListener('click', revealRelative);
+  geneClearBtn.addEventListener('click', () => {
+    localStorage.removeItem(STORAGE_KEY);
+    while (geneSvg.firstChild) geneSvg.removeChild(geneSvg.firstChild);
+  });
+
+  renderGenealogy();
 
   // Person inspector: build indexes and bind search
   const personById = new Map(result.people.map(p => [p.id, p]));

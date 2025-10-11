@@ -64,8 +64,10 @@ app.innerHTML = `
       </div>
     </section>
     <section id="overlaySim" class="overlay"><div class="overlay-card">
+      <div class="title-sub">Simulating 125 years of demographic changes. This may take a few minutes.</div>
       <div id="flashYear" class="year-flash">1900</div>
       <div id="flashMsg" class="title-sub">Preparing simulation…</div>
+      <div id="flashFeed" class="flash-feed"></div>
     </div></section>
     <section id="overlayTitle" class="overlay"><div class="overlay-card">
       <div class="title-headline" id="titleHeadline">Case Brief</div>
@@ -103,6 +105,29 @@ const flashMsgEl = document.getElementById('flashMsg');
 const titleHeadlineEl = document.getElementById('titleHeadline');
 const titleSubEl = document.getElementById('titleSub');
 const titleContinueBtn = document.getElementById('titleContinue');
+const flashFeedEl = document.getElementById('flashFeed');
+
+function pushFlash(text, style = 'normal') {
+  if (!flashFeedEl) return;
+  // bump existing lines' fade levels
+  const lines = Array.from(flashFeedEl.querySelectorAll('.flash-line'));
+  lines.forEach((ln) => {
+    for (let i = 5; i >= 0; i--) ln.classList.remove(`fade-${i}`);
+    const cur = Number(ln.dataset.fade || 0);
+    const next = Math.min(cur + 1, 5);
+    ln.dataset.fade = String(next);
+    ln.classList.add(`fade-${next}`);
+  });
+  // add new line at top
+  const div = document.createElement('div');
+  div.className = 'flash-line fade-0' + (style === 'murder' ? ' murder' : '');
+  div.dataset.fade = '0';
+  div.textContent = text;
+  flashFeedEl.prepend(div);
+  // cap to last ~10
+  const all = Array.from(flashFeedEl.querySelectorAll('.flash-line'));
+  all.slice(10).forEach(n => n.remove());
+}
 
 function setStatus(stateText, stateClass) {
   statusEl.textContent = stateText;
@@ -807,6 +832,7 @@ async function runSimulation() {
   for (const e of result.events) indexEventByYear(e);
 
   logLine(`Planned events across ${START_YEAR}–${END_YEAR}: births=${result.people.length}, marriages=${result.marriages.length}`);
+  if (flashMsgEl) flashMsgEl.textContent = 'Preparing simulation…';
 
   // Yearly stochastic event probabilities (tunable)
   const PROB = {
@@ -866,6 +892,14 @@ async function runSimulation() {
     logLine(`— Year ${y} —`);
     if (flashYearEl) flashYearEl.textContent = String(y);
     await delay(10);
+    // Flavor timeline
+    if (y === 1900 && flashMsgEl) flashMsgEl.textContent = 'Preparing simulation…';
+    if (y === 1917) pushFlash('Simulating World War I');
+    if (y === 1929) pushFlash('Simulating the Great Depression');
+    if (y === 1941) pushFlash('Simulating World War II');
+    if (y === 1946) pushFlash('Simulating the Baby Boom');
+    if (y === 1968) pushFlash('Simulating Vietnam War & counterculture');
+    if (y === 2000) pushFlash('Simulating Y2K');
     const b = birthsByYear.get(y) || 0;
     const m = marriagesByYear.get(y) || 0;
     
@@ -1019,6 +1053,7 @@ async function runSimulation() {
         indexEventByYear(evt);
         murderCommitted = true;
         logLine(`Year ${y}: A murder occurred.`);
+        pushFlash(`A murder shocks ${getCityName(cityId)}.`, 'murder');
       }
     }
 
@@ -1031,6 +1066,7 @@ async function runSimulation() {
             result.consumerDNA.push({ personId: p.id, year: y });
             const evt = addEvent({ year: y, type: 'DNA_TEST_CONSUMER', people: [p.id], details: { cityId: p.cityId } });
             indexEventByYear(evt);
+            if (random() < 0.02) pushFlash(`${personByIdPre.get(p.id)?.firstName || 'Someone'} took a consumer DNA test.`);
           }
         }
       }

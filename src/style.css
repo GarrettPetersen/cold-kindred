@@ -107,6 +107,9 @@ button.start:active {
     transition: width 180ms ease;
 }
 
+/* progress hidden in new UX */
+.progress { display: none; }
+
 button.secondary {
     background: #444;
 }
@@ -243,6 +246,16 @@ button.secondary {
     padding: 12px 20px;
     cursor: pointer;
 }
+
+.flash-feed { width: min(720px, 90%); margin-top: 12px; text-align: left; }
+.flash-line { margin: 4px 0; transition: opacity 200ms linear, color 200ms linear; }
+.flash-line.fade-0 { color: #111; opacity: 1; }
+.flash-line.fade-1 { color: #222; opacity: 0.9; }
+.flash-line.fade-2 { color: #444; opacity: 0.8; }
+.flash-line.fade-3 { color: #666; opacity: 0.7; }
+.flash-line.fade-4 { color: #888; opacity: 0.6; }
+.flash-line.fade-5 { color: #aaa; opacity: 0.5; }
+.flash-line.murder { color: #b00020; font-weight: 600; opacity: 1; }
 
 .tabbar {
     display: flex;

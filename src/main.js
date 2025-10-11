@@ -51,6 +51,17 @@ app.innerHTML = `
           <h2>Map</h2>
           <div id="locText" class="location-text">Location: Unknown</div>
           <svg id="mapSvg" class="map-svg" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMid meet"></svg>
+          <div class="gene-controls" style="margin-top:8px">
+            <div class="row-gap">
+              <label>dx <input id="dxInput" class="input" type="number" value="0" style="width:90px" /></label>
+              <button id="dxMinus" class="start secondary">−</button>
+              <button id="dxPlus" class="start secondary">+</button>
+              <label>dy <input id="dyInput" class="input" type="number" value="0" style="width:90px" /></label>
+              <button id="dyMinus" class="start secondary">−</button>
+              <button id="dyPlus" class="start secondary">+</button>
+              <button id="copyCity" class="start secondary">Copy City Offsets</button>
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -77,6 +88,13 @@ const geneClearBtn = document.getElementById('geneClear');
 const geneSvg = document.getElementById('geneSvg');
 const mapSvg = document.getElementById('mapSvg');
 const locText = document.getElementById('locText');
+const dxInput = document.getElementById('dxInput');
+const dyInput = document.getElementById('dyInput');
+const dxMinus = document.getElementById('dxMinus');
+const dxPlus = document.getElementById('dxPlus');
+const dyMinus = document.getElementById('dyMinus');
+const dyPlus = document.getElementById('dyPlus');
+const copyCityBtn = document.getElementById('copyCity');
 
 function setStatus(stateText, stateClass) {
   statusEl.textContent = stateText;
@@ -1103,6 +1121,7 @@ async function runSimulation() {
   function renderMap() {
     if (!mapSvg) return;
     while (mapSvg.firstChild) mapSvg.removeChild(mapSvg.firstChild);
+    let selectedCityId = null;
     // Base map SVG
     fetch('/assets/united-states-map-usa-america-svgrepo-com.svg')
       .then(r => r.text())
@@ -1125,6 +1144,7 @@ async function runSimulation() {
           const dy = c.offsetY || 0;
           const dx = c.offsetX || 0;
           g.setAttribute('transform', `translate(${mx + dx}, ${my + dy})`);
+          g.dataset.cityId = String(c.id);
 
           const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
           t.setAttribute('class', 'map-emoji');
@@ -1141,10 +1161,84 @@ async function runSimulation() {
 
           g.addEventListener('click', () => {
             locText.textContent = `Location: ${c.name}`;
+            selectedCityId = c.id;
+            dxInput.value = String(c.offsetX || 0);
+            dyInput.value = String(c.offsetY || 0);
           });
 
           mapSvg.appendChild(g);
         }
+
+        function applyAdjustment(deltaX, deltaY) {
+          if (selectedCityId == null) return;
+          const city = CITIES.find(cc => cc.id === selectedCityId);
+          if (!city) return;
+          city.offsetX = (city.offsetX || 0) + (deltaX || 0);
+          city.offsetY = (city.offsetY || 0) + (deltaY || 0);
+          dxInput.value = String(city.offsetX || 0);
+          dyInput.value = String(city.offsetY || 0);
+          // Re-render markers only (keep base map)
+          const markers = Array.from(mapSvg.querySelectorAll('g.map-marker'));
+          for (const g of markers) g.remove();
+          for (const c of CITIES) {
+            const [lat, lng] = getCityLatLng(c.id);
+            const [mx, my] = projectLatLngToSvg(lat, lng, 1000, 600);
+            const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            g.setAttribute('class', 'map-marker');
+            const dy = c.offsetY || 0;
+            const dx = c.offsetX || 0;
+            g.setAttribute('transform', `translate(${mx + dx}, ${my + dy})`);
+            g.dataset.cityId = String(c.id);
+            const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            t.setAttribute('class', 'map-emoji');
+            t.setAttribute('text-anchor', 'middle');
+            t.textContent = '📍';
+            g.appendChild(t);
+            const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            label.setAttribute('class', 'map-label');
+            label.setAttribute('text-anchor', 'middle');
+            label.setAttribute('y', '18');
+            label.textContent = c.name;
+            g.appendChild(label);
+            g.addEventListener('click', () => {
+              locText.textContent = `Location: ${c.name}`;
+              selectedCityId = c.id;
+              dxInput.value = String(c.offsetX || 0);
+              dyInput.value = String(c.offsetY || 0);
+            });
+            mapSvg.appendChild(g);
+          }
+        }
+
+        dxMinus?.addEventListener('click', () => applyAdjustment(-2, 0));
+        dxPlus?.addEventListener('click', () => applyAdjustment(2, 0));
+        dyMinus?.addEventListener('click', () => applyAdjustment(0, -2));
+        dyPlus?.addEventListener('click', () => applyAdjustment(0, 2));
+        dxInput?.addEventListener('change', () => {
+          if (selectedCityId == null) return;
+          const city = CITIES.find(cc => cc.id === selectedCityId);
+          if (!city) return;
+          city.offsetX = Number(dxInput.value || 0);
+          applyAdjustment(0, 0);
+        });
+        dyInput?.addEventListener('change', () => {
+          if (selectedCityId == null) return;
+          const city = CITIES.find(cc => cc.id === selectedCityId);
+          if (!city) return;
+          city.offsetY = Number(dyInput.value || 0);
+          applyAdjustment(0, 0);
+        });
+        copyCityBtn?.addEventListener('click', () => {
+          if (selectedCityId == null) return;
+          const c = CITIES.find(cc => cc.id === selectedCityId);
+          if (!c) return;
+          const snippet = `{ id: ${c.id}, name: '${c.name}', weight: ${c.weight}, offsetX: ${c.offsetX || 0}, offsetY: ${c.offsetY || 0} }`;
+          navigator.clipboard?.writeText(snippet).then(() => {
+            locText.textContent = `Copied offsets for ${c.name}: offsetX=${c.offsetX || 0}, offsetY=${c.offsetY || 0}`;
+          }).catch(() => {
+            locText.textContent = snippet; // fallback: show it to copy manually
+          });
+        });
       })
       .catch(() => {
         // Fallback: draw just city points if SVG fails

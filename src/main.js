@@ -249,21 +249,21 @@ async function runSimulation() {
   // Major US cities with approximate population weights (expanded for coverage)
   const CITIES = [
     { id: 1, name: 'New York, NY', weight: 8336817 },
-    { id: 2, name: 'Los Angeles, CA', weight: 3979576, offsetY: -8, offsetX: 10 },
-    { id: 3, name: 'Chicago, IL', weight: 2693976 },
-    { id: 4, name: 'Houston, TX', weight: 2320268 },
-    { id: 5, name: 'Phoenix, AZ', weight: 1680992, offsetY: -6 },
+    { id: 2, name: 'Los Angeles, CA', weight: 3979576, offsetX: -22, offsetY: 0 },
+    { id: 3, name: 'Chicago, IL', weight: 2693976, offsetX: 6, offsetY: 38 },
+    { id: 4, name: 'Houston, TX', weight: 2320268, offsetX: 0, offsetY: 46 },
+    { id: 5, name: 'Phoenix, AZ', weight: 1680992, offsetX: 6, offsetY: 14 },
     { id: 6, name: 'Philadelphia, PA', weight: 1584064 },
-    { id: 7, name: 'San Antonio, TX', weight: 1547253 },
-    { id: 8, name: 'San Diego, CA', weight: 1423851, offsetY: -6, offsetX: 8 },
-    { id: 9, name: 'Dallas, TX', weight: 1343573 },
-    { id: 10, name: 'San Jose, CA', weight: 1030119, offsetY: -34, offsetX: 16 },
-    { id: 11, name: 'San Francisco, CA', weight: 883305, offsetY: -18, offsetX: 14 },
-    { id: 12, name: 'Seattle, WA', weight: 744955, offsetY: 24, offsetX: 40 },
-    { id: 13, name: 'Portland, OR', weight: 653115, offsetY: 22, offsetX: 36 },
-    { id: 14, name: 'Miami, FL', weight: 470914, offsetY: -28, offsetX: 18 },
-    { id: 15, name: 'Atlanta, GA', weight: 498715 },
-    { id: 16, name: 'New Orleans, LA', weight: 391006 }
+    { id: 7, name: 'San Antonio, TX', weight: 1547253, offsetX: -8, offsetY: 40 },
+    { id: 8, name: 'San Diego, CA', weight: 1423851, offsetX: -32, offsetY: -6 },
+    { id: 9, name: 'Dallas, TX', weight: 1343573, offsetX: -4, offsetY: 62 },
+    { id: 10, name: 'San Jose, CA', weight: 1030119, offsetX: 6, offsetY: -40 },
+    { id: 11, name: 'San Francisco, CA', weight: 883305, offsetX: -8, offsetY: -18 },
+    { id: 12, name: 'Seattle, WA', weight: 744955, offsetX: 56, offsetY: -14 },
+    { id: 13, name: 'Portland, OR', weight: 653115, offsetX: 48, offsetY: -8 },
+    { id: 14, name: 'Miami, FL', weight: 470914, offsetX: 18, offsetY: -28 },
+    { id: 15, name: 'Atlanta, GA', weight: 498715, offsetX: 46, offsetY: 34 },
+    { id: 16, name: 'New Orleans, LA', weight: 391006, offsetX: 26, offsetY: 26 }
   ];
   const TOTAL_CITY_WEIGHT = CITIES.reduce((s, c) => s + c.weight, 0);
   function pickWeightedCityId() {

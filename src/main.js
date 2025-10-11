@@ -127,11 +127,6 @@ function pushFlash(text, style = 'normal') {
   // cap to last ~10
   const all = Array.from(flashFeedEl.querySelectorAll('.flash-line'));
   all.slice(10).forEach(n => n.remove());
-  // remove the initial 'Preparing simulation…' once it has faded beyond 10 slots
-  if (all.length > 10) {
-    const prep = all.find(n => n.textContent === 'Preparing simulation…');
-    if (prep && Number(prep.dataset.fade || 0) >= 5) prep.remove();
-  }
 }
 
 function setStatus(stateText, stateClass) {
@@ -889,7 +884,6 @@ async function runSimulation() {
   for (const e of result.events) indexEventByYear(e);
 
   logLine(`Planned events across ${START_YEAR}–${END_YEAR}: births=${result.people.length}, marriages=${result.marriages.length}`);
-  if (flashMsgEl) flashMsgEl.textContent = 'Preparing simulation…';
 
   // Yearly stochastic event probabilities (tunable)
   const PROB = {

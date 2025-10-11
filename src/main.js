@@ -416,6 +416,34 @@ async function runSimulation() {
     return colors[Math.floor(random() * colors.length)];
   }
 
+  function validateBabyAttributes(baby, father, mother) {
+    const issues = [];
+    if (!baby.firstName) issues.push('firstName');
+    if (!baby.lastName || baby.lastName === 'Unknown') issues.push('lastName');
+    if (!baby.birthDate) issues.push('birthDate');
+    else if (Number.isNaN(year(baby.birthDate))) issues.push('birthYear');
+    if (baby.skinTone == null) issues.push('skinTone');
+    if (!baby.cityId) issues.push('cityId');
+    if (!father || !mother) issues.push('parents');
+    if (issues.length) {
+      // Print a compact object helpful for debugging lineage
+      console.error('[BABY_VALIDATION]', {
+        issues,
+        baby: {
+          id: baby.id,
+          firstName: baby.firstName,
+          lastName: baby.lastName,
+          birthDate: baby.birthDate,
+          generation: baby.generation,
+          skinTone: baby.skinTone,
+          cityId: baby.cityId
+        },
+        father: father ? { id: father.id, name: father.firstName + ' ' + father.lastName, cityId: father.cityId } : null,
+        mother: mother ? { id: mother.id, name: mother.firstName + ' ' + mother.lastName, cityId: mother.cityId } : null
+      });
+    }
+  }
+
   // ----- Kinship helpers to prevent close-kin pairing -----
   function getById(id) {
     return result.people.find(p => p.id === id) || null;
@@ -769,6 +797,7 @@ async function runSimulation() {
         });
         child.skinTone = inheritSkinTone(father, mother);
         child.hairColor = inheritHairColor(father, mother);
+        validateBabyAttributes(child, father, mother);
         children.push(child);
         births++;
         // record birth event

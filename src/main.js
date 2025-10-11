@@ -127,6 +127,11 @@ function pushFlash(text, style = 'normal') {
   // cap to last ~10
   const all = Array.from(flashFeedEl.querySelectorAll('.flash-line'));
   all.slice(10).forEach(n => n.remove());
+  // remove the initial 'Preparing simulation…' once it has faded beyond 10 slots
+  if (all.length > 10) {
+    const prep = all.find(n => n.textContent === 'Preparing simulation…');
+    if (prep && Number(prep.dataset.fade || 0) >= 5) prep.remove();
+  }
 }
 
 function setStatus(stateText, stateClass) {
@@ -946,6 +951,7 @@ async function runSimulation() {
     await delay(10);
     // Flavor timeline
     if (y === 1900 && flashMsgEl) flashMsgEl.textContent = 'Preparing simulation…';
+    if (y > 1900 && flashMsgEl && flashMsgEl.textContent) flashMsgEl.textContent = '';
     if (y === 1900) pushFlash('Preparing simulation…');
     if (y === 1914) pushFlash('World War I begins');
     if (y === 1917) pushFlash('World War I');

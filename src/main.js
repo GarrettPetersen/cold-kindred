@@ -198,8 +198,8 @@ async function runSimulation() {
   function createPerson(fields) {
     const person = {
       id: nextId++,
-      firstName: fields.firstName,
-      lastName: fields.lastName,
+      firstName: fields.firstName || 'Unknown',
+      lastName: fields.lastName || null,
       maidenName: fields.maidenName || null,
       sex: fields.sex, // 'M' | 'F'
       birthDate: fields.birthDate,
@@ -217,6 +217,12 @@ async function runSimulation() {
       retired: false,
       alive: true
     };
+    // Ensure last name present; prefer mother's surname, then father's, then 'Unknown'
+    if (!person.lastName) {
+      const mom = fields.motherId ? result.people.find(p => p.id === fields.motherId) : null;
+      const dad = fields.fatherId ? result.people.find(p => p.id === fields.fatherId) : null;
+      person.lastName = mom?.lastName || dad?.lastName || 'Unknown';
+    }
     result.people.push(person);
     return person;
   }

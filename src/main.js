@@ -263,7 +263,13 @@ async function runSimulation() {
     { id: 13, name: 'Portland, OR', weight: 653115, offsetX: 48, offsetY: -8 },
     { id: 14, name: 'Miami, FL', weight: 470914, offsetX: 18, offsetY: -28 },
     { id: 15, name: 'Atlanta, GA', weight: 498715, offsetX: 46, offsetY: 34 },
-    { id: 16, name: 'New Orleans, LA', weight: 391006, offsetX: 26, offsetY: 26 }
+    { id: 16, name: 'New Orleans, LA', weight: 391006, offsetX: 26, offsetY: 26 },
+    { id: 17, name: 'Denver, CO', weight: 715522 },
+    { id: 18, name: 'Salt Lake City, UT', weight: 200133 },
+    { id: 19, name: 'Kansas City, MO', weight: 508090 },
+    { id: 20, name: 'Oklahoma City, OK', weight: 681054 },
+    { id: 21, name: 'St. Louis, MO', weight: 301578 },
+    { id: 22, name: 'Minneapolis, MN', weight: 429954 }
   ];
   const TOTAL_CITY_WEIGHT = CITIES.reduce((s, c) => s + c.weight, 0);
   function pickWeightedCityId() {
@@ -297,6 +303,12 @@ async function runSimulation() {
       case 14: return [25.7617, -80.1918]; // Miami
       case 15: return [33.7490, -84.3880]; // Atlanta
       case 16: return [29.9511, -90.0715]; // New Orleans
+      case 17: return [39.7392, -104.9903]; // Denver
+      case 18: return [40.7608, -111.8910]; // Salt Lake City
+      case 19: return [39.0997, -94.5786]; // Kansas City
+      case 20: return [35.4676, -97.5164]; // Oklahoma City
+      case 21: return [38.6270, -90.1994]; // St. Louis
+      case 22: return [44.9778, -93.2650]; // Minneapolis
       default: return [39.8283, -98.5795];
     }
   }
@@ -560,8 +572,8 @@ async function runSimulation() {
 
   // ---------- Step 1: Founders (G0) with unique last names, first names, birthdates ----------
   await delay(150);
-  const foundersMaleCount = 200;
-  const foundersFemaleCount = 200;
+  const foundersMaleCount = 400;
+  const foundersFemaleCount = 400;
 
   const uniqueSurnames = sampleWithoutReplacement(COMMON_SURNAMES, foundersMaleCount + foundersFemaleCount);
   const uniqueMaleFirst = sampleWithoutReplacement(MALE_FIRST.filter(n => FEMALE_FIRST.indexOf(n) === -1), foundersMaleCount);

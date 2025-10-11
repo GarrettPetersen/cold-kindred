@@ -182,7 +182,10 @@ async function runSimulation() {
 
   // ---------- Name lists (common US names, truncated for demo but sufficient for uniqueness) ----------
   const COMMON_SURNAMES = [
-    'Smith','Johnson','Williams','Brown','Jones','Garcia','Miller','Davis','Rodriguez','Martinez','Hernandez','Lopez','Gonzalez','Wilson','Anderson','Thomas','Taylor','Moore','Jackson','Martin','Lee','Perez','Thompson','White','Harris','Sanchez','Clark','Ramirez','Lewis','Robinson','Walker','Young','Allen','King','Wright','Scott','Torres','Nguyen','Hill','Flores','Green','Adams','Nelson','Baker','Hall','Rivera','Campbell','Mitchell','Carter','Roberts','Gomez','Phillips','Evans','Turner','Diaz','Parker','Cruz','Edwards','Collins','Reyes','Stewart','Morris','Morales','Murphy','Cook','Rogers','Gutierrez','Ortiz','Morgan','Cooper','Peterson','Bailey','Reed','Kelly','Howard','Ramos','Kim','Cox','Ward','Richardson','Watson','Brooks','Chavez','Wood','James','Bennett','Gray','Mendoza','Ruiz','Hughes','Price','Alvarez','Castillo','Sanders','Patel','Myers','Long','Ross','Foster','Jimenez','Powell','Jenkins','Perry','Russell','Sullivan','Bell','Coleman','Butler','Henderson','Barnes','Gonzales','Fisher','Vasquez','Simmons','Romero','Jordan','Patterson','Alexander','Hamilton','Graham','Reynolds','Griffin','Wallace','Moreno','West','Cole','Hayes','Bryant','Herrera','Gibson','Ellis','Tran','Medina','Aguilar','Stevens','Murray','Ford','Castro','Marshall','Owens','Harrison','Fernandez','Mcdonald','Woods','Washington','Kennedy','Wells','Vargas','Henry','Chen','Freeman','Shaw','Mendez','Weaver','Guzman','Nichols','Olson','Ramsey','Hunter','Hart','Guerrero','George','Shaw','Porter','Chambers','Cole','Moss','Newton','Page','Schmidt','Hansen','Bishop','Burke','Boyd','Lowe','Dean','Perez','Haynes','Fleming','Park','Warren','Gibbs','Walters','Lyons','Carter','Barker','Paul','Mack','Poole','Frank','Logan','Owen','Bass','Marsh','Drake','Sutton','Jennings','Boone','Banks','Potter','Lindsey','Pope','Sherman','Weston','Conner','Baldwin','French','Farmer','Hines','Lawson','Casey','Little','Day','Fowler','Bowman','Davidson','May','Carroll','Fields','Figueroa','Carlson','Mccarthy','Harrington','Norton','Atkins','Luna','Miles','Greer','Roman','Morrow','Randall','Hall','Clarke','Parks','Lambert','Stephens','Snyder','Mason','Salazar','Cross','Curtis','Kent','Doyle','Brock','Cummings','Erickson','Holland','Page','Keller','Curtis','Klein','Pratt','Tyler','Sharp','Barber','Goodman','Brady'
+    // Top US surnames (extended set)
+    'Smith','Johnson','Williams','Brown','Jones','Garcia','Miller','Davis','Rodriguez','Martinez','Hernandez','Lopez','Gonzalez','Wilson','Anderson','Thomas','Taylor','Moore','Jackson','Martin','Lee','Perez','Thompson','White','Harris','Sanchez','Clark','Ramirez','Lewis','Robinson','Walker','Young','Allen','King','Wright','Scott','Torres','Nguyen','Hill','Flores','Green','Adams','Nelson','Baker','Hall','Rivera','Campbell','Mitchell','Carter','Roberts','Gomez','Phillips','Evans','Turner','Diaz','Parker','Cruz','Edwards','Collins','Reyes','Stewart','Morris','Morales','Murphy','Cook','Rogers','Gutierrez','Ortiz','Morgan','Cooper','Peterson','Bailey','Reed','Kelly','Howard','Ramos','Kim','Cox','Ward','Richardson','Watson','Brooks','Chavez','Wood','James','Bennett','Gray','Mendoza','Ruiz','Hughes','Price','Alvarez','Castillo','Sanders','Patel','Myers','Long','Ross','Foster','Jimenez','Powell','Jenkins','Perry','Russell','Sullivan','Bell','Coleman','Butler','Henderson','Barnes','Gonzales','Fisher','Vasquez','Simmons','Romero','Jordan','Patterson','Alexander','Hamilton','Graham','Reynolds','Griffin','Wallace','Moreno','West','Cole','Hayes','Bryant','Herrera','Gibson','Ellis','Tran','Medina','Aguilar','Stevens','Murray','Ford','Castro','Marshall','Owens','Harrison','Fernandez','Mcdonald','Woods','Washington','Kennedy','Wells','Vargas','Henry','Chen','Freeman','Shaw','Mendez','Weaver','Guzman','Nichols','Olson','Ramsey','Hunter','Hart','Guerrero','George','Porter','Chambers','Moss','Newton','Page','Schmidt','Hansen','Bishop','Burke','Boyd','Lowe','Dean','Haynes','Fleming','Park','Warren','Gibbs','Walters','Lyons','Barker','Paul','Mack','Poole','Frank','Logan','Owen','Bass','Marsh','Drake','Sutton','Jennings','Boone','Banks','Potter','Lindsey','Pope','Sherman','Weston','Conner','Baldwin','French','Farmer','Hines','Lawson','Casey','Little','Day','Fowler','Bowman','Davidson','May','Carroll','Fields','Figueroa','Carlson','Mccarthy','Harrington','Norton','Atkins','Luna','Miles','Greer','Roman','Morrow','Randall','Clarke','Parks','Lambert','Stephens','Snyder','Mason','Salazar','Cross','Curtis','Kent','Doyle','Brock','Cummings','Erickson','Holland','Keller','Klein','Pratt','Tyler','Sharp','Barber','Goodman','Brady',
+    // Additional US/Anglo/Euro-immigrant surnames to broaden variety
+    'Abbott','Acevedo','Acosta','Aguirre','Albert','Alston','Anthony','Archer','Armstrong','Arroyo','Ashby','Ashley','Atkinson','Austin','Avery','Ball','Barrett','Bartlett','Bates','Becker','Bellamy','Benton','Berg','Berry','Black','Blair','Blake','Bolton','Bond','Booker','Booth','Bowers','Boyle','Bradford','Bradley','Brady','Brandt','Brennan','Brewer','Bridges','Briggs','Brock','Browning','Bruce','Bryan','Buchanan','Buck','Burnett','Burns','Burton','Bush','Calderon','Calhoun','Callahan','Camacho','Cameron','Carey','Carlson','Carney','Carr','Carson','Case','Castro','Chan','Chandler','Chang','Chapman','Charles','Chase','Christensen','Christian','Chu','Clarke','Clayton','Cline','Cobb','Cohen','Contreras','Conway','Cooke','Cooley','Copeland','Cordova','Cortez','Costa','Craig','Crane','Crawford','Crosby','Curry','Daniel','Daniels','Daugherty','David','Davila','Dawson','Decker','Delgado','Dennis','Dickerson','Dickson','Dixon','Dodson','Dominguez','Dorsey','Douglas','Downs','Doyle','Duarte','Duffy','Duke','Dunlap','Dunn','Durham','Dyer','Eaton','Edmonds','Elliott','Emerson','England','Espinoza',' Estes','Ferguson','Finley','Fischer','Fitzgerald','Floyd','Flynn','Foreman','Fowler','Fox','Francis','Frederick','Friedman','Frost','Fry','Fuller','Gallegos','Gamble','Garner','Gay','George','Gentry','Glass','Golden','Good','Goodwin','Gordon','Gould','Grant','Graves','Greene','Grimes','Gross','Guerra','Guthrie','Hale','Haley','Hancock','Haney','Hardin','Harding','Harper','Harris','Harrington','Hatch','Hawkins','Hayden','Heath','Hebert','Hendrix','Hensley','Henson','Herman','Herring','Hess','Hester','Hewitt','Hickman','Hinton','Hobbs','Hodge','Hoffman','Holder','Holloway','Hoover','Hooper','Hopkins','Horne','House','Hubbard','Huber','Huerta','Huff','Humphrey','Hurst','Hutchinson','Ibarra','Ingram','Jack','Jacobson','Jensen','Johns','Johnston','Kane','Keith','Keller','Kelley','Kemp','Kendall','Kerr','Kidd','Kirk','Kirby','Kirkpatrick','Kline','Knapp','Knight','Knowles','Kramer','Lamb','Lamb','Lambert','Lancaster','Landry','Lane','Lang','Lara','Larsen','Larson','Lawrence','Le','Leach','Leal','Leblanc','Lee','Lehman','Lester','Levine','Li','Lindsey','Lloyd','Lucas','Lynn','Macdonald','Maddox','Maldonado','Mann','Manning','Marks','Marquez','Marsh','Marshall','Massey','Mathews','Mathis','Mayer','Maynard','McBride','McCall','McCann','McCarthy','McClain','McConnell','McCormick','McCoy','McCullough','McDaniel','McDowell','McGee','McGuire','McIntyre','McKay','McKee','McKenzie','McKinney','McKnight','McLaughlin','McLean','McNeil','McPherson','Meadows','Mejia','Melendez','Mendez','Meredith','Michael','Middleton','Miranda','Mitchell','Monroe','Monson','Montgomery','Montoya','Moon','Mooney','Moran','Moreno','Morris','Morrow','Mosley','Moss','Mueller','Munoz','Navarro','Neal','Nelson','Newman','Nielsen','Nixon','Noble','Noel','Norman','Norris','Nunez','Ochoa','Odom','Olsen','Ortega','Ortiz','Osborne','Owen','Pacheco','Padilla','Page','Palmer','Park','Parks','Parsons','Payne','Pearce','Pena','Pennington','Perkins','Phelps','Phillips','Pineda','Pittman','Pollard','Portillo','Potter','Powell','Preston','Price','Quinn','Ramsey','Randolph','Rasmussen','Ray','Raymond','Reese','Reeves','Reid','Reilly','Richard','Richards','Riggs','Riley','Rios','Rivas','Roach','Robbins','Rocha','Rojas','Rollins','Roman','Roosevelt','Rosales','Rosario','Roth','Rowe','Roy','Salas','Salgado','Salinas','Sampson','Sanchez','Sandoval','Santana','Santiago','Santos','Sargent','Saunders','Savage','Sawyer','Schmidt','Schneider','Schroeder','Schultz','Schwartz','Sears','Sexton','Shaffer','Shannon','Sharp','Shaw','Shea','Shepherd','Sheppard','Sherman','Shields','Short','Silva','Simmons','Simpson','Singleton','Skinner','Slater','Sloan','Small','Smart','Snow','Solomon','Sosa','Soto','Spears','Spencer','Stafford','Stanley','Stark','Steele','Stein','Stephenson','Stevenson','Stewart','Stokes','Stone','Stout','Strickland','Strong','Stuart','Suarez','Sullivan','Summers','Swanson','Sweeney','Sweet','Tanner','Tate','Terrell','Terry','Thomas','Thornton','Todd','Townsend','Tran','Trevino','Trujillo','Tucker','Turner','Tyler','Underwood','Valdez','Valencia','Valentine','Valenzuela','Vance','Vega','Velasquez','Velez','Villarreal','Vincent','Vinson','Wade','Wagner','Walker','Wall','Walsh','Walter','Ware','Warner','Warren','Washington','Waters','Watkins','Watson','Weaver','Webb','Weber','Webster','Weeks','Weiss','Welch','West','Wheeler','Whitaker','Whitehead','Whitfield','Whitley','Whitney','Wiggins','Wilcox','Wiley','Wilkerson','Wilkinson','William','Williamson','Willis','Wilson','Winters','Wise','Wolfe','Wong','Woodard','Woods','Workman','Wright','Wu','Wyatt','Yang','Yates','Young','Zamora','Zhang','Zuniga'
   ];
 
   const MALE_FIRST = [
@@ -221,7 +224,8 @@ async function runSimulation() {
     if (!person.lastName) {
       const mom = fields.motherId ? result.people.find(p => p.id === fields.motherId) : null;
       const dad = fields.fatherId ? result.people.find(p => p.id === fields.fatherId) : null;
-      person.lastName = mom?.lastName || dad?.lastName || 'Unknown';
+      const fallback = mom?.lastName || dad?.lastName;
+      person.lastName = fallback && fallback !== 'Unknown' ? fallback : pick(COMMON_SURNAMES);
     }
     result.people.push(person);
     return person;
@@ -644,7 +648,16 @@ async function runSimulation() {
   const foundersMaleCount = 400;
   const foundersFemaleCount = 400;
 
-  const uniqueSurnames = sampleWithoutReplacement(COMMON_SURNAMES, foundersMaleCount + foundersFemaleCount);
+  const requestedSurnames = foundersMaleCount + foundersFemaleCount;
+  if (requestedSurnames > COMMON_SURNAMES.length) {
+    console.error('[SURNAME_POOL]', {
+      message: 'Founding population exceeds surname list size; duplicates may occur.',
+      requested: requestedSurnames,
+      available: COMMON_SURNAMES.length
+    });
+  }
+  const uniqueSurnames = sampleWithoutReplacement(COMMON_SURNAMES, requestedSurnames);
+  const surnameAt = (i) => uniqueSurnames.length ? uniqueSurnames[i % uniqueSurnames.length] : pick(COMMON_SURNAMES);
   const uniqueMaleFirst = sampleWithoutReplacement(MALE_FIRST.filter(n => FEMALE_FIRST.indexOf(n) === -1), foundersMaleCount);
   const uniqueFemaleFirst = sampleWithoutReplacement(FEMALE_FIRST.filter(n => MALE_FIRST.indexOf(n) === -1), foundersFemaleCount);
   // Backdate founders into the late 19th century so early-1900 births occur
@@ -657,7 +670,7 @@ async function runSimulation() {
     const cityId = pickWeightedCityId();
     const p = createPerson({
       firstName: uniqueMaleFirst[i % uniqueMaleFirst.length],
-      lastName: uniqueSurnames[idx],
+      lastName: surnameAt(idx),
       sex: 'M',
       birthDate: uniqueFounderBirthdates[idx],
       generation: 0,
@@ -670,7 +683,7 @@ async function runSimulation() {
     const cityId = pickWeightedCityId();
     const p = createPerson({
       firstName: uniqueFemaleFirst[i % uniqueFemaleFirst.length],
-      lastName: uniqueSurnames[idx],
+      lastName: surnameAt(idx),
       sex: 'F',
       birthDate: uniqueFounderBirthdates[idx],
       generation: 0,
@@ -773,7 +786,7 @@ async function runSimulation() {
         let lastName = father.lastName;
         const isPartnerPair = !isMarriedPair;
         if (isPartnerPair) {
-          lastName = mother.lastName;
+          lastName = mother.lastName || lastName;
         }
         const birthDate = randomChildBirthDate(year(mother.birthDate));
         // Determine biological father (affair-born children possible only heterosexual)

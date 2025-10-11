@@ -66,7 +66,7 @@ app.innerHTML = `
     <section id="overlaySim" class="overlay"><div class="overlay-card">
       <div class="title-sub">Simulating 125 years of demographic changes. This may take a few minutes.</div>
       <div id="flashYear" class="year-flash">1900</div>
-      <div id="flashMsg" class="title-sub">Preparing simulation…</div>
+      <div id="flashMsg" class="title-sub"></div>
       <div id="flashFeed" class="flash-feed"></div>
     </div></section>
     <section id="overlayTitle" class="overlay"><div class="overlay-card">
@@ -950,8 +950,6 @@ async function runSimulation() {
     if (flashYearEl) flashYearEl.textContent = String(y);
     await delay(10);
     // Flavor timeline
-    if (y === 1900 && flashMsgEl) flashMsgEl.textContent = 'Preparing simulation…';
-    if (y > 1900 && flashMsgEl && flashMsgEl.textContent) flashMsgEl.textContent = '';
     if (y === 1900) pushFlash('Preparing simulation…');
     if (y === 1914) pushFlash('World War I begins');
     if (y === 1917) pushFlash('World War I');
@@ -998,8 +996,46 @@ async function runSimulation() {
     if (y === 2016) pushFlash('Contentious election year');
     if (y === 2020) pushFlash('Global pandemic');
     if (y === 2021) pushFlash('Vaccine rollout');
-    // occasional election-year note
-    if (y % 4 === 0 && y >= 1900 && Math.random() < 0.25) pushFlash('Presidential election year');
+    // Elections – winners as regular events
+    const ELECTIONS = {
+      1900: { name: 'William McKinley', party: 'Republican' },
+      1904: { name: 'Theodore Roosevelt', party: 'Republican' },
+      1908: { name: 'William Howard Taft', party: 'Republican' },
+      1912: { name: 'Woodrow Wilson', party: 'Democratic' },
+      1916: { name: 'Woodrow Wilson', party: 'Democratic' },
+      1920: { name: 'Warren G. Harding', party: 'Republican' },
+      1924: { name: 'Calvin Coolidge', party: 'Republican' },
+      1928: { name: 'Herbert Hoover', party: 'Republican' },
+      1932: { name: 'Franklin D. Roosevelt', party: 'Democratic' },
+      1936: { name: 'Franklin D. Roosevelt', party: 'Democratic' },
+      1940: { name: 'Franklin D. Roosevelt', party: 'Democratic' },
+      1944: { name: 'Franklin D. Roosevelt', party: 'Democratic' },
+      1948: { name: 'Harry S. Truman', party: 'Democratic' },
+      1952: { name: 'Dwight D. Eisenhower', party: 'Republican' },
+      1956: { name: 'Dwight D. Eisenhower', party: 'Republican' },
+      1960: { name: 'John F. Kennedy', party: 'Democratic' },
+      1964: { name: 'Lyndon B. Johnson', party: 'Democratic' },
+      1968: { name: 'Richard Nixon', party: 'Republican' },
+      1972: { name: 'Richard Nixon', party: 'Republican' },
+      1976: { name: 'Jimmy Carter', party: 'Democratic' },
+      1980: { name: 'Ronald Reagan', party: 'Republican' },
+      1984: { name: 'Ronald Reagan', party: 'Republican' },
+      1988: { name: 'George H. W. Bush', party: 'Republican' },
+      1992: { name: 'Bill Clinton', party: 'Democratic' },
+      1996: { name: 'Bill Clinton', party: 'Democratic' },
+      2000: { name: 'George W. Bush', party: 'Republican' },
+      2004: { name: 'George W. Bush', party: 'Republican' },
+      2008: { name: 'Barack Obama', party: 'Democratic' },
+      2012: { name: 'Barack Obama', party: 'Democratic' },
+      2016: { name: 'Donald Trump', party: 'Republican' },
+      2020: { name: 'Joe Biden', party: 'Democratic' }
+    };
+    if (ELECTIONS[y]) {
+      const w = ELECTIONS[y];
+      pushFlash(`${w.name} elected president.`);
+      const evt = addEvent({ year: y, type: 'ELECTION', people: [], details: { winner: w.name, party: w.party } });
+      indexEventByYear(evt);
+    }
     const b = birthsByYear.get(y) || 0;
     const m = marriagesByYear.get(y) || 0;
     // Sample at least one demographic highlight per year

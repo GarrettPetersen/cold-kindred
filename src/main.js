@@ -643,6 +643,34 @@ async function runSimulation() {
     return 0.50;                 // 50% per year 75+
   }
 
+  // Cause-of-death selection (simple, age/year aware)
+  function deathCauseFor(age, year) {
+    // War windows (US involvement)
+    const wars = [
+      { from: 1917, to: 1918, label: 'combat in World War I' },
+      { from: 1941, to: 1945, label: 'combat in World War II' },
+      { from: 1950, to: 1953, label: 'combat in the Korean War' },
+      { from: 1965, to: 1973, label: 'combat in the Vietnam War' },
+      { from: 1990, to: 1991, label: 'combat in the Gulf War' },
+      { from: 2001, to: 2014, label: 'combat in Afghanistan' },
+      { from: 2003, to: 2011, label: 'combat in the Iraq War' }
+    ];
+    if (age >= 18 && age <= 35) {
+      const inWar = wars.find(w => year >= w.from && year <= w.to);
+      if (inWar && Math.random() < 0.08) return inWar.label;
+    }
+    if (year === 1918 && age >= 1 && age <= 50) {
+      if (Math.random() < 0.15) return 'influenza pandemic';
+    }
+    if (age < 1) return Math.random() < 0.5 ? 'complications at birth' : 'infant illness';
+    if (age < 13) return Math.random() < 0.6 ? 'illness' : 'accident';
+    if (age < 26) return Math.random() < 0.6 ? 'accident' : (year > 1990 && Math.random() < 0.4 ? 'overdose' : 'illness');
+    if (age < 45) return Math.random() < 0.5 ? 'accident' : (Math.random() < 0.5 ? 'cancer' : 'heart condition');
+    if (age < 65) return Math.random() < 0.55 ? 'cancer' : (Math.random() < 0.5 ? 'heart disease' : 'stroke');
+    if (age < 85) return Math.random() < 0.6 ? 'heart disease' : (Math.random() < 0.5 ? 'cancer' : 'stroke');
+    return Math.random() < 0.6 ? 'natural causes' : 'heart failure';
+  }
+
   // ---------- Step 1: Founders (G0) with unique last names, first names, birthdates ----------
   await delay(150);
   const foundersMaleCount = 382;
@@ -1255,8 +1283,10 @@ async function runSimulation() {
       const hazard = mortalityHazard(age);
       if (hazard > 0 && random() < hazard) {
         p.alive = false;
-        const evt = addEvent({ year: y, type: 'DEATH', people: [p.id], details: { cityId: p.cityId, age } });
+        const cause = deathCauseFor(age, y);
+        const evt = addEvent({ year: y, type: 'DEATH', people: [p.id], details: { cityId: p.cityId, age, cause } });
         indexEventByYear(evt);
+        if (Math.random() < 0.02) pushFlash(`${p.firstName} ${p.lastName} died in ${getCityName(p.cityId)} (${cause}).`);
       }
     }
 

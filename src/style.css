@@ -239,6 +239,9 @@ button.secondary {
 .gene-edge.marriage { stroke: #06b6d4; }
 .gene-edge.biological { stroke: #16a34a; }
 .gene-edge.guardian { stroke: #f59e0b; stroke-dasharray: 4 3; }
+.marriage-line { stroke: #06b6d4; stroke-width: 2; }
+.descent-line { stroke: #555; stroke-width: 2; }
+.sibling-line { stroke: #999; stroke-width: 2; }
 
 .gene-person .head { fill: #111; }
 .gene-person .limb { stroke: #111; stroke-width: 2; stroke-linecap: round; }

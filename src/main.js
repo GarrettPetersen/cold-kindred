@@ -980,8 +980,9 @@ async function runSimulation() {
   const STORAGE_KEY = 'ck:v1:knowledge';
   const emptyKnowledge = () => ({
     knownPeople: new Set(),
-    // edges: { type: 'marriage'|'biological'|'guardian', a: id, b: id }
-    edges: [],
+    // knownRelationships: explicit, user-known relationships only.
+    // Each: { type: 'marriage'|'biological'|'guardian'|'siblings', a: id, b: id }
+    knownRelationships: [],
     simSeed: result.seed
   });
   function loadKnowledge() {
@@ -993,7 +994,9 @@ async function runSimulation() {
       if (parsed.simSeed !== result.seed) return emptyKnowledge();
       const k = emptyKnowledge();
       k.knownPeople = new Set(parsed.knownPeople || []);
-      k.edges = Array.isArray(parsed.edges) ? parsed.edges : [];
+      // migrate prior version 'edges' => 'knownRelationships'
+      const rels = parsed.knownRelationships || parsed.edges || [];
+      k.knownRelationships = Array.isArray(rels) ? rels : [];
       k.simSeed = parsed.simSeed || result.seed;
       return k;
     } catch {
@@ -1003,7 +1006,7 @@ async function runSimulation() {
   function saveKnowledge(k) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
       knownPeople: Array.from(k.knownPeople),
-      edges: k.edges,
+      knownRelationships: k.knownRelationships,
       simSeed: result.seed
     }));
   }
@@ -1015,15 +1018,15 @@ async function runSimulation() {
     knowledge.knownPeople.add(seed.id);
     if (seed.spouseId) {
       knowledge.knownPeople.add(seed.spouseId);
-      knowledge.edges.push({ type: 'marriage', a: seed.id, b: seed.spouseId });
+      knowledge.knownRelationships.push({ type: 'marriage', a: seed.id, b: seed.spouseId });
     }
     if (seed.fatherId) {
       knowledge.knownPeople.add(seed.fatherId);
-      knowledge.edges.push({ type: 'biological', a: seed.fatherId, b: seed.id });
+      knowledge.knownRelationships.push({ type: 'biological', a: seed.fatherId, b: seed.id });
     }
     if (seed.motherId) {
       knowledge.knownPeople.add(seed.motherId);
-      knowledge.edges.push({ type: 'biological', a: seed.motherId, b: seed.id });
+      knowledge.knownRelationships.push({ type: 'biological', a: seed.motherId, b: seed.id });
     }
     saveKnowledge(knowledge);
   }
@@ -1032,7 +1035,7 @@ async function runSimulation() {
   function renderGenealogy() {
     // Build nodes from knownPeople
     const nodes = [];
-    const edges = knowledge.edges.filter(e => knowledge.knownPeople.has(e.a) && knowledge.knownPeople.has(e.b));
+    const edges = knowledge.knownRelationships.filter(e => knowledge.knownPeople.has(e.a) && knowledge.knownPeople.has(e.b));
     for (const id of knowledge.knownPeople) {
       const p = personById.get(id);
       if (!p) continue;
@@ -1285,13 +1288,13 @@ async function runSimulation() {
       // Auto-connect visible family edges for context (if in knowledge)
       const p = candidates[0];
       if (p.spouseId && knowledge.knownPeople.has(p.spouseId)) {
-        knowledge.edges.push({ type: 'marriage', a: p.id, b: p.spouseId });
+        knowledge.knownRelationships.push({ type: 'marriage', a: p.id, b: p.spouseId });
       }
       if (p.fatherId && knowledge.knownPeople.has(p.fatherId)) {
-        knowledge.edges.push({ type: 'biological', a: p.fatherId, b: p.id });
+        knowledge.knownRelationships.push({ type: 'biological', a: p.fatherId, b: p.id });
       }
       if (p.motherId && knowledge.knownPeople.has(p.motherId)) {
-        knowledge.edges.push({ type: 'biological', a: p.motherId, b: p.id });
+        knowledge.knownRelationships.push({ type: 'biological', a: p.motherId, b: p.id });
       }
       saveKnowledge(knowledge);
       renderGenealogy();
@@ -1317,7 +1320,7 @@ async function runSimulation() {
     if (!relatives.length) return;
     const pickRel = relatives[Math.floor(Math.random() * relatives.length)];
     knowledge.knownPeople.add(pickRel.id);
-    knowledge.edges.push({ type: pickRel.type, a: pickRel.a, b: pickRel.b });
+    knowledge.knownRelationships.push({ type: pickRel.type, a: pickRel.a, b: pickRel.b });
     saveKnowledge(knowledge);
     renderGenealogy();
   }

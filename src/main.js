@@ -645,8 +645,8 @@ async function runSimulation() {
 
   // ---------- Step 1: Founders (G0) with unique last names, first names, birthdates ----------
   await delay(150);
-  const foundersMaleCount = 400;
-  const foundersFemaleCount = 400;
+  const foundersMaleCount = 382;
+  const foundersFemaleCount = 383;
 
   const requestedSurnames = foundersMaleCount + foundersFemaleCount;
   if (requestedSurnames > COMMON_SURNAMES.length) {

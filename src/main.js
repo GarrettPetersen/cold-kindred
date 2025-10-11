@@ -735,11 +735,15 @@ async function runSimulation() {
       for (let k = 0; k < numKids; k++) {
         const sex = random() < 0.5 ? 'M' : 'F';
         const firstName = sex === 'M' ? pick(MALE_FIRST) : pick(FEMALE_FIRST);
-        const lastName = father.lastName; // father's family name
+        // Choose family surname: if out of wedlock (partner pair), take mother's surname; if affair in marriage, keep family (husband's) surname; otherwise father's
+        let lastName = father.lastName;
+        const isPartnerPair = !isMarriedPair;
+        if (isPartnerPair) {
+          lastName = mother.lastName;
+        }
         const birthDate = randomChildBirthDate(year(mother.birthDate));
         // Determine biological father (affair-born children possible only heterosexual)
         let bioFatherId = father.id;
-        const isPartnerPair = !isMarriedPair;
         const fromAffair = isMarriedPair ? (random() < 0.08) : (random() < 0.12);
         if (fromAffair) {
           const maleAdultsSameCity = result.people.filter(p => p.sex === 'M' && p.id !== father.id && (year(birthDate) - year(p.birthDate)) >= 18 && p.cityId === (mother.cityId || father.cityId));

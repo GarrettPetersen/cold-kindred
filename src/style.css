@@ -228,6 +228,9 @@ button.secondary {
 .overlay-card {
     text-align: center;
     padding: 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
 }
 .year-flash {
     font-size: 72px;
@@ -247,7 +250,7 @@ button.secondary {
     cursor: pointer;
 }
 
-.flash-feed { width: min(720px, 90%); margin-top: 12px; text-align: left; }
+.flash-feed { width: min(720px, 90%); margin-top: 12px; text-align: left; height: 200px; overflow: hidden; }
 .flash-line { margin: 4px 0; transition: opacity 200ms linear, color 200ms linear; animation: slideDown 160ms ease-out; }
 @keyframes slideDown { from { transform: translateY(-6px); opacity: 0.9; } to { transform: translateY(0); opacity: 1; } }
 .flash-line.fade-0 { color: #111; opacity: 1; }
@@ -256,7 +259,7 @@ button.secondary {
 .flash-line.fade-3 { color: #666; opacity: 0.7; }
 .flash-line.fade-4 { color: #888; opacity: 0.6; }
 .flash-line.fade-5 { color: #aaa; opacity: 0.5; }
-.flash-line.murder { color: #b00020; font-weight: 600; opacity: 1; }
+.flash-line.murder { color: #b00020; font-weight: 600; }
 
 .tabbar {
     display: flex;

@@ -248,7 +248,8 @@ button.secondary {
 }
 
 .flash-feed { width: min(720px, 90%); margin-top: 12px; text-align: left; }
-.flash-line { margin: 4px 0; transition: opacity 200ms linear, color 200ms linear; }
+.flash-line { margin: 4px 0; transition: opacity 200ms linear, color 200ms linear; animation: slideDown 160ms ease-out; }
+@keyframes slideDown { from { transform: translateY(-6px); opacity: 0.9; } to { transform: translateY(0); opacity: 1; } }
 .flash-line.fade-0 { color: #111; opacity: 1; }
 .flash-line.fade-1 { color: #222; opacity: 0.9; }
 .flash-line.fade-2 { color: #444; opacity: 0.8; }

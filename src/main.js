@@ -894,14 +894,46 @@ async function runSimulation() {
     await delay(10);
     // Flavor timeline
     if (y === 1900 && flashMsgEl) flashMsgEl.textContent = 'Preparing simulation…';
-    if (y === 1917) pushFlash('Simulating World War I');
-    if (y === 1929) pushFlash('Simulating the Great Depression');
-    if (y === 1941) pushFlash('Simulating World War II');
-    if (y === 1946) pushFlash('Simulating the Baby Boom');
-    if (y === 1968) pushFlash('Simulating Vietnam War & counterculture');
-    if (y === 2000) pushFlash('Simulating Y2K');
+    if (y === 1900) pushFlash('Preparing simulation…');
+    if (y === 1917) pushFlash('World War I');
+    if (y === 1920) pushFlash('The Roaring Twenties');
+    if (y === 1929) pushFlash('The Great Depression');
+    if (y === 1941) pushFlash('World War II');
+    if (y === 1946) pushFlash('Baby Boom');
+    if (y === 1950) pushFlash('Red Scare');
+    if (y === 1964) pushFlash('Civil Rights Era');
+    if (y === 1968) pushFlash('Vietnam War');
+    if (y === 1969) pushFlash('Flower Power');
+    if (y === 1977) pushFlash('Dawn of Personal Computing');
+    if (y === 1989) pushFlash('End of Cold War');
+    if (y === 2000) pushFlash('Y2K');
+    if (y === 2001) pushFlash('9/11');
+    if (y === 2008) pushFlash('Great Recession');
     const b = birthsByYear.get(y) || 0;
     const m = marriagesByYear.get(y) || 0;
+    // Sample at least one demographic highlight per year
+    if (b > 0 || m > 0) {
+      if (random() < 0.6 && b > 0) {
+        const bornThisYear = result.people.filter(p => year(p.birthDate) === y);
+        const pickB = bornThisYear[Math.floor(random() * bornThisYear.length)];
+        if (pickB) pushFlash(`${pickB.firstName} ${pickB.lastName} born in ${getCityName(pickB.cityId)}.`);
+      } else if (m > 0) {
+        const marriedThisYear = result.marriages.filter(mm => mm.year === y);
+        const pickM = marriedThisYear[Math.floor(random() * marriedThisYear.length)];
+        if (pickM) {
+          const ha = personByIdPre.get(pickM.husbandId); const wa = personByIdPre.get(pickM.wifeId);
+          pushFlash(`${ha?.firstName || 'Someone'} ${ha?.lastName || ''} married ${wa?.firstName || 'someone'} ${wa?.lastName || ''}.`);
+        }
+      }
+    } else if (random() < 0.2) {
+      // fallback: occasional job change sample
+      const sampled = result.events.findLast ? result.events.findLast(e => e.type === 'JOB_CHANGE' && e.year === y) :
+        [...result.events].reverse().find(e => e.type === 'JOB_CHANGE' && e.year === y);
+      if (sampled) {
+        const p = personByIdPre.get(sampled.people[0]);
+        if (p) pushFlash(`${p.firstName} ${p.lastName} started as ${sampled.details?.jobTitle || 'a new job'}.`);
+      }
+    }
     
     // Adults for stochastic events
     const adults = result.people.filter(p => p.alive && (y - year(p.birthDate)) >= 18);

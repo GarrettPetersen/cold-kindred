@@ -850,7 +850,7 @@ async function runSimulation() {
     }
     // Clear SVG
     while (geneSvg.firstChild) geneSvg.removeChild(geneSvg.firstChild);
-    const marginX = 40, marginY = 40, w = 120, h = 40, gapX = 24, gapY = 80;
+    const marginX = 40, marginY = 60, w = 80, h = 80, gapX = 32, gapY = 120;
     const pos = new Map();
     const gens = Array.from(layers.keys()).sort((a, b) => a - b);
     for (let gi = 0; gi < gens.length; gi++) {
@@ -876,25 +876,100 @@ async function runSimulation() {
       path.setAttribute('class', `gene-edge ${e.type}`);
       geneSvg.appendChild(path);
     }
-    // Draw nodes
+    // Draw nodes (bathroom-sign style icon + name above)
     for (const n of nodes) {
       const p = pos.get(n.id);
       if (!p) continue;
       const gEl = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-      rect.setAttribute('x', String(p.x));
-      rect.setAttribute('y', String(p.y));
-      rect.setAttribute('width', String(w));
-      rect.setAttribute('height', String(h));
-      rect.setAttribute('rx', '6');
-      rect.setAttribute('class', 'gene-node');
-      const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      text.setAttribute('x', String(p.x + 8));
-      text.setAttribute('y', String(p.y + 24));
-      text.setAttribute('font-size', '12');
-      text.textContent = `${n.firstName} ${n.lastName}`;
-      gEl.appendChild(rect);
-      gEl.appendChild(text);
+
+      // Name above icon
+      const name = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      name.setAttribute('x', String(p.x + w / 2));
+      name.setAttribute('y', String(p.y - 8));
+      name.setAttribute('text-anchor', 'middle');
+      name.setAttribute('class', 'gene-name');
+      name.textContent = `${n.firstName} ${n.lastName}`;
+      gEl.appendChild(name);
+
+      // Simple person icon: sex-based silhouette (dress for F)
+      const iconGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      iconGroup.setAttribute('class', 'gene-person');
+
+      const cx = p.x + w / 2;
+      const cy = p.y + 16; // head center y
+      const head = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      head.setAttribute('cx', String(cx));
+      head.setAttribute('cy', String(cy));
+      head.setAttribute('r', '8');
+      head.setAttribute('class', 'head');
+      iconGroup.appendChild(head);
+
+      const bodyY1 = cy + 10;
+      if (n.sex === 'F') {
+        // Triangle dress, a classic bathroom sign silhouette
+        const dress = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        const topY = bodyY1;
+        const skirtY = topY + 32;
+        const halfWidth = 18;
+        const armY = topY + 6;
+        dress.setAttribute('d', `M ${cx} ${topY} L ${cx - halfWidth} ${skirtY} L ${cx + halfWidth} ${skirtY} Z`);
+        dress.setAttribute('class', 'dress');
+        iconGroup.appendChild(dress);
+        // simple arms
+        const armL = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        armL.setAttribute('x1', String(cx - 16));
+        armL.setAttribute('y1', String(armY));
+        armL.setAttribute('x2', String(cx));
+        armL.setAttribute('y2', String(armY));
+        armL.setAttribute('class', 'limb');
+        iconGroup.appendChild(armL);
+        const armR = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        armR.setAttribute('x1', String(cx));
+        armR.setAttribute('y1', String(armY));
+        armR.setAttribute('x2', String(cx + 16));
+        armR.setAttribute('y2', String(armY));
+        armR.setAttribute('class', 'limb');
+        iconGroup.appendChild(armR);
+      } else {
+        const bodyY2 = bodyY1 + 26;
+        const body = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        body.setAttribute('x1', String(cx));
+        body.setAttribute('y1', String(bodyY1));
+        body.setAttribute('x2', String(cx));
+        body.setAttribute('y2', String(bodyY2));
+        body.setAttribute('class', 'limb');
+        iconGroup.appendChild(body);
+        const armL = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        armL.setAttribute('x1', String(cx - 16));
+        armL.setAttribute('y1', String(bodyY1 + 6));
+        armL.setAttribute('x2', String(cx));
+        armL.setAttribute('y2', String(bodyY1 + 6));
+        armL.setAttribute('class', 'limb');
+        iconGroup.appendChild(armL);
+        const armR = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        armR.setAttribute('x1', String(cx));
+        armR.setAttribute('y1', String(bodyY1 + 6));
+        armR.setAttribute('x2', String(cx + 16));
+        armR.setAttribute('y2', String(bodyY1 + 6));
+        armR.setAttribute('class', 'limb');
+        iconGroup.appendChild(armR);
+        const legL = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        legL.setAttribute('x1', String(cx));
+        legL.setAttribute('y1', String(bodyY2));
+        legL.setAttribute('x2', String(cx - 12));
+        legL.setAttribute('y2', String(bodyY2 + 20));
+        legL.setAttribute('class', 'limb');
+        iconGroup.appendChild(legL);
+        const legR = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        legR.setAttribute('x1', String(cx));
+        legR.setAttribute('y1', String(bodyY2));
+        legR.setAttribute('x2', String(cx + 12));
+        legR.setAttribute('y2', String(bodyY2 + 20));
+        legR.setAttribute('class', 'limb');
+        iconGroup.appendChild(legR);
+      }
+
+      gEl.appendChild(iconGroup);
       geneSvg.appendChild(gEl);
     }
   }

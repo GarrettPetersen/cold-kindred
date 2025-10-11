@@ -228,18 +228,24 @@ async function runSimulation() {
     eventsByYear.set(evt.year, list);
   }
 
-  // Top 10 US cities with approximate population weights
+  // Major US cities with approximate population weights (expanded for coverage)
   const CITIES = [
     { id: 1, name: 'New York, NY', weight: 8336817 },
-    { id: 2, name: 'Los Angeles, CA', weight: 3979576 },
+    { id: 2, name: 'Los Angeles, CA', weight: 3979576, offsetY: -12 },
     { id: 3, name: 'Chicago, IL', weight: 2693976 },
     { id: 4, name: 'Houston, TX', weight: 2320268 },
-    { id: 5, name: 'Phoenix, AZ', weight: 1680992 },
+    { id: 5, name: 'Phoenix, AZ', weight: 1680992, offsetY: -10 },
     { id: 6, name: 'Philadelphia, PA', weight: 1584064 },
     { id: 7, name: 'San Antonio, TX', weight: 1547253 },
-    { id: 8, name: 'San Diego, CA', weight: 1423851 },
+    { id: 8, name: 'San Diego, CA', weight: 1423851, offsetY: -10 },
     { id: 9, name: 'Dallas, TX', weight: 1343573 },
-    { id: 10, name: 'San Jose, CA', weight: 1030119 }
+    { id: 10, name: 'San Jose, CA', weight: 1030119, offsetY: -24 },
+    { id: 11, name: 'San Francisco, CA', weight: 883305, offsetY: -20 },
+    { id: 12, name: 'Seattle, WA', weight: 744955, offsetY: -15 },
+    { id: 13, name: 'Portland, OR', weight: 653115, offsetY: -12 },
+    { id: 14, name: 'Miami, FL', weight: 470914 },
+    { id: 15, name: 'Atlanta, GA', weight: 498715 },
+    { id: 16, name: 'New Orleans, LA', weight: 391006 }
   ];
   const TOTAL_CITY_WEIGHT = CITIES.reduce((s, c) => s + c.weight, 0);
   function pickWeightedCityId() {
@@ -266,7 +272,13 @@ async function runSimulation() {
       case 7: return [29.4241, -98.4936]; // San Antonio
       case 8: return [32.7157, -117.1611]; // San Diego
       case 9: return [32.7767, -96.7970]; // Dallas
-      case 10: return [37.3382, -121.8863]; // San Jose
+      case 10: return [37.3382, -121.8863]; // San Jose (ensure north of Mexico)
+      case 11: return [37.7749, -122.4194]; // San Francisco
+      case 12: return [47.6062, -122.3321]; // Seattle
+      case 13: return [45.5152, -122.6784]; // Portland
+      case 14: return [25.7617, -80.1918]; // Miami
+      case 15: return [33.7490, -84.3880]; // Atlanta
+      case 16: return [29.9511, -90.0715]; // New Orleans
       default: return [39.8283, -98.5795];
     }
   }
@@ -530,8 +542,8 @@ async function runSimulation() {
 
   // ---------- Step 1: Founders (G0) with unique last names, first names, birthdates ----------
   await delay(150);
-  const foundersMaleCount = 100;
-  const foundersFemaleCount = 100;
+  const foundersMaleCount = 200;
+  const foundersFemaleCount = 200;
 
   const uniqueSurnames = sampleWithoutReplacement(COMMON_SURNAMES, foundersMaleCount + foundersFemaleCount);
   const uniqueMaleFirst = sampleWithoutReplacement(MALE_FIRST.filter(n => FEMALE_FIRST.indexOf(n) === -1), foundersMaleCount);
@@ -1107,7 +1119,8 @@ async function runSimulation() {
           const [mx, my] = projectLatLngToSvg(lat, lng, 1000, 600);
           const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
           g.setAttribute('class', 'map-marker');
-          g.setAttribute('transform', `translate(${mx}, ${my})`);
+          const dy = c.offsetY || 0;
+          g.setAttribute('transform', `translate(${mx}, ${my + dy})`);
 
           const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
           t.setAttribute('class', 'map-emoji');
@@ -1136,7 +1149,8 @@ async function runSimulation() {
           const [mx, my] = projectLatLngToSvg(lat, lng, 1000, 600);
           const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
           g.setAttribute('class', 'map-marker');
-          g.setAttribute('transform', `translate(${mx}, ${my})`);
+          const dy = c.offsetY || 0;
+          g.setAttribute('transform', `translate(${mx}, ${my + dy})`);
           const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
           t.setAttribute('class', 'map-emoji');
           t.setAttribute('text-anchor', 'middle');

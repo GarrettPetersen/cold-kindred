@@ -1035,15 +1035,25 @@ async function runSimulation() {
     // Sample at least one demographic highlight per year
     if (b > 0 || m > 0) {
       if (random() < 0.6 && b > 0) {
-        const bornThisYear = result.people.filter(p => year(p.birthDate) === y);
-        const pickB = bornThisYear[Math.floor(random() * bornThisYear.length)];
-        if (pickB) pushFlash(`${pickB.firstName} ${pickB.lastName} born in ${getCityName(pickB.cityId)}.`);
+        const yearEvts = eventsByYear.get(y) || [];
+        const birthEvts = yearEvts.filter(e => e.type === 'BIRTH');
+        const pickE = birthEvts[Math.floor(random() * birthEvts.length)];
+        if (pickE) {
+          const pid = pickE.people[0];
+          const pp = personByIdPre.get(pid);
+          const where = getCityName(pickE.details?.cityId || pp?.cityId);
+          let note = '';
+          if (pickE.details?.outOfWedlock) note = ' (out of wedlock)';
+          else if (pickE.details?.fromAffair) note = ' (born from an affair)';
+          if (pp) pushFlash(`${pp.firstName} ${pp.lastName} born in ${where}${note}.`);
+        }
       } else if (m > 0) {
         const marriedThisYear = result.marriages.filter(mm => mm.year === y);
         const pickM = marriedThisYear[Math.floor(random() * marriedThisYear.length)];
         if (pickM) {
           const ha = personByIdPre.get(pickM.husbandId); const wa = personByIdPre.get(pickM.wifeId);
-          pushFlash(`${ha?.firstName || 'Someone'} ${ha?.lastName || ''} married ${wa?.firstName || 'someone'} ${wa?.lastName || ''}.`);
+          const wifeMaiden = wa?.maidenName || wa?.lastName || '';
+          pushFlash(`${wa?.firstName || 'Someone'} ${wifeMaiden} married ${ha?.firstName || 'someone'} ${ha?.lastName || ''}.`);
         }
       }
     } else if (random() < 0.2) {

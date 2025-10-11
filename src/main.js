@@ -152,6 +152,8 @@ async function runSimulation() {
       bioMotherId: fields.bioMotherId || null,
       cityId: fields.cityId || null,
       city: fields.cityId ? getCityName(fields.cityId) : (fields.city || null),
+      skinTone: fields.skinTone || null, // 1..5 Fitzpatrick
+      hairColor: fields.hairColor || null, // 'black'|'brown'|'blonde'|'red'|'gray'|'bald'
       retired: false,
       alive: true
     };
@@ -247,6 +249,68 @@ async function runSimulation() {
     return c ? c.name : 'Unknown';
   }
 
+  // ----- Demographics and trait assignment -----
+  function getCityRegion(cityId) {
+    switch (cityId) {
+      case 1: // New York
+      case 6: // Philadelphia
+        return 'NE';
+      case 3: // Chicago
+        return 'MW';
+      case 2: // Los Angeles
+      case 5: // Phoenix
+      case 8: // San Diego
+      case 10: // San Jose
+        return 'W';
+      case 4: // Houston
+      case 7: // San Antonio
+      case 9: // Dallas
+        return 'S';
+      default:
+        return 'NE';
+    }
+  }
+  function pickWeighted(pairs) {
+    const total = pairs.reduce((s, [, w]) => s + w, 0);
+    let r = random() * total;
+    for (const [val, w] of pairs) {
+      if ((r -= w) <= 0) return val;
+    }
+    return pairs[pairs.length - 1][0];
+  }
+  function assignFounderTraits(person) {
+    const region = getCityRegion(person.cityId);
+    let toneWeights;
+    if (region === 'S') toneWeights = [[1, 50],[2,20],[3,12],[4,10],[5,8]];
+    else if (region === 'W') toneWeights = [[1,55],[2,22],[3,12],[4,7],[5,4]];
+    else if (region === 'MW') toneWeights = [[1,58],[2,22],[3,10],[4,6],[5,4]];
+    else toneWeights = [[1,60],[2,20],[3,10],[4,7],[5,3]];
+    person.skinTone = pickWeighted(toneWeights);
+    const hairWeights = [["black",30],["brown",40],["blonde",20],["red",5],["bald",2],["gray",3]];
+    person.hairColor = pickWeighted(hairWeights);
+  }
+  function inheritSkinTone(father, mother) {
+    const tones = [1,2,3,4,5];
+    const fav = father?.skinTone || 3;
+    const mav = mother?.skinTone || 3;
+    const base = Math.round((fav + mav) / 2);
+    const candidates = tones.map(t => [t, 1 / (1 + Math.abs(t - base))]);
+    // small mutation
+    candidates.forEach(c => c[1] *= 0.9);
+    const mutTone = Math.max(1, Math.min(5, base + (random() < 0.5 ? -1 : 1)));
+    candidates.push([mutTone, 0.5]);
+    return pickWeighted(candidates);
+  }
+  function inheritHairColor(father, mother) {
+    const colors = ["black","brown","blonde","red","bald","gray"];
+    const f = father?.hairColor || "brown";
+    const m = mother?.hairColor || "brown";
+    if (f === m) return f;
+    if (random() < 0.45) return f;
+    if (random() < 0.5) return m;
+    return colors[Math.floor(random() * colors.length)];
+  }
+
   // ----- Kinship helpers to prevent close-kin pairing -----
   function getById(id) {
     return result.people.find(p => p.id === id) || null;
@@ -312,6 +376,84 @@ async function runSimulation() {
     if (y < 1980) return pick(JOBS_MID);
     if (y < 2000) return pick(JOBS_LATE);
     return pick(JOBS_MODERN);
+  }
+
+  // Emoji utilities
+  const SKIN_TONE_MODIFIERS = ['', '\u{1F3FB}', '\u{1F3FC}', '\u{1F3FD}', '\u{1F3FE}', '\u{1F3FF}'];
+  function toneMod(tone) { return SKIN_TONE_MODIFIERS[Math.max(0, Math.min(5, tone || 0))]; }
+  function ageCategory(p, currentYear) {
+    const age = currentYear - year(p.birthDate);
+    if (age < 3) return 'baby';
+    if (age < 13) return 'child';
+    if (age < 20) return 'youth';
+    if (p.retired || age >= 65) return 'elder';
+    return 'adult';
+  }
+  // Profession emoji mapping (subset that are widely supported)
+  const PROF_EMOJI = new Map([
+    ['Teacher','\u{1F9D1}\u{200D}\u{1F3EB}'],      // person + school
+    ['Nurse','\u{1F9D1}\u{200D}\u{2695}\u{FE0F}'], // person + medical symbol
+    ['Doctor','\u{1F9D1}\u{200D}\u{2695}\u{FE0F}'],
+    ['Police Officer','\u{1F46E}'],
+    ['Construction Worker','\u{1F477}'],
+    ['Mechanic','\u{1F9D1}\u{200D}\u{1F527}'],
+    ['Chef','\u{1F9D1}\u{200D}\u{1F373}'],
+    ['Artist','\u{1F9D1}\u{200D}\u{1F3A8}'],
+    ['Firefighter','\u{1F9D1}\u{200D}\u{1F692}'],
+    ['Farmer','\u{1F9D1}\u{200D}\u{1F33E}'],
+    ['Scientist','\u{1F9D1}\u{200D}\u{1F52C}'],
+    ['Factory Worker','\u{1F3ED}'],
+    ['Pilot','\u{1F9D1}\u{200D}\u{2708}\u{FE0F}'],
+    ['Student','\u{1F393}'],
+    ['Judge','\u{1F9D1}\u{200D}\u{2696}\u{FE0F}'],
+    ['Engineer','\u{1F9D1}\u{200D}\u{1F527}'],
+    ['Journalist','\u{1F4F0}'],
+    ['Writer','\u{270D}\u{FE0F}'],
+    ['Artist','\u{1F9D1}\u{200D}\u{1F3A8}'],
+    ['Retail Associate','\u{1F6D2}'],
+    ['Truck Driver','\u{1F69A}']
+  ]);
+
+  function professionEmojiFor(p, currentYear) {
+    const age = currentYear - year(p.birthDate);
+    if (age < 16) return null; // handled by age icons
+    if (p.retired || age >= 65) return null;
+    // Look up last job change event for this person to get current job
+    let job = null;
+    const evtIds = eventsByPerson.get(p.id) || [];
+    for (let i = evtIds.length - 1; i >= 0; i--) {
+      const e = result.events[evtIds[i] - 1];
+      if (e && e.type === 'JOB_CHANGE') { job = e.details?.jobTitle || null; break; }
+    }
+    if (!job) return null;
+    const base = PROF_EMOJI.get(job);
+    if (!base) return null;
+    // Insert skin tone to base person where applicable by appending modifier
+    // Many ZWJ professions start with person U+1F9D1; append tone after first codepoint
+    try {
+      const t = toneMod(p.skinTone);
+      if (!t) return base;
+      const first = base.codePointAt(0);
+      if (!first) return base;
+      const rest = base.slice([...base][0].length);
+      return String.fromCodePoint(first) + t + rest;
+    } catch { return base; }
+  }
+
+  function personEmojiFor(p) {
+    // Base people: person U+1F9D1, man U+1F468, woman U+1F469, baby U+1F476, boy U+1F466, girl U+1F467,
+    // older man U+1F474, older woman U+1F475
+    const t = toneMod(p.skinTone);
+    const y = new Date().getUTCFullYear();
+    const cat = ageCategory(p, y);
+    if (cat === 'baby') return `\u{1F476}${t}`;
+    if (cat === 'child') return p.sex === 'F' ? `\u{1F467}${t}` : `\u{1F466}${t}`;
+    if (cat === 'youth') return p.sex === 'F' ? `\u{1F467}${t}` : `\u{1F466}${t}`;
+    if (cat === 'elder') return p.sex === 'F' ? `\u{1F475}${t}` : `\u{1F474}${t}`;
+    // For adults, prefer profession emoji if available
+    const prof = professionEmojiFor(p, y);
+    if (prof) return prof;
+    return p.sex === 'F' ? `\u{1F469}${t}` : `\u{1F468}${t}`;
   }
 
   function marry(husband, wife, yearOfMarriage) {
@@ -388,6 +530,7 @@ async function runSimulation() {
       generation: 0,
       cityId
     });
+    assignFounderTraits(p);
     males.push(p);
   }
   for (let i = 0; i < foundersFemaleCount; i++, idx++) {
@@ -400,6 +543,7 @@ async function runSimulation() {
       generation: 0,
       cityId
     });
+    assignFounderTraits(p);
     females.push(p);
   }
 
@@ -514,6 +658,8 @@ async function runSimulation() {
           bioMotherId: mother.id,
           cityId: (random() < 0.5 ? father.cityId : mother.cityId) || pickWeightedCityId()
         });
+        child.skinTone = inheritSkinTone(father, mother);
+        child.hairColor = inheritHairColor(father, mother);
         children.push(child);
         births++;
         // record birth event
@@ -887,26 +1033,23 @@ async function runSimulation() {
       name.setAttribute('x', String(p.x + w / 2));
       name.setAttribute('y', String(p.y - 8));
       name.setAttribute('text-anchor', 'middle');
-      name.setAttribute('class', 'gene-name');
+      name.setAttribute('class', `gene-name${n.alive ? (n.retired ? ' retired' : '') : ' deceased'}`);
       name.textContent = `${n.firstName} ${n.lastName}`;
       gEl.appendChild(name);
 
       const cx = p.x + w / 2;
-      const iw = 36; // icon width
-      const ih = 56; // icon height
+      const iw = 28; // emoji size looks better slightly smaller
+      const ih = 28;
       const ix = cx - iw / 2;
       const iy = p.y; // top of icon area
-      const icon = document.createElementNS('http://www.w3.org/2000/svg', 'image');
-      const href = n.sex === 'F' ? '/assets/woman.svg' : '/assets/man.svg';
-      // set both href variants for broader browser support
-      icon.setAttribute('href', href);
-      icon.setAttributeNS('http://www.w3.org/1999/xlink', 'href', href);
-      icon.setAttribute('x', String(ix));
-      icon.setAttribute('y', String(iy));
-      icon.setAttribute('width', String(iw));
-      icon.setAttribute('height', String(ih));
-      icon.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-      gEl.appendChild(icon);
+      // Render as text emoji with skin tone and role
+      const emojiText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      emojiText.setAttribute('x', String(cx));
+      emojiText.setAttribute('y', String(iy + ih));
+      emojiText.setAttribute('text-anchor', 'middle');
+      emojiText.setAttribute('class', `gene-emoji${n.alive ? (n.retired ? ' retired' : '') : ' deceased'}`);
+      emojiText.textContent = personEmojiFor(n);
+      gEl.appendChild(emojiText);
       geneSvg.appendChild(gEl);
     }
   }

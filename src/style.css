@@ -244,3 +244,10 @@ button.secondary {
 .gene-person .limb { stroke: #111; stroke-width: 2; stroke-linecap: round; }
 .gene-person .dress { fill: #111; stroke: none; }
 .gene-name { font-size: 12px; fill: #111; }
+
+.gene-emoji {
+    font-size: 28px;
+}
+
+.gene-name.deceased, .gene-emoji.deceased { fill: #777; opacity: 0.7; }
+.gene-name.retired, .gene-emoji.retired { fill: #444; }

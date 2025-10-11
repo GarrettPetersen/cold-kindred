@@ -891,85 +891,22 @@ async function runSimulation() {
       name.textContent = `${n.firstName} ${n.lastName}`;
       gEl.appendChild(name);
 
-      // Simple person icon: sex-based silhouette (dress for F)
-      const iconGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-      iconGroup.setAttribute('class', 'gene-person');
-
       const cx = p.x + w / 2;
-      const cy = p.y + 16; // head center y
-      const head = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-      head.setAttribute('cx', String(cx));
-      head.setAttribute('cy', String(cy));
-      head.setAttribute('r', '8');
-      head.setAttribute('class', 'head');
-      iconGroup.appendChild(head);
-
-      const bodyY1 = cy + 10;
-      if (n.sex === 'F') {
-        // Triangle dress, a classic bathroom sign silhouette
-        const dress = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        const topY = bodyY1;
-        const skirtY = topY + 32;
-        const halfWidth = 18;
-        const armY = topY + 6;
-        dress.setAttribute('d', `M ${cx} ${topY} L ${cx - halfWidth} ${skirtY} L ${cx + halfWidth} ${skirtY} Z`);
-        dress.setAttribute('class', 'dress');
-        iconGroup.appendChild(dress);
-        // simple arms
-        const armL = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        armL.setAttribute('x1', String(cx - 16));
-        armL.setAttribute('y1', String(armY));
-        armL.setAttribute('x2', String(cx));
-        armL.setAttribute('y2', String(armY));
-        armL.setAttribute('class', 'limb');
-        iconGroup.appendChild(armL);
-        const armR = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        armR.setAttribute('x1', String(cx));
-        armR.setAttribute('y1', String(armY));
-        armR.setAttribute('x2', String(cx + 16));
-        armR.setAttribute('y2', String(armY));
-        armR.setAttribute('class', 'limb');
-        iconGroup.appendChild(armR);
-      } else {
-        const bodyY2 = bodyY1 + 26;
-        const body = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        body.setAttribute('x1', String(cx));
-        body.setAttribute('y1', String(bodyY1));
-        body.setAttribute('x2', String(cx));
-        body.setAttribute('y2', String(bodyY2));
-        body.setAttribute('class', 'limb');
-        iconGroup.appendChild(body);
-        const armL = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        armL.setAttribute('x1', String(cx - 16));
-        armL.setAttribute('y1', String(bodyY1 + 6));
-        armL.setAttribute('x2', String(cx));
-        armL.setAttribute('y2', String(bodyY1 + 6));
-        armL.setAttribute('class', 'limb');
-        iconGroup.appendChild(armL);
-        const armR = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        armR.setAttribute('x1', String(cx));
-        armR.setAttribute('y1', String(bodyY1 + 6));
-        armR.setAttribute('x2', String(cx + 16));
-        armR.setAttribute('y2', String(bodyY1 + 6));
-        armR.setAttribute('class', 'limb');
-        iconGroup.appendChild(armR);
-        const legL = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        legL.setAttribute('x1', String(cx));
-        legL.setAttribute('y1', String(bodyY2));
-        legL.setAttribute('x2', String(cx - 12));
-        legL.setAttribute('y2', String(bodyY2 + 20));
-        legL.setAttribute('class', 'limb');
-        iconGroup.appendChild(legL);
-        const legR = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        legR.setAttribute('x1', String(cx));
-        legR.setAttribute('y1', String(bodyY2));
-        legR.setAttribute('x2', String(cx + 12));
-        legR.setAttribute('y2', String(bodyY2 + 20));
-        legR.setAttribute('class', 'limb');
-        iconGroup.appendChild(legR);
-      }
-
-      gEl.appendChild(iconGroup);
+      const iw = 36; // icon width
+      const ih = 56; // icon height
+      const ix = cx - iw / 2;
+      const iy = p.y; // top of icon area
+      const icon = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+      const href = n.sex === 'F' ? '/assets/woman.svg' : '/assets/man.svg';
+      // set both href variants for broader browser support
+      icon.setAttribute('href', href);
+      icon.setAttributeNS('http://www.w3.org/1999/xlink', 'href', href);
+      icon.setAttribute('x', String(ix));
+      icon.setAttribute('y', String(iy));
+      icon.setAttribute('width', String(iw));
+      icon.setAttribute('height', String(ih));
+      icon.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+      gEl.appendChild(icon);
       geneSvg.appendChild(gEl);
     }
   }

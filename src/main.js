@@ -179,6 +179,8 @@ async function runSimulation() {
   logLine('Starting simulation');
   // show overlay for flashing years
   overlaySim.classList.add('visible');
+  if (flashYearEl) flashYearEl.textContent = '1900';
+  pushFlash('Preparing simulation…');
 
   // ---------- Name lists (common US names, truncated for demo but sufficient for uniqueness) ----------
   const COMMON_SURNAMES = [

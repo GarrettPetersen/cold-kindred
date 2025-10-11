@@ -231,19 +231,19 @@ async function runSimulation() {
   // Major US cities with approximate population weights (expanded for coverage)
   const CITIES = [
     { id: 1, name: 'New York, NY', weight: 8336817 },
-    { id: 2, name: 'Los Angeles, CA', weight: 3979576, offsetY: -12 },
+    { id: 2, name: 'Los Angeles, CA', weight: 3979576, offsetY: -8, offsetX: 10 },
     { id: 3, name: 'Chicago, IL', weight: 2693976 },
     { id: 4, name: 'Houston, TX', weight: 2320268 },
-    { id: 5, name: 'Phoenix, AZ', weight: 1680992, offsetY: -10 },
+    { id: 5, name: 'Phoenix, AZ', weight: 1680992, offsetY: -6 },
     { id: 6, name: 'Philadelphia, PA', weight: 1584064 },
     { id: 7, name: 'San Antonio, TX', weight: 1547253 },
-    { id: 8, name: 'San Diego, CA', weight: 1423851, offsetY: -10 },
+    { id: 8, name: 'San Diego, CA', weight: 1423851, offsetY: -6, offsetX: 8 },
     { id: 9, name: 'Dallas, TX', weight: 1343573 },
-    { id: 10, name: 'San Jose, CA', weight: 1030119, offsetY: -24 },
-    { id: 11, name: 'San Francisco, CA', weight: 883305, offsetY: -20 },
-    { id: 12, name: 'Seattle, WA', weight: 744955, offsetY: -15 },
-    { id: 13, name: 'Portland, OR', weight: 653115, offsetY: -12 },
-    { id: 14, name: 'Miami, FL', weight: 470914 },
+    { id: 10, name: 'San Jose, CA', weight: 1030119, offsetY: -34, offsetX: 16 },
+    { id: 11, name: 'San Francisco, CA', weight: 883305, offsetY: -18, offsetX: 14 },
+    { id: 12, name: 'Seattle, WA', weight: 744955, offsetY: 24, offsetX: 40 },
+    { id: 13, name: 'Portland, OR', weight: 653115, offsetY: 22, offsetX: 36 },
+    { id: 14, name: 'Miami, FL', weight: 470914, offsetY: -28, offsetX: 18 },
     { id: 15, name: 'Atlanta, GA', weight: 498715 },
     { id: 16, name: 'New Orleans, LA', weight: 391006 }
   ];
@@ -1090,11 +1090,14 @@ async function runSimulation() {
 
   // ----- Map Rendering -----
   function projectLatLngToSvg(lat, lng, viewW, viewH) {
-    // crude USA projection to fit SVG viewBox 1000x600; assumes US bounding box
-    const minLat = 25, maxLat = 49; // approx CONUS
-    const minLng = -125, maxLng = -66;
-    const x = ((lng - minLng) / (maxLng - minLng)) * viewW;
-    const y = ((maxLat - lat) / (maxLat - minLat)) * viewH;
+    // Tweak the bounding box to better match this specific SVG's coastline placement
+    const minLat = 24, maxLat = 50;   // slightly expanded
+    const minLng = -126, maxLng = -66; // slightly expanded west
+    let x = ((lng - minLng) / (maxLng - minLng)) * viewW;
+    let y = ((maxLat - lat) / (maxLat - minLat)) * viewH;
+    // Gentle non-linear vertical compression for high latitudes (PNW looked too high)
+    const t = (lat - minLat) / (maxLat - minLat);
+    y = y * (0.9 + 0.1 * (1 - t));
     return [x, y];
   }
   function renderMap() {
@@ -1120,7 +1123,8 @@ async function runSimulation() {
           const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
           g.setAttribute('class', 'map-marker');
           const dy = c.offsetY || 0;
-          g.setAttribute('transform', `translate(${mx}, ${my + dy})`);
+          const dx = c.offsetX || 0;
+          g.setAttribute('transform', `translate(${mx + dx}, ${my + dy})`);
 
           const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
           t.setAttribute('class', 'map-emoji');
@@ -1150,7 +1154,8 @@ async function runSimulation() {
           const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
           g.setAttribute('class', 'map-marker');
           const dy = c.offsetY || 0;
-          g.setAttribute('transform', `translate(${mx}, ${my + dy})`);
+          const dx = c.offsetX || 0;
+          g.setAttribute('transform', `translate(${mx + dx}, ${my + dy})`);
           const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
           t.setAttribute('class', 'map-emoji');
           t.setAttribute('text-anchor', 'middle');

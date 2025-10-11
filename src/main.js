@@ -266,10 +266,10 @@ async function runSimulation() {
     { id: 16, name: 'New Orleans, LA', weight: 391006, offsetX: 26, offsetY: 26 },
     { id: 17, name: 'Denver, CO', weight: 715522 },
     { id: 18, name: 'Salt Lake City, UT', weight: 200133 },
-    { id: 19, name: 'Kansas City, MO', weight: 508090 },
+    { id: 19, name: 'Kansas City, MO', weight: 508090, offsetX: 0, offsetY: 14 },
     { id: 20, name: 'Oklahoma City, OK', weight: 681054 },
-    { id: 21, name: 'St. Louis, MO', weight: 301578 },
-    { id: 22, name: 'Minneapolis, MN', weight: 429954 }
+    { id: 21, name: 'St. Louis, MO', weight: 301578, offsetX: 0, offsetY: 20 },
+    { id: 22, name: 'Minneapolis, MN', weight: 429954, offsetX: 0, offsetY: 28 }
   ];
   const TOTAL_CITY_WEIGHT = CITIES.reduce((s, c) => s + c.weight, 0);
   function pickWeightedCityId() {
@@ -755,6 +755,33 @@ async function runSimulation() {
   const END_YEAR = 2025;
   const totalYears = END_YEAR - START_YEAR + 1;
 
+  // Prepare maps and choose a fixed killer before the yearly loop so we can ban their close relatives from DNA tests
+  const personByIdPre = new Map(result.people.map(p => [p.id, p]));
+  function ancestorsUpTo(person, maxDepth) {
+    const out = new Map();
+    const queue = [{ id: person.id, depth: 0 }];
+    while (queue.length) {
+      const { id, depth } = queue.shift();
+      if (depth >= maxDepth) continue;
+      const p = personByIdPre.get(id);
+      if (!p) continue;
+      const nextDepth = depth + 1;
+      if (p.fatherId) { out.set(p.fatherId, Math.min(out.get(p.fatherId) || Infinity, nextDepth)); queue.push({ id: p.fatherId, depth: nextDepth }); }
+      if (p.motherId) { out.set(p.motherId, Math.min(out.get(p.motherId) || Infinity, nextDepth)); queue.push({ id: p.motherId, depth: nextDepth }); }
+    }
+    return out; // Map<ancestorId, depth>
+  }
+  function shareAncestorWithin(a, b, maxDepth) {
+    const A = ancestorsUpTo(a, maxDepth);
+    const B = ancestorsUpTo(b, maxDepth);
+    for (const id of A.keys()) if (B.has(id)) return true;
+    return false;
+  }
+  // Choose killer candidate: adults by 1970
+  const adultsBy1970 = result.people.filter(p => (1970 - year(p.birthDate)) >= 18);
+  const killerFixed = adultsBy1970.length ? adultsBy1970[Math.floor(random() * adultsBy1970.length)] : result.people[Math.floor(random() * result.people.length)];
+  let killerIdFixed = killerFixed.id;
+
   // index events by year
   const birthsByYear = new Map();
   for (const p of result.people) {
@@ -778,10 +805,50 @@ async function runSimulation() {
     divorce: 0.005,      // 0.5% per married couple per year
     affair: 0.01         // 1% per married adult per year
   };
+  function consumerDNAProb(y) {
+    if (y < 1990) return 0;
+    if (y < 2007) return 0.00015;
+    if (y < 2013) return 0.0007;
+    if (y < 2020) return 0.0015;
+    return 0.0025;
+  }
 
   // Choose one murder year and assign once
   const murderYear = 1970 + Math.floor(random() * 31); // 1970..2000
   let murderCommitted = false;
+
+  // DNA stores
+  result.codis = { profiles: [] };
+  result.consumerDNA = [];
+  function isBannedRelative(candidate) {
+    if (!candidate) return true;
+    if (candidate.id === killerIdFixed) return true; // killer banned
+    const killer = personByIdPre.get(killerIdFixed);
+    if (!killer) return true;
+    // direct ancestor/descendant within 2 generations
+    const candAnc2 = ancestorsUpTo(candidate, 3);
+    if (candAnc2.has(killerIdFixed)) return true; // candidate is child/grandchild
+    const killerAnc2 = ancestorsUpTo(killer, 3);
+    if (killerAnc2.has(candidate.id)) return true; // candidate is parent/grandparent
+    // siblings/half-siblings share at least one parent
+    if ((candidate.fatherId && candidate.fatherId === killer.fatherId) || (candidate.motherId && candidate.motherId === killer.motherId)) return true;
+    // share ancestor within 2 generations on both sides => first cousins or closer
+    if (shareAncestorWithin(candidate, killer, 3)) return true;
+    return false;
+  }
+  function isSecondCousinOrFurther(candidate) {
+    const killer = personByIdPre.get(killerIdFixed);
+    if (!killer) return false;
+    const A = ancestorsUpTo(candidate, 5);
+    const B = ancestorsUpTo(killer, 5);
+    let ok = false;
+    for (const id of A.keys()) {
+      const da = A.get(id) || 99;
+      const db = B.get(id) || 99;
+      if (da >= 3 && db >= 3) { ok = true; break; }
+    }
+    return ok;
+  }
 
   let yearIndex = 0;
   for (let y = START_YEAR; y <= END_YEAR; y++, yearIndex++) {
@@ -925,17 +992,48 @@ async function runSimulation() {
     if (!murderCommitted && y === murderYear) {
       const adultPool = adults.slice();
       if (adultPool.length >= 2) {
-        const killer = adultPool[Math.floor(random() * adultPool.length)];
-        let victim = adultPool[Math.floor(random() * adultPool.length)];
-        if (victim.id === killer.id && adultPool.length > 1) {
-          victim = adultPool.find(p => p.id !== killer.id) || victim;
+        // Choose killer: prefer preselected, but ensure adult & alive at this year
+        let killer = personByIdPre.get(killerIdFixed) || adultPool[Math.floor(random() * adultPool.length)];
+        if ((y - year(killer.birthDate)) < 18 || !killer.alive) {
+          killer = adultPool[Math.floor(random() * adultPool.length)];
+          killerIdFixed = killer.id; // update stored killer if we had to swap
         }
+        // Choose victim: not killer and not a banned close relative of killer
+        let victimCandidates = adultPool.filter(p => p.id !== killer.id && !isBannedRelative(p));
+        if (victimCandidates.length === 0) victimCandidates = adultPool.filter(p => p.id !== killer.id);
+        let victim = victimCandidates[Math.floor(random() * victimCandidates.length)];
         victim.alive = false;
         const cityId = victim.cityId || killer.cityId || pickWeightedCityId();
         const evt = addEvent({ year: y, type: 'MURDER', people: [killer.id, victim.id], details: { cityId } });
         indexEventByYear(evt);
         murderCommitted = true;
         logLine(`Year ${y}: A murder occurred.`);
+      }
+    }
+
+    // DNA tests (consumer) after 1990; probability grows later
+    if (y >= 1990) {
+      const pTest = consumerDNAProb(y);
+      for (const p of adults) {
+        if (random() < pTest) {
+          if (!isBannedRelative(p)) {
+            result.consumerDNA.push({ personId: p.id, year: y });
+            const evt = addEvent({ year: y, type: 'DNA_TEST_CONSUMER', people: [p.id], details: { cityId: p.cityId } });
+            indexEventByYear(evt);
+          }
+        }
+      }
+    }
+
+    // Occasional CODIS (law-enforcement) DNA profile creation, very rare
+    if (y >= 1990) {
+      const pLE = 0.00005;
+      for (const p of adults) {
+        if (random() < pLE) {
+          result.codis.profiles.push({ personId: p.id, year: y });
+          const evt = addEvent({ year: y, type: 'DNA_TEST_CODIS', people: [p.id], details: { cityId: p.cityId } });
+          indexEventByYear(evt);
+        }
       }
     }
 
@@ -967,6 +1065,29 @@ async function runSimulation() {
 
   // ---------- Finalize ----------
   await delay(50);
+  // Ensure at least one distant relative (>= second cousin) has a consumer DNA test for gameplay
+  const killerForCheck = personByIdPre.get(killerIdFixed);
+  let hasHit = false;
+  for (const prof of result.consumerDNA) {
+    const cand = personByIdPre.get(prof.personId);
+    if (cand && isSecondCousinOrFurther(cand)) { hasHit = true; break; }
+  }
+  if (!hasHit) {
+    // find a third-cousin-or-further; try depth >=4 first
+    const candidates = result.people.filter(p => p.alive && p.id !== killerIdFixed && !isBannedRelative(p));
+    let pickRel = candidates.find(p => {
+      const A = ancestorsUpTo(p, 6); const B = ancestorsUpTo(killerForCheck, 6);
+      for (const id of A.keys()) { const da = A.get(id)||99; const db = B.get(id)||99; if (da >= 4 && db >= 4) return true; }
+      return false;
+    }) || candidates.find(isSecondCousinOrFurther);
+    if (pickRel) {
+      result.consumerDNA.push({ personId: pickRel.id, year: Math.min(2015, END_YEAR) });
+      const evt = addEvent({ year: Math.min(2015, END_YEAR), type: 'DNA_TEST_CONSUMER_FORCED', people: [pickRel.id], details: { cityId: pickRel.cityId } });
+      indexEventByYear(evt);
+      logLine(`Forced DNA test for a distant relative to ensure playability.`);
+    }
+  }
+  result.killerId = killerIdFixed;
   result.summary = {
     population: result.people.length,
     marriages: result.marriages.length,

@@ -219,6 +219,8 @@ async function runSimulation() {
       city: fields.cityId ? getCityName(fields.cityId) : (fields.city || null),
       skinTone: fields.skinTone || null, // 1..5 Fitzpatrick
       hairColor: fields.hairColor || null, // 'black'|'brown'|'blonde'|'red'|'gray'|'bald'
+      knowledgeRadius: fields.knowledgeRadius || null,
+      knowsAffairs: fields.knowsAffairs ?? null,
       retired: false,
       alive: true
     };
@@ -399,6 +401,12 @@ async function runSimulation() {
     person.skinTone = pickWeighted(toneWeights);
     const hairWeights = [["black",30],["brown",40],["blonde",20],["red",5],["bald",2],["gray",3]];
     person.hairColor = pickWeighted(hairWeights);
+    // Assign knowledge traits (2..5) and affair-knowledge
+    const r = random();
+    person.knowledgeRadius = r < 0.2 ? 2 : r < 0.7 ? 3 : r < 0.95 ? 4 : 5;
+    // Older generations slightly less likely to know affairs
+    const knows = random() < 0.35; // base
+    person.knowsAffairs = knows;
   }
   function inheritSkinTone(father, mother) {
     const tones = [1,2,3,4,5];
@@ -843,6 +851,10 @@ async function runSimulation() {
         });
         child.skinTone = inheritSkinTone(father, mother);
         child.hairColor = inheritHairColor(father, mother);
+        // Knowledge inheritance with noise
+        const baseKR = Math.round(((father.knowledgeRadius || 3) + (mother.knowledgeRadius || 3)) / 2);
+        child.knowledgeRadius = Math.max(2, Math.min(5, baseKR + (random() < 0.2 ? (random() < 0.5 ? -1 : 1) : 0)));
+        child.knowsAffairs = random() < 0.35 || (father.knowsAffairs || mother.knowsAffairs);
         validateBabyAttributes(child, father, mother);
         children.push(child);
         births++;
@@ -896,6 +908,43 @@ async function runSimulation() {
     const B = ancestorsUpTo(b, maxDepth);
     for (const id of A.keys()) if (B.has(id)) return true;
     return false;
+  }
+  // Interview resolver: BFS over family graph up to a person's knowledgeRadius; toggle bio edges by knowsAffairs
+  function buildNeighbors(includeBio) {
+    const adj = new Map();
+    function link(u, v) {
+      const a = adj.get(u) || new Set(); a.add(v); adj.set(u, a);
+    }
+    for (const p of result.people) {
+      if (p.fatherId) { link(p.id, p.fatherId); link(p.fatherId, p.id); }
+      if (p.motherId) { link(p.id, p.motherId); link(p.motherId, p.id); }
+      if (p.spouseId) { link(p.id, p.spouseId); link(p.spouseId, p.id); }
+      if (p.partnerId) { link(p.id, p.partnerId); link(p.partnerId, p.id); }
+      if (includeBio && p.bioFatherId && p.bioFatherId !== p.fatherId) { link(p.id, p.bioFatherId); link(p.bioFatherId, p.id); }
+      if (includeBio && p.bioMotherId && p.bioMotherId !== p.motherId) { link(p.id, p.bioMotherId); link(p.bioMotherId, p.id); }
+    }
+    return adj;
+  }
+  function knownSubgraphFrom(personId) {
+    const person = personByIdPre.get(personId);
+    const radius = Math.max(2, Math.min(5, person?.knowledgeRadius || 3));
+    const adj = buildNeighbors(!!person?.knowsAffairs);
+    const visited = new Set([personId]);
+    const dist = new Map([[personId, 0]]);
+    const q = [personId];
+    while (q.length) {
+      const u = q.shift();
+      const du = dist.get(u) || 0;
+      if (du >= radius) continue;
+      const nbrs = adj.get(u) || new Set();
+      for (const v of nbrs) {
+        if (visited.has(v)) continue;
+        visited.add(v);
+        dist.set(v, du + 1);
+        q.push(v);
+      }
+    }
+    return { nodes: visited, dist };
   }
   // Choose killer candidate: adults by 1970
   const adultsBy1970 = result.people.filter(p => (1970 - year(p.birthDate)) >= 18);
@@ -1338,6 +1387,23 @@ async function runSimulation() {
     }
   }
   result.killerId = killerIdFixed;
+
+  // Knowledge guarantee: ensure at least one living person can know of the killer within their horizon
+  const living = result.people.filter(p => p.alive);
+  function personKnowsKiller(p) {
+    const { nodes, dist } = knownSubgraphFrom(p.id);
+    return nodes.has(killerIdFixed) && (dist.get(killerIdFixed) || 99) <= Math.max(2, Math.min(5, p.knowledgeRadius || 3));
+  }
+  let anyoneKnows = living.some(personKnowsKiller);
+  if (!anyoneKnows) {
+    // boost a plausible relative's horizon
+    const candidates = living.filter(p => !isBannedRelative(p) && isSecondCousinOrFurther(p));
+    const pick = candidates[0] || living[0];
+    if (pick) {
+      pick.knowledgeRadius = Math.max(4, pick.knowledgeRadius || 4);
+      pick.knowsAffairs = true;
+    }
+  }
   result.summary = {
     population: result.people.length,
     marriages: result.marriages.length,

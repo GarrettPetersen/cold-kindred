@@ -19,23 +19,21 @@ app.innerHTML = `
         <button id="runAgain" class="start secondary" disabled>Run Again</button>
       </div>
 
+      <div class="tabbar">
+        <button class="tab-btn active" data-tab="map">Map</button>
+        <button class="tab-btn" data-tab="genealogy">Genealogy</button>
+        <button class="tab-btn" data-tab="people">People</button>
+        <button class="tab-btn" data-tab="records">Records</button>
+        <button class="tab-btn" data-tab="log">Log</button>
+      </div>
+
       <div class="panels">
-        <div class="panel">
-          <h2>Run Log</h2>
-          <div id="log" class="log" aria-label="Simulation log"></div>
+        <div id="tab-map" class="panel tab-panel">
+          <h2>Map</h2>
+          <div id="locText" class="location-text">Location: Unknown</div>
+          <svg id="mapSvg" class="map-svg" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMid meet"></svg>
         </div>
-        <div class="panel">
-          <h2>Output</h2>
-          <button id="toggleJson" class="text-btn">Toggle JSON</button>
-          <pre id="outputJson" class="json"></pre>
-        </div>
-        <div class="panel">
-          <h2>Person Inspector</h2>
-          <input id="personSearch" class="input" placeholder="Search name…" autocomplete="off" />
-          <div id="personResults" class="list"></div>
-          <div id="personDetail" class="detail"></div>
-        </div>
-        <div class="panel">
+        <div id="tab-genealogy" class="panel tab-panel hidden">
           <h2>Genealogy</h2>
           <div class="gene-controls">
             <input id="geneSearch" class="input" placeholder="Add by name or ID…" autocomplete="off" />
@@ -47,24 +45,33 @@ app.innerHTML = `
           </div>
           <svg id="geneSvg" class="gene-svg" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMid meet"></svg>
         </div>
-        <div class="panel">
-          <h2>Map</h2>
-          <div id="locText" class="location-text">Location: Unknown</div>
-          <svg id="mapSvg" class="map-svg" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMid meet"></svg>
-          <div class="gene-controls" style="margin-top:8px">
-            <div class="row-gap">
-              <label>dx <input id="dxInput" class="input" type="number" value="0" style="width:90px" /></label>
-              <button id="dxMinus" class="start secondary">−</button>
-              <button id="dxPlus" class="start secondary">+</button>
-              <label>dy <input id="dyInput" class="input" type="number" value="0" style="width:90px" /></label>
-              <button id="dyMinus" class="start secondary">−</button>
-              <button id="dyPlus" class="start secondary">+</button>
-              <button id="copyCity" class="start secondary">Copy City Offsets</button>
-            </div>
+        <div id="tab-people" class="panel tab-panel hidden">
+          <h2>People</h2>
+          <p class="title-sub">Directory coming soon.</p>
+        </div>
+        <div id="tab-records" class="panel tab-panel hidden">
+          <h2>Records</h2>
+          <p class="title-sub">Records search coming soon.</p>
+        </div>
+        <div id="tab-log" class="panel tab-panel hidden">
+          <h2>Run Log</h2>
+          <div id="log" class="log" aria-label="Simulation log"></div>
+          <div style="margin-top:8px">
+            <button id="toggleJson" class="text-btn">Toggle JSON</button>
           </div>
+          <pre id="outputJson" class="json hidden"></pre>
         </div>
       </div>
     </section>
+    <section id="overlaySim" class="overlay"><div class="overlay-card">
+      <div id="flashYear" class="year-flash">1900</div>
+      <div id="flashMsg" class="title-sub">Preparing simulation…</div>
+    </div></section>
+    <section id="overlayTitle" class="overlay"><div class="overlay-card">
+      <div class="title-headline" id="titleHeadline">Case Brief</div>
+      <div class="title-sub" id="titleSub"></div>
+      <button id="titleContinue" class="title-btn">Begin Investigation</button>
+    </div></section>
   </main>
 `;
 
@@ -88,13 +95,14 @@ const geneClearBtn = document.getElementById('geneClear');
 const geneSvg = document.getElementById('geneSvg');
 const mapSvg = document.getElementById('mapSvg');
 const locText = document.getElementById('locText');
-const dxInput = document.getElementById('dxInput');
-const dyInput = document.getElementById('dyInput');
-const dxMinus = document.getElementById('dxMinus');
-const dxPlus = document.getElementById('dxPlus');
-const dyMinus = document.getElementById('dyMinus');
-const dyPlus = document.getElementById('dyPlus');
-const copyCityBtn = document.getElementById('copyCity');
+// removed offset tool
+const overlaySim = document.getElementById('overlaySim');
+const overlayTitle = document.getElementById('overlayTitle');
+const flashYearEl = document.getElementById('flashYear');
+const flashMsgEl = document.getElementById('flashMsg');
+const titleHeadlineEl = document.getElementById('titleHeadline');
+const titleSubEl = document.getElementById('titleSub');
+const titleContinueBtn = document.getElementById('titleContinue');
 
 function setStatus(stateText, stateClass) {
   statusEl.textContent = stateText;
@@ -144,6 +152,8 @@ async function runSimulation() {
   logEl.innerHTML = '';
   outputJsonEl.textContent = '';
   logLine('Starting simulation');
+  // show overlay for flashing years
+  overlaySim.classList.add('visible');
 
   // ---------- Name lists (common US names, truncated for demo but sufficient for uniqueness) ----------
   const COMMON_SURNAMES = [
@@ -854,6 +864,7 @@ async function runSimulation() {
   for (let y = START_YEAR; y <= END_YEAR; y++, yearIndex++) {
     // announce year transition, then small delay to visualize progression
     logLine(`— Year ${y} —`);
+    if (flashYearEl) flashYearEl.textContent = String(y);
     await delay(10);
     const b = birthsByYear.get(y) || 0;
     const m = marriagesByYear.get(y) || 0;
@@ -1106,6 +1117,37 @@ async function runSimulation() {
   startBtn.disabled = false;
   runAgainBtn.disabled = false;
 
+  // Build killer moniker and show title card
+  const murderEvt = result.events.find(e => e.type === 'MURDER');
+  const murderCityName = murderEvt ? getCityName(murderEvt.details?.cityId) : 'an American city';
+  function killerMoniker(cityId, seedVal) {
+    const region = getCityRegion(cityId);
+    const GEO = {
+      NE: ['Harbor','River','Bay','Granite','Pine','Liberty','Colonial','Maritime'],
+      MW: ['Great Lakes','Prairie','Rail','Steel','River','Grain','Twin Cities','Lake'],
+      S:  ['Delta','Gulf','Bayou','Cotton','Lone Star','Magnolia','Peach','River'],
+      W:  ['Golden State','Desert','Sierra','Pacific','Canyon','Mile High','Bay']
+    };
+    const NOUNS = ['Killer','Phantom','Prowler','Stalker','Butcher','Ripper','Hunter','Ghost'];
+    const MODS = ['Shadow','Midnight','Cross','Trail','Whisper','Ridge','Raven','Copper'];
+    const geo = (GEO[region] || GEO.NE);
+    const r1 = Math.abs((seedVal * 9301 + 49297) % 233280);
+    const r2 = Math.abs((seedVal * 23333 + 12345) % 233280);
+    const r3 = Math.abs((seedVal * 61169 + 7) % 233280);
+    const g = geo[r1 % geo.length];
+    const m = MODS[r2 % MODS.length];
+    const n = NOUNS[r3 % NOUNS.length];
+    // Occasionally two-word geo
+    const name = (r1 % 3 === 0) ? `${g} ${m} ${n}` : `${g} ${n}`;
+    return name;
+  }
+  const moniker = killerMoniker(murderEvt?.details?.cityId, seed);
+  overlaySim.classList.remove('visible');
+  titleHeadlineEl.textContent = 'Case Brief';
+  titleSubEl.textContent = `In ${murderEvt?.year || 'an unknown year'}, a dead body was found in ${murderCityName}. The police never had any strong leads, and the trail went cold. Can you solve the case of the ${moniker}?`;
+  overlayTitle.classList.add('visible');
+  titleContinueBtn.onclick = () => { overlayTitle.classList.remove('visible'); };
+
   // Build quick lookup before any genealogy rendering
   const personById = new Map(result.people.map(p => [p.id, p]));
 
@@ -1257,7 +1299,6 @@ async function runSimulation() {
   function renderMap() {
     if (!mapSvg) return;
     while (mapSvg.firstChild) mapSvg.removeChild(mapSvg.firstChild);
-    let selectedCityId = null;
     // Base map SVG
     fetch('/assets/united-states-map-usa-america-svgrepo-com.svg')
       .then(r => r.text())
@@ -1280,7 +1321,6 @@ async function runSimulation() {
           const dy = c.offsetY || 0;
           const dx = c.offsetX || 0;
           g.setAttribute('transform', `translate(${mx + dx}, ${my + dy})`);
-          g.dataset.cityId = String(c.id);
 
           const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
           t.setAttribute('class', 'map-emoji');
@@ -1297,84 +1337,12 @@ async function runSimulation() {
 
           g.addEventListener('click', () => {
             locText.textContent = `Location: ${c.name}`;
-            selectedCityId = c.id;
-            dxInput.value = String(c.offsetX || 0);
-            dyInput.value = String(c.offsetY || 0);
           });
 
           mapSvg.appendChild(g);
         }
 
-        function applyAdjustment(deltaX, deltaY) {
-          if (selectedCityId == null) return;
-          const city = CITIES.find(cc => cc.id === selectedCityId);
-          if (!city) return;
-          city.offsetX = (city.offsetX || 0) + (deltaX || 0);
-          city.offsetY = (city.offsetY || 0) + (deltaY || 0);
-          dxInput.value = String(city.offsetX || 0);
-          dyInput.value = String(city.offsetY || 0);
-          // Re-render markers only (keep base map)
-          const markers = Array.from(mapSvg.querySelectorAll('g.map-marker'));
-          for (const g of markers) g.remove();
-          for (const c of CITIES) {
-            const [lat, lng] = getCityLatLng(c.id);
-            const [mx, my] = projectLatLngToSvg(lat, lng, 1000, 600);
-            const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-            g.setAttribute('class', 'map-marker');
-            const dy = c.offsetY || 0;
-            const dx = c.offsetX || 0;
-            g.setAttribute('transform', `translate(${mx + dx}, ${my + dy})`);
-            g.dataset.cityId = String(c.id);
-            const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            t.setAttribute('class', 'map-emoji');
-            t.setAttribute('text-anchor', 'middle');
-            t.textContent = '📍';
-            g.appendChild(t);
-            const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            label.setAttribute('class', 'map-label');
-            label.setAttribute('text-anchor', 'middle');
-            label.setAttribute('y', '18');
-            label.textContent = c.name;
-            g.appendChild(label);
-            g.addEventListener('click', () => {
-              locText.textContent = `Location: ${c.name}`;
-              selectedCityId = c.id;
-              dxInput.value = String(c.offsetX || 0);
-              dyInput.value = String(c.offsetY || 0);
-            });
-            mapSvg.appendChild(g);
-          }
-        }
-
-        dxMinus?.addEventListener('click', () => applyAdjustment(-2, 0));
-        dxPlus?.addEventListener('click', () => applyAdjustment(2, 0));
-        dyMinus?.addEventListener('click', () => applyAdjustment(0, -2));
-        dyPlus?.addEventListener('click', () => applyAdjustment(0, 2));
-        dxInput?.addEventListener('change', () => {
-          if (selectedCityId == null) return;
-          const city = CITIES.find(cc => cc.id === selectedCityId);
-          if (!city) return;
-          city.offsetX = Number(dxInput.value || 0);
-          applyAdjustment(0, 0);
-        });
-        dyInput?.addEventListener('change', () => {
-          if (selectedCityId == null) return;
-          const city = CITIES.find(cc => cc.id === selectedCityId);
-          if (!city) return;
-          city.offsetY = Number(dyInput.value || 0);
-          applyAdjustment(0, 0);
-        });
-        copyCityBtn?.addEventListener('click', () => {
-          if (selectedCityId == null) return;
-          const c = CITIES.find(cc => cc.id === selectedCityId);
-          if (!c) return;
-          const snippet = `{ id: ${c.id}, name: '${c.name}', weight: ${c.weight}, offsetX: ${c.offsetX || 0}, offsetY: ${c.offsetY || 0} }`;
-          navigator.clipboard?.writeText(snippet).then(() => {
-            locText.textContent = `Copied offsets for ${c.name}: offsetX=${c.offsetX || 0}, offsetY=${c.offsetY || 0}`;
-          }).catch(() => {
-            locText.textContent = snippet; // fallback: show it to copy manually
-          });
-        });
+        // click marker -> update Location text
       })
       .catch(() => {
         // Fallback: draw just city points if SVG fails
@@ -1467,6 +1435,16 @@ async function runSimulation() {
 
   renderGenealogy();
   renderMap();
+
+  // Tabs
+  const tabButtons = Array.from(document.querySelectorAll('.tab-btn'));
+  function setActiveTab(name) {
+    tabButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.tab === name));
+    const panels = ['map','genealogy','people','records','log'];
+    panels.forEach(p => document.getElementById(`tab-${p}`).classList.toggle('hidden', p !== name));
+  }
+  tabButtons.forEach(btn => btn.addEventListener('click', () => setActiveTab(btn.dataset.tab)));
+  setActiveTab('map');
 
   // Person inspector: build indexes and bind search
   function renderPersonResults(query) {

@@ -211,6 +211,53 @@ button.secondary {
     padding: 6px 8px;
 }
 
+.overlay {
+    position: fixed;
+    inset: 0;
+    background: #fff;
+    color: #111;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+}
+.overlay.visible { display: flex; }
+.overlay-card {
+    text-align: center;
+    padding: 24px;
+}
+.year-flash {
+    font-size: 72px;
+    letter-spacing: 2px;
+    margin: 0 0 16px;
+}
+.title-headline { font-size: 24px; margin: 8px 0 16px; }
+.title-sub { color: #333; margin-bottom: 16px; }
+.title-btn {
+    -webkit-appearance: none;
+    appearance: none;
+    background: #111;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 12px 20px;
+    cursor: pointer;
+}
+
+.tabbar {
+    display: flex;
+    gap: 8px;
+    border-bottom: 1px solid #eee;
+    margin-bottom: 8px;
+}
+.tabbar button {
+    -webkit-appearance: none; appearance: none;
+    background: transparent; border: none; padding: 10px 12px; cursor: pointer;
+    border-bottom: 2px solid transparent; color: #333;
+}
+.tabbar button.active { border-bottom-color: #111; color: #111; }
+.tab-panel.hidden { display: none; }
+
 .gene-controls .row-gap {
     display: flex;
     gap: 8px;

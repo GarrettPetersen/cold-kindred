@@ -47,6 +47,11 @@ app.innerHTML = `
           </div>
           <svg id="geneSvg" class="gene-svg" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMid meet"></svg>
         </div>
+        <div class="panel">
+          <h2>Map</h2>
+          <div id="locText" class="location-text">Location: Unknown</div>
+          <svg id="mapSvg" class="map-svg" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMid meet"></svg>
+        </div>
       </div>
     </section>
   </main>
@@ -70,6 +75,8 @@ const geneAddBtn = document.getElementById('geneAdd');
 const geneRevealBtn = document.getElementById('geneReveal');
 const geneClearBtn = document.getElementById('geneClear');
 const geneSvg = document.getElementById('geneSvg');
+const mapSvg = document.getElementById('mapSvg');
+const locText = document.getElementById('locText');
 
 function setStatus(stateText, stateClass) {
   statusEl.textContent = stateText;
@@ -247,6 +254,21 @@ async function runSimulation() {
   function getCityName(cityId) {
     const c = CITIES.find(c => c.id === cityId);
     return c ? c.name : 'Unknown';
+  }
+  function getCityLatLng(cityId) {
+    switch (cityId) {
+      case 1: return [40.7128, -74.0060]; // New York
+      case 2: return [34.0522, -118.2437]; // Los Angeles
+      case 3: return [41.8781, -87.6298]; // Chicago
+      case 4: return [29.7604, -95.3698]; // Houston
+      case 5: return [33.4484, -112.0740]; // Phoenix
+      case 6: return [39.9526, -75.1652]; // Philadelphia
+      case 7: return [29.4241, -98.4936]; // San Antonio
+      case 8: return [32.7157, -117.1611]; // San Diego
+      case 9: return [32.7767, -96.7970]; // Dallas
+      case 10: return [37.3382, -121.8863]; // San Jose
+      default: return [39.8283, -98.5795];
+    }
   }
 
   // ----- Demographics and trait assignment -----
@@ -1054,6 +1076,86 @@ async function runSimulation() {
     }
   }
 
+  // ----- Map Rendering -----
+  function projectLatLngToSvg(lat, lng, viewW, viewH) {
+    // crude USA projection to fit SVG viewBox 1000x600; assumes US bounding box
+    const minLat = 25, maxLat = 49; // approx CONUS
+    const minLng = -125, maxLng = -66;
+    const x = ((lng - minLng) / (maxLng - minLng)) * viewW;
+    const y = ((maxLat - lat) / (maxLat - minLat)) * viewH;
+    return [x, y];
+  }
+  function renderMap() {
+    if (!mapSvg) return;
+    while (mapSvg.firstChild) mapSvg.removeChild(mapSvg.firstChild);
+    // Base map SVG
+    fetch('/assets/united-states-map-usa-america-svgrepo-com.svg')
+      .then(r => r.text())
+      .then(svgStr => {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(svgStr, 'image/svg+xml');
+        const imported = document.importNode(doc.documentElement, true);
+        imported.setAttribute('width', '1000');
+        imported.setAttribute('height', '600');
+        imported.setAttribute('x', '0');
+        imported.setAttribute('y', '0');
+        mapSvg.appendChild(imported);
+
+        // City markers
+        for (const c of CITIES) {
+          const [lat, lng] = getCityLatLng(c.id);
+          const [mx, my] = projectLatLngToSvg(lat, lng, 1000, 600);
+          const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+          g.setAttribute('class', 'map-marker');
+          g.setAttribute('transform', `translate(${mx}, ${my})`);
+
+          const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          t.setAttribute('class', 'map-emoji');
+          t.setAttribute('text-anchor', 'middle');
+          t.textContent = '📍';
+          g.appendChild(t);
+
+          const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          label.setAttribute('class', 'map-label');
+          label.setAttribute('text-anchor', 'middle');
+          label.setAttribute('y', '18');
+          label.textContent = c.name;
+          g.appendChild(label);
+
+          g.addEventListener('click', () => {
+            locText.textContent = `Location: ${c.name}`;
+          });
+
+          mapSvg.appendChild(g);
+        }
+      })
+      .catch(() => {
+        // Fallback: draw just city points if SVG fails
+        for (const c of CITIES) {
+          const [lat, lng] = getCityLatLng(c.id);
+          const [mx, my] = projectLatLngToSvg(lat, lng, 1000, 600);
+          const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+          g.setAttribute('class', 'map-marker');
+          g.setAttribute('transform', `translate(${mx}, ${my})`);
+          const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          t.setAttribute('class', 'map-emoji');
+          t.setAttribute('text-anchor', 'middle');
+          t.textContent = '📍';
+          g.appendChild(t);
+          const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          label.setAttribute('class', 'map-label');
+          label.setAttribute('text-anchor', 'middle');
+          label.setAttribute('y', '18');
+          label.textContent = c.name;
+          g.appendChild(label);
+          g.addEventListener('click', () => {
+            locText.textContent = `Location: ${c.name}`;
+          });
+          mapSvg.appendChild(g);
+        }
+      });
+  }
+
   function addKnownByQuery(query) {
     const q = (query || '').trim().toLowerCase();
     if (!q) return; 
@@ -1115,6 +1217,7 @@ async function runSimulation() {
   });
 
   renderGenealogy();
+  renderMap();
 
   // Person inspector: build indexes and bind search
   function renderPersonResults(query) {

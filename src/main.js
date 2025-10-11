@@ -643,21 +643,24 @@ async function runSimulation() {
     return 0.50;                 // 50% per year 75+
   }
 
-  // Cause-of-death selection (simple, age/year aware)
-  function deathCauseFor(age, year) {
-    // War windows (US involvement)
-    const wars = [
-      { from: 1917, to: 1918, label: 'combat in World War I' },
-      { from: 1941, to: 1945, label: 'combat in World War II' },
-      { from: 1950, to: 1953, label: 'combat in the Korean War' },
-      { from: 1965, to: 1973, label: 'combat in the Vietnam War' },
-      { from: 1990, to: 1991, label: 'combat in the Gulf War' },
-      { from: 2001, to: 2014, label: 'combat in Afghanistan' },
-      { from: 2003, to: 2011, label: 'combat in the Iraq War' }
-    ];
-    if (age >= 18 && age <= 35) {
-      const inWar = wars.find(w => year >= w.from && year <= w.to);
-      if (inWar && Math.random() < 0.08) return inWar.label;
+  // War windows (US involvement)
+  const WAR_PERIODS = [
+    { from: 1917, to: 1918, label: 'combat in World War I' },
+    { from: 1941, to: 1945, label: 'combat in World War II' },
+    { from: 1950, to: 1953, label: 'combat in the Korean War' },
+    { from: 1965, to: 1973, label: 'combat in the Vietnam War' },
+    { from: 1990, to: 1991, label: 'combat in the Gulf War' },
+    { from: 2001, to: 2014, label: 'combat in Afghanistan' },
+    { from: 2003, to: 2011, label: 'combat in the Iraq War' }
+  ];
+  function warAt(year) { return WAR_PERIODS.find(w => year >= w.from && year <= w.to) || null; }
+
+  // Cause-of-death selection (simple, age/year/sex aware)
+  function deathCauseFor(age, year, sex) {
+    // Only combat-age men die from combat causes
+    if (sex === 'M' && age >= 18 && age <= 35) {
+      const inWar = warAt(year);
+      if (inWar && Math.random() < 0.15) return inWar.label;
     }
     if (year === 1918 && age >= 1 && age <= 50) {
       if (Math.random() < 0.15) return 'influenza pandemic';
@@ -1280,10 +1283,15 @@ async function runSimulation() {
       if (!p.alive) continue;
       const age = y - year(p.birthDate);
       if (age < 0) continue;
-      const hazard = mortalityHazard(age);
+      let hazard = mortalityHazard(age);
+      // Increase hazard for combat-age men during war periods
+      const war = warAt(y);
+      if (p.sex === 'M' && age >= 18 && age <= 35 && war) {
+        hazard = Math.min(1, hazard * 1.5 + 0.01);
+      }
       if (hazard > 0 && random() < hazard) {
         p.alive = false;
-        const cause = deathCauseFor(age, y);
+        const cause = deathCauseFor(age, y, p.sex);
         const evt = addEvent({ year: y, type: 'DEATH', people: [p.id], details: { cityId: p.cityId, age, cause } });
         indexEventByYear(evt);
         if (Math.random() < 0.02) pushFlash(`${p.firstName} ${p.lastName} died in ${getCityName(p.cityId)} (${cause}).`);

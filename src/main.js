@@ -114,16 +114,8 @@ app.innerHTML = `
           <svg id="mapSvg" class="map-svg" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMid meet"></svg>
         </div>
         <div id="panel-genealogy" class="panel tab-panel hidden">
-          <h2>Genealogy</h2>
-          <div class="gene-controls">
-            <input id="geneSearch" class="input" placeholder="Add by name or ID…" autocomplete="off" />
-            <div class="row-gap">
-              <button id="geneAdd" class="start secondary">Add</button>
-              <button id="geneReveal" class="start secondary">Reveal relative</button>
-              <button id="geneClear" class="start secondary">Clear</button>
-            </div>
-          </div>
-          <svg id="geneSvg" class="gene-svg" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMid meet"></svg>
+          <h2>Connections</h2>
+          <svg id="geneSvg" class="gene-svg" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid meet"></svg>
         </div>
         <div id="panel-log" class="panel tab-panel hidden">
           <h2>Run Log</h2>
@@ -2017,12 +2009,7 @@ async function runSimulation() {
     renderGenealogy();
   }
 
-  geneAddBtn.addEventListener('click', () => addKnownByQuery(geneSearchEl.value));
-  geneRevealBtn.addEventListener('click', revealRelative);
-  geneClearBtn.addEventListener('click', () => {
-    localStorage.removeItem(STORAGE_KEY);
-    while (geneSvg.firstChild) geneSvg.removeChild(geneSvg.firstChild);
-  });
+  // Removed manual add/reveal/clear controls; Connections reflects discovered knowledge only
 
   renderGenealogy();
   renderMap();

@@ -217,8 +217,6 @@ async function runSimulation() {
   };
 
   setStatus('Running…', 'running');
-  startBtn.disabled = true;
-  runAgainBtn.disabled = true;
   setProgress(0);
   logEl.innerHTML = '';
   outputJsonEl.textContent = '';
@@ -2154,11 +2152,7 @@ function startGame() {
 }
 
 startBtn.addEventListener('click', startGame);
-runAgainBtn.addEventListener('click', () => {
-  runSimulation();
-});
-
-toggleJsonBtn.addEventListener('click', () => {
+if (toggleJsonBtn) toggleJsonBtn.addEventListener('click', () => {
   outputJsonEl.classList.toggle('hidden');
 });
 

@@ -25,6 +25,7 @@ app.innerHTML = `
           <button class="menu-btn" data-panel="codis">CODIS</button>
           <button class="menu-btn" data-panel="airport">Airport</button>
           <button class="menu-btn" data-panel="genealogy">Connections</button>
+          <button class="menu-btn" data-panel="news">Newspaper archive</button>
         </div>
         <div id="panel-evidence" class="panel tab-panel">
           <h2>Evidence locker</h2>
@@ -82,6 +83,30 @@ app.innerHTML = `
             <button id="intHello" class="start secondary">Say "hello"</button>
             <button id="intBack" class="start secondary">Back</button>
           </div>
+        </div>
+        <div id="panel-news" class="panel tab-panel hidden">
+          <h2>Newspaper archive</h2>
+          <div class="section field-row">
+            <label>Year <input id="newsYear" class="input" style="width:120px" placeholder="e.g. 1972" /></label>
+            <label>Month
+              <select id="newsMonth" class="input" style="width:140px">
+                <option value="1">January</option>
+                <option value="2">February</option>
+                <option value="3">March</option>
+                <option value="4">April</option>
+                <option value="5">May</option>
+                <option value="6">June</option>
+                <option value="7">July</option>
+                <option value="8">August</option>
+                <option value="9">September</option>
+                <option value="10">October</option>
+                <option value="11">November</option>
+                <option value="12">December</option>
+              </select>
+            </label>
+            <button id="newsSearch" class="start secondary">Search</button>
+          </div>
+          <div id="newsResults" class="detail"></div>
         </div>
         <div id="panel-airport" class="panel tab-panel hidden">
           <h2>Airport</h2>
@@ -159,6 +184,10 @@ const gyLookupBtn = document.getElementById('gyLookup');
 const gyResultsEl = document.getElementById('gyResults');
 const codisRefreshBtn = document.getElementById('codisRefresh');
 const codisListEl = document.getElementById('codisList');
+const newsYearEl = document.getElementById('newsYear');
+const newsMonthEl = document.getElementById('newsMonth');
+const newsSearchBtn = document.getElementById('newsSearch');
+const newsResultsEl = document.getElementById('newsResults');
 // removed offset tool
 const overlaySim = document.getElementById('overlaySim');
 const overlayTitle = document.getElementById('overlayTitle');
@@ -679,7 +708,11 @@ async function runSimulation() {
       year: yearOfMarriage
     };
     result.marriages.push(rec);
-    addEvent({ year: yearOfMarriage, type: 'MARRIAGE', people: [husband.id, wife.id], details: { marriageId: rec.id, cityId: husband.cityId } });
+    // marriage date: pick a plausible month/day
+    const m = 1 + Math.floor(Math.random() * 12);
+    const dim = new Date(Date.UTC(yearOfMarriage, m, 0)).getUTCDate();
+    const d = 1 + Math.floor(Math.random() * dim);
+    addEvent({ year: yearOfMarriage, type: 'MARRIAGE', people: [husband.id, wife.id], details: { marriageId: rec.id, cityId: husband.cityId, date: isoFromYMD(yearOfMarriage, m, d), month: m } });
     return rec;
   }
 
@@ -990,9 +1023,10 @@ async function runSimulation() {
         validateBabyAttributes(child, father, mother);
         children.push(child);
         births++;
-        // record birth event
+        // record birth event with exact date
         const outOfWedlock = isPartnerPair;
-        addEvent({ year: year(birthDate), type: 'BIRTH', people: [child.id], details: { cityId: child.cityId, outOfWedlock, fromAffair: fromAffair && bioFatherId !== father.id } });
+        const by = year(birthDate); const bm = new Date(birthDate).getUTCMonth() + 1; const bd = new Date(birthDate).getUTCDate();
+        addEvent({ year: by, type: 'BIRTH', people: [child.id], details: { cityId: child.cityId, outOfWedlock, fromAffair: fromAffair && bioFatherId !== father.id, date: isoFromYMD(by, bm, bd), month: bm } });
         
       }
     }
@@ -1498,7 +1532,12 @@ async function runSimulation() {
         if (p.disposition === 'buried') {
           plotId = assignBurialPlot(p);
         }
-        const evt = addEvent({ year: y, type: 'DEATH', people: [p.id], details: { cityId: p.cityId, age, cause, disposition: p.disposition, plotId } });
+        // Generate an exact death date within the year; obits may appear next month if within last 5 days
+        const month = 1 + Math.floor(random() * 12);
+        const daysInMonth = new Date(Date.UTC(y, month, 0)).getUTCDate();
+        const day = 1 + Math.floor(random() * daysInMonth);
+        const date = isoFromYMD(y, month, day);
+        const evt = addEvent({ year: y, type: 'DEATH', people: [p.id], details: { cityId: p.cityId, age, cause, disposition: p.disposition, plotId, date, month } });
         indexEventByYear(evt);
         if (Math.random() < 0.02) pushFlash(`${p.firstName} ${p.lastName} died in ${getCityName(p.cityId)} (${cause}).`);
       }
@@ -2002,7 +2041,7 @@ async function runSimulation() {
   // Sidebar menu navigation
   function setActivePanel(name) {
     menuButtons.forEach(b => b.classList.toggle('active', b.dataset.panel === name));
-    const names = ['evidence','records','graveyard','codis','airport','genealogy','log','interview'];
+    const names = ['evidence','records','graveyard','codis','airport','genealogy','log','interview','news'];
     names.forEach(n => panelByName(n)?.classList.toggle('hidden', n !== name));
     if (name === 'evidence') renderEvidence();
     if (name === 'codis') renderCODIS();
@@ -2084,7 +2123,10 @@ async function runSimulation() {
         const father = p.fatherId ? personByIdPre.get(p.fatherId) : null;
         const mother = p.motherId ? personByIdPre.get(p.motherId) : null;
         const parentText = `Parents: ${mother ? mother.firstName + ' ' + mother.lastName : 'Unknown'}${father ? ' & ' + father.firstName + ' ' + father.lastName : ''}`;
-        lines.push(`${p.lastName}, ${p.firstName} – b. ${yb} – ${getCityName(p.cityId)} — ${parentText}`);
+        // find birth event for exact date
+        const be = result.events.find(ev => ev.type==='BIRTH' && ev.people[0]===p.id);
+        const dt = be?.details?.date ? ` on ${be.details.date}` : '';
+        lines.push(`${p.lastName}, ${p.firstName} – b. ${yb}${dt} – ${getCityName(p.cityId)} — ${parentText}`);
       }
     } else if (type === 'death') {
       for (const e of result.events) {
@@ -2100,7 +2142,8 @@ async function runSimulation() {
           const plot = e.details?.plotId || buriedPlotOf(pid);
           post += plot != null ? ` – Plot ${plot} (${getCityName(e.details?.cityId)})` : '';
         }
-        lines.push(`${p.lastName}, ${p.firstName} – d. ${e.year} – ${getCityName(e.details?.cityId)}${post}`);
+        const dt = e.details?.date ? ` on ${e.details.date}` : '';
+        lines.push(`${p.lastName}, ${p.firstName} – d. ${e.year}${dt} – ${getCityName(e.details?.cityId)}${post}`);
       }
     } else if (type === 'marriage') {
       for (const m of result.marriages) {
@@ -2112,7 +2155,8 @@ async function runSimulation() {
         const h = personByIdPre.get(m.husbandId); const w = personByIdPre.get(m.wifeId);
         const sortKey = (h?.lastName || '');
         if (!inRange(sortKey, range)) continue;
-        lines.push(`${h?.lastName || ''}, ${h?.firstName || ''} & ${w?.firstName || ''} ${w?.lastName || ''} – ${m.year}  [💍 Add connection]`);
+        const dt = marriageEvt?.details?.date ? ` on ${marriageEvt.details.date}` : '';
+        lines.push(`${h?.lastName || ''}, ${h?.firstName || ''} & ${w?.firstName || ''} ${w?.lastName || ''} – ${m.year}${dt}  [💍 Add connection]`);
       }
     } else if (type === 'divorce') {
       for (const e of result.events) {
@@ -2280,6 +2324,69 @@ async function runSimulation() {
     codisListEl.appendChild(box);
   }
   codisRefreshBtn?.addEventListener('click', renderCODIS);
+
+  // Newspaper archive - Obituaries
+  function monthFromISO(dateStr) {
+    const d = new Date(dateStr);
+    return d.getUTCMonth() + 1; // 1..12
+  }
+  function renderObits() {
+    const y = Number(newsYearEl.value || 0);
+    const m = Number(newsMonthEl.value || 0);
+    const cityId = result.playerCityId;
+    newsResultsEl.innerHTML = '';
+    for (const e of result.events) {
+      if (e.type !== 'DEATH') continue;
+      if (e.details?.cityId !== cityId) continue;
+      if (y && e.year !== y) continue;
+      const pid = e.people[0];
+      const p = personByIdPre.get(pid);
+      if (!p) continue;
+      if (m) {
+        // Use exact month with obituary carryover: if death is within last 5 days of month, obit next month
+        const deathMonth = e.details?.month || monthFromISO(e.details?.date || `${e.year}-06-15`);
+        const d = e.details?.date ? new Date(e.details.date).getUTCDate() : 15;
+        const daysInMonth = new Date(Date.UTC(e.year, deathMonth, 0)).getUTCDate();
+        const obitMonth = (daysInMonth - d < 5) ? (deathMonth === 12 ? 1 : deathMonth + 1) : deathMonth;
+        if (obitMonth !== m) continue;
+      }
+      // Build survivors/predeceased list
+      const relatives = [];
+      const father = p.fatherId ? personByIdPre.get(p.fatherId) : null;
+      const mother = p.motherId ? personByIdPre.get(p.motherId) : null;
+      const spouse = p.spouseId ? personByIdPre.get(p.spouseId) : null;
+      const children = result.people.filter(c => c.fatherId === p.id || c.motherId === p.id);
+      const predeceased = [];
+      const survivedBy = [];
+      if (father) ((father.alive) ? survivedBy : predeceased).push(`father ${father.firstName} ${father.lastName}`);
+      if (mother) ((mother.alive) ? survivedBy : predeceased).push(`mother ${mother.firstName} ${mother.lastName}`);
+      if (spouse) ((spouse.alive) ? survivedBy : predeceased).push(`spouse ${spouse.firstName} ${spouse.lastName}`);
+      for (const c of children) {
+        ((c.alive) ? survivedBy : predeceased).push(`child ${c.firstName} ${c.lastName}`);
+      }
+      const life = `(${year(p.birthDate)}-${e.year})`;
+      const pre = `We mourn the passing of ${p.firstName} ${p.lastName} ${life}.`;
+      const header = `${p.firstName} ${p.lastName} – d. ${e.year}${e.details?.date ? ' on ' + e.details.date : ''} – ${getCityName(e.details?.cityId)}`;
+      const parts = [pre, header];
+      if (predeceased.length) parts.push(`Pre-deceased by: ${predeceased.join(', ')}`);
+      if (survivedBy.length) parts.push(`Survived by: ${survivedBy.join(', ')}`);
+      // Add first-degree connection buttons (ring) for parent/child and spouse
+      const container = document.createElement('div');
+      container.style.display = 'flex';
+      container.style.justifyContent = 'space-between';
+      const text = document.createElement('span'); text.textContent = parts.join('\n');
+      container.appendChild(text);
+      const actions = document.createElement('span'); actions.style.display='inline-flex'; actions.style.gap='6px';
+      if (father) { const b=document.createElement('button'); b.className='start secondary'; b.textContent='💍 Add'; b.title='Add familial connection'; b.addEventListener('click',()=>addConnection(p.id,father.id,'familial')); actions.appendChild(b); }
+      if (mother) { const b=document.createElement('button'); b.className='start secondary'; b.textContent='💍 Add'; b.title='Add familial connection'; b.addEventListener('click',()=>addConnection(p.id,mother.id,'familial')); actions.appendChild(b); }
+      if (spouse) { const b=document.createElement('button'); b.className='start secondary'; b.textContent='💍 Add'; b.title='Add familial connection'; b.addEventListener('click',()=>addConnection(p.id,spouse.id,'familial')); actions.appendChild(b); }
+      for (const c of children) { const b=document.createElement('button'); b.className='start secondary'; b.textContent='💍 Add'; b.title='Add familial connection'; b.addEventListener('click',()=>addConnection(p.id,c.id,'familial')); actions.appendChild(b); }
+      if (actions.childNodes.length) container.appendChild(actions);
+      newsResultsEl.appendChild(container);
+    }
+    if (!newsResultsEl.childNodes.length) newsResultsEl.textContent = 'No obituaries for that selection.';
+  }
+  newsSearchBtn?.addEventListener('click', () => { newsResultsEl.innerHTML=''; renderObits(); });
 
   // -------- Residents typeahead & Interviews --------
   const residentSearchEl = document.getElementById('residentSearch');

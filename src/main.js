@@ -1913,14 +1913,15 @@ async function runSimulation() {
   renderMap();
 
   // Tabs
-  const tabButtons = Array.from(document.querySelectorAll('.tab-btn'));
+  const tabButtons = [];
   function setActiveTab(name) {
-    tabButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.tab === name));
+    // legacy no-op; kept for compatibility
     const panels = ['map','genealogy','people','records','log'];
-    panels.forEach(p => document.getElementById(`tab-${p}`).classList.toggle('hidden', p !== name));
+    panels.forEach(p => {
+      const el = document.getElementById(`tab-${p}`);
+      if (el) el.classList.toggle('hidden', p !== name);
+    });
   }
-  tabButtons.forEach(btn => btn.addEventListener('click', () => setActiveTab(btn.dataset.tab)));
-  setActiveTab('map');
 
   // Sidebar menu navigation
   function setActivePanel(name) {
@@ -2022,12 +2023,66 @@ async function runSimulation() {
 
   // CODIS rendering
   function renderCODIS() {
-    const lines = result.codis.profiles.map((pr, idx) => {
+    codisListEl.innerHTML = '';
+    codisListEl.classList.add('codis-list');
+    result.codis.profiles.forEach((pr, idx) => {
       const p = personByIdPre.get(pr.personId);
       const label = p ? `${p.firstName} ${p.lastName}` : (pr.moniker ? pr.moniker : `Profile #${idx+1}`);
-      return `${label} – added ${pr.year || ''}`;
+      const row = document.createElement('div');
+      row.textContent = `${label} – added ${pr.year || ''}`;
+      if (!p && pr.moniker) row.classList.add('killer');
+      row.addEventListener('click', () => renderCODISMatches(pr.personId));
+      codisListEl.appendChild(row);
     });
-    codisListEl.textContent = lines.join('\n');
+  }
+
+  function renderCODISMatches(personId) {
+    // naive kinship estimator by graph distance
+    const base = personByIdPre.get(personId);
+    if (!base) { codisListEl.textContent = 'Profile not linked to a person yet.'; return; }
+    const adj = new Map();
+    function link(u, v) { const a = adj.get(u) || new Set(); a.add(v); adj.set(u, a); }
+    for (const p of result.people) {
+      if (p.fatherId) { link(p.id, p.fatherId); link(p.fatherId, p.id); }
+      if (p.motherId) { link(p.id, p.motherId); link(p.motherId, p.id); }
+      if (p.spouseId) { link(p.id, p.spouseId); link(p.spouseId, p.id); }
+      if (p.partnerId) { link(p.id, p.partnerId); link(p.partnerId, p.id); }
+    }
+    const dist = new Map([[personId,0]]);
+    const q = [personId];
+    while (q.length) {
+      const u = q.shift();
+      const du = dist.get(u) || 0;
+      if (du > 6) continue;
+      const nbrs = adj.get(u) || new Set();
+      for (const v of nbrs) {
+        if (dist.has(v)) continue;
+        dist.set(v, du + 1);
+        q.push(v);
+      }
+    }
+    const rows = [];
+    for (const [pid, d] of dist.entries()) {
+      if (pid === personId) continue;
+      const p = personByIdPre.get(pid);
+      if (!p) continue;
+      let rel = 'distant relative'; let pct = '~0.8%';
+      if (d === 1) { rel = 'parent/child/spouse'; pct = '50% (parent/child)'; }
+      else if (d === 2) { rel = 'sibling/grandparent/grandchild'; pct = '25–50%'; }
+      else if (d === 3) { rel = 'aunt/uncle/niece/nephew'; pct = '25%'; }
+      else if (d === 4) { rel = 'first cousin'; pct = '12.5%'; }
+      else if (d === 5) { rel = 'first cousin once removed'; pct = '6.25%'; }
+      else if (d === 6) { rel = 'second cousin'; pct = '3.125%'; }
+      rows.push(`${p.firstName} ${p.lastName} – ${pct} – likely ${rel}`);
+    }
+    rows.sort();
+    const back = document.createElement('button'); back.className='start secondary'; back.textContent='Back';
+    back.addEventListener('click', renderCODIS);
+    codisListEl.innerHTML='';
+    codisListEl.appendChild(back);
+    const box = document.createElement('div'); box.className='detail'; box.style.marginTop='8px';
+    box.textContent = rows.join('\n');
+    codisListEl.appendChild(box);
   }
   codisRefreshBtn?.addEventListener('click', renderCODIS);
 

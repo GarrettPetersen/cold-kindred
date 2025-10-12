@@ -23,8 +23,8 @@ app.innerHTML = `
         </div>
         <div id="panel-evidence" class="panel tab-panel">
           <h2>Evidence locker</h2>
-          <div class="title-sub">Victim's clothes</div>
-          <button id="evSendDNA" class="start secondary">Send for DNA testing</button>
+          <div id="evList" class="list"></div>
+          <div id="evActions" class="detail" style="margin-top:8px"></div>
           <div id="evStatus" class="title-sub"></div>
         </div>
         <div id="panel-records" class="panel tab-panel hidden">
@@ -212,7 +212,8 @@ async function runSimulation() {
     people: [],
     marriages: [],
     events: [],
-    graveyards: {} // { [cityId]: { nextPlotId:number, plots: { [plotId]: number[] } } }
+    graveyards: {}, // { [cityId]: { nextPlotId:number, plots: { [plotId]: number[] } } }
+    evidence: {} // { [cityId]: Array<{ id:string, name:string, type:string, actions?:string[] }> }
   };
 
   setStatus('Running…', 'running');
@@ -1570,6 +1571,10 @@ async function runSimulation() {
     result.killerMoniker = moniker;
     result.murderVictimId = murderEvt.people[1];
     result.playerCityId = murderEvt.details?.cityId || null;
+    // Seed evidence in the crime city
+    const cid = result.playerCityId;
+    result.evidence[cid] = result.evidence[cid] || [];
+    result.evidence[cid].push({ id: 'victim-clothes', name: "Victim's clothes", type: 'clothing', actions: ['dna'] });
   }
   overlaySim.classList.remove('visible');
   titleHeadlineEl.textContent = 'Case Brief';
@@ -1921,6 +1926,8 @@ async function runSimulation() {
     menuButtons.forEach(b => b.classList.toggle('active', b.dataset.panel === name));
     const names = ['evidence','records','graveyard','codis','airport','genealogy','log'];
     names.forEach(n => panelByName(n)?.classList.toggle('hidden', n !== name));
+    if (name === 'evidence') renderEvidence();
+    if (name === 'codis') renderCODIS();
   }
   menuButtons.forEach(btn => btn.addEventListener('click', () => setActivePanel(btn.dataset.panel)));
   // Initialize player city to murder city if available
@@ -1929,17 +1936,41 @@ async function runSimulation() {
   }
   setActivePanel('evidence');
 
-  // Evidence locker: send victim clothes for DNA testing
-  evSendDNA?.addEventListener('click', () => {
-    const victimId = result.murderVictimId;
-    const killerId = result.killerId;
-    let added = 0;
-    if (killerId) { result.codis.profiles.push({ personId: killerId, year: (murderEvt?.year || 2000), moniker: result.killerMoniker || null }); added++; }
-    if (victimId) { result.codis.profiles.push({ personId: victimId, year: (murderEvt?.year || 2000) }); added++; }
-    evStatus.textContent = added ? `Submitted evidence. Added ${added} profile(s) to CODIS.` : 'No evidence available.';
-    setActivePanel('codis');
-    renderCODIS();
-  });
+  // Evidence locker rendering & actions
+  function renderEvidence() {
+    const cityId = result.playerCityId;
+    playerCityNameEl.textContent = getCityName(cityId);
+    const list = document.getElementById('evList');
+    const actions = document.getElementById('evActions');
+    list.innerHTML = '';
+    actions.innerHTML = '';
+    evStatus.textContent = '';
+    const items = result.evidence[cityId] || [];
+    if (!items.length) { list.textContent = 'No evidence in this city.'; return; }
+    items.forEach((it) => {
+      const btn = document.createElement('button');
+      btn.className = 'menu-btn';
+      btn.textContent = it.name;
+      btn.addEventListener('click', () => {
+        // show actions
+        actions.innerHTML = '';
+        if (it.actions?.includes('dna')) {
+          const a = document.createElement('button'); a.className = 'start secondary'; a.textContent = 'Send for DNA testing';
+          a.addEventListener('click', () => {
+            const victimId = result.murderVictimId;
+            const killerId = result.killerId;
+            let added = 0;
+            if (killerId) { result.codis.profiles.push({ personId: killerId, year: (murderEvt?.year || 2000), moniker: result.killerMoniker || null }); added++; }
+            if (victimId) { result.codis.profiles.push({ personId: victimId, year: (murderEvt?.year || 2000) }); added++; }
+            evStatus.textContent = added ? `Submitted evidence. Added ${added} profile(s) to CODIS.` : 'No evidence available.';
+            setActivePanel('codis');
+          });
+          actions.appendChild(a);
+        }
+      });
+      list.appendChild(btn);
+    });
+  }
 
   // Records search
   function inRange(lastName, range) {

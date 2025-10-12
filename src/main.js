@@ -1559,23 +1559,40 @@ async function runSimulation() {
   const murderCityName = murderEvt ? getCityName(murderEvt.details?.cityId) : 'an American city';
   function killerMoniker(cityId, seedVal) {
     const region = getCityRegion(cityId);
+    const cityName = getCityName(cityId) || '';
+    const cityShort = cityName.split(',')[0] || cityName;
     const GEO = {
       NE: ['Harbor','River','Bay','Granite','Pine','Liberty','Colonial','Maritime'],
       MW: ['Great Lakes','Prairie','Rail','Steel','River','Grain','Twin Cities','Lake'],
       S:  ['Delta','Gulf','Bayou','Cotton','Lone Star','Magnolia','Peach','River'],
-      W:  ['Golden State','Desert','Sierra','Pacific','Canyon','Mile High','Bay']
+      W:  ['Golden Coast','Desert','Sierra','Pacific','Canyon','Mile High','Bay']
     };
-    const NOUNS = ['Killer','Phantom','Prowler','Stalker','Butcher','Ripper','Hunter','Ghost'];
-    const MODS = ['Shadow','Midnight','Cross','Trail','Whisper','Ridge','Raven','Copper'];
+    const NOUNS = ['Specter','Phantom','Prowler','Stalker','Butcher','Ripper','Hunter','Ghost','Shade','Marauder','Cipher'];
+    const MODS = ['Shadow','Midnight','Cross','Trail','Whisper','Ridge','Raven','Copper','Fog','Dust'];
+    const FORBIDDEN = [
+      'Golden State Killer','Night Stalker','Boston Strangler','Zodiac Killer','Green River Killer',
+      'BTK Killer','Hillside Strangler','Grim Sleeper','Son of Sam','Axeman'
+    ];
     const geo = (GEO[region] || GEO.NE);
     const r1 = Math.abs((seedVal * 9301 + 49297) % 233280);
     const r2 = Math.abs((seedVal * 23333 + 12345) % 233280);
     const r3 = Math.abs((seedVal * 61169 + 7) % 233280);
+    const r4 = Math.abs((seedVal * 727 + 19) % 233280);
     const g = geo[r1 % geo.length];
     const m = MODS[r2 % MODS.length];
-    const n = NOUNS[r3 % NOUNS.length];
-    // Occasionally two-word geo
-    const name = (r1 % 3 === 0) ? `${g} ${m} ${n}` : `${g} ${n}`;
+    let n = NOUNS[r3 % NOUNS.length];
+    // Build base name (sometimes insert modifier)
+    let name = (r1 % 3 === 0) ? `${g} ${m} ${n}` : `${g} ${n}`;
+    // Occasionally add a city suffix to further diversify
+    if (r4 % 2 === 0 && cityShort) name = `${name} of ${cityShort}`;
+    // Avoid known real-world monikers (case-insensitive)
+    const lower = name.toLowerCase();
+    const hitsForbidden = FORBIDDEN.some(f => lower.includes(f.toLowerCase()));
+    if (hitsForbidden || /\bKiller\b/i.test(name)) {
+      // Swap noun away from Killer-like terms and add extra modifier
+      n = NOUNS[(r3 + 7) % NOUNS.length];
+      name = `${g} ${m} ${n}` + (cityShort ? ` of ${cityShort}` : '');
+    }
     return name;
   }
   const moniker = killerMoniker(murderEvt?.details?.cityId, seed);
@@ -1999,8 +2016,14 @@ async function runSimulation() {
             const victimId = result.murderVictimId;
             const killerId = result.killerId;
             let added = 0;
-            if (killerId) { result.codis.profiles.push({ personId: killerId, year: (murderEvt?.year || 2000), moniker: result.killerMoniker || null }); added++; }
-            if (victimId) { result.codis.profiles.push({ personId: victimId, year: (murderEvt?.year || 2000) }); added++; }
+            const alreadyKMoniker = result.codis.profiles.some(pr => pr.moniker && pr.moniker === (result.killerMoniker || ''));
+            const alreadyV = result.codis.profiles.some(pr => pr.personId === victimId);
+            // Add moniker as standalone profile sharing the killer's DNA id
+            if (killerId && !alreadyKMoniker) {
+              result.codis.profiles.push({ personId: null, year: (murderEvt?.year || 2000), moniker: result.killerMoniker || null, dnaId: `killer-${killerId}` });
+              added++;
+            }
+            if (victimId && !alreadyV) { result.codis.profiles.push({ personId: victimId, year: (murderEvt?.year || 2000), dnaId: `person-${victimId}` }); added++; }
             if (added) {
               a.textContent = 'Victim and Killer DNA profiles added to CODIS.';
               a.disabled = true;
@@ -2069,11 +2092,12 @@ async function runSimulation() {
     codisListEl.classList.add('codis-list');
     result.codis.profiles.forEach((pr, idx) => {
       const p = personByIdPre.get(pr.personId);
-      const label = p ? `${p.firstName} ${p.lastName}` : (pr.moniker ? pr.moniker : `Profile #${idx+1}`);
+      // Prefer moniker if present (e.g., killer). Do NOT show real name in that case.
+      const label = pr.moniker ? pr.moniker : (p ? `${p.firstName} ${p.lastName}` : `Profile #${idx+1}`);
       const row = document.createElement('div');
       row.className = 'row';
       row.textContent = `${label} – added ${pr.year || ''}`;
-      if (!p && pr.moniker) row.classList.add('killer');
+      if (pr.moniker) row.classList.add('killer');
       row.addEventListener('click', () => showCodisDropdown(row, pr.personId));
       codisListEl.appendChild(row);
     });
@@ -2102,16 +2126,23 @@ async function runSimulation() {
   }
 
   function renderCODISMatches(personId) {
-    // naive kinship estimator by graph distance
-    const base = personByIdPre.get(personId);
+    // If personId is null (moniker), match by DNA id against the killer
+    let base = personByIdPre.get(personId || -1);
+    if (!base) {
+      // try resolve via DNA id if moniker profile
+      const mon = result.codis.profiles.find(pr => pr.personId === null && pr.moniker);
+      if (mon && mon.dnaId && mon.dnaId.startsWith('killer-')) {
+        const kid = Number(mon.dnaId.slice('killer-'.length));
+        base = personByIdPre.get(kid);
+      }
+    }
     if (!base) { codisListEl.textContent = 'Profile not linked to a person yet.'; return; }
     const adj = new Map();
     function link(u, v) { const a = adj.get(u) || new Set(); a.add(v); adj.set(u, a); }
     for (const p of result.people) {
       if (p.fatherId) { link(p.id, p.fatherId); link(p.fatherId, p.id); }
       if (p.motherId) { link(p.id, p.motherId); link(p.motherId, p.id); }
-      if (p.spouseId) { link(p.id, p.spouseId); link(p.spouseId, p.id); }
-      if (p.partnerId) { link(p.id, p.partnerId); link(p.partnerId, p.id); }
+      // Note: do NOT link spouse/partner for genetic matches
     }
     const dist = new Map([[personId,0]]);
     const q = [personId];
@@ -2126,37 +2157,59 @@ async function runSimulation() {
         q.push(v);
       }
     }
+    function shareParent(a, b) {
+      return (a.fatherId && a.fatherId === b.fatherId) || (a.motherId && a.motherId === b.motherId);
+    }
+    function isParentOf(a, b) { return b.fatherId === a.id || b.motherId === a.id; }
+    function isChildOf(a, b) { return a.fatherId === b.id || a.motherId === b.id; }
+    function isGrandparentOf(a, b) {
+      const f = personByIdPre.get(b.fatherId || -1);
+      const m = personByIdPre.get(b.motherId || -1);
+      return (f && (f.fatherId === a.id || f.motherId === a.id)) || (m && (m.fatherId === a.id || m.motherId === a.id));
+    }
+    function isGrandchildOf(a, b) { return isGrandparentOf(b, a); }
+    function shareGrandparent(a, b) {
+      const aGP = new Set();
+      const af = personByIdPre.get(a.fatherId || -1); const am = personByIdPre.get(a.motherId || -1);
+      if (af) { if (af.fatherId) aGP.add(af.fatherId); if (af.motherId) aGP.add(af.motherId); }
+      if (am) { if (am.fatherId) aGP.add(am.fatherId); if (am.motherId) aGP.add(am.motherId); }
+      const bf = personByIdPre.get(b.fatherId || -1); const bm = personByIdPre.get(b.motherId || -1);
+      const bGP = new Set();
+      if (bf) { if (bf.fatherId) bGP.add(bf.fatherId); if (bf.motherId) bGP.add(bf.motherId); }
+      if (bm) { if (bm.fatherId) bGP.add(bm.fatherId); if (bm.motherId) bGP.add(bm.motherId); }
+      for (const id of aGP) if (bGP.has(id)) return true;
+      return false;
+    }
+
     const rows = [];
     for (const [pid, d] of dist.entries()) {
       if (pid === personId) continue;
       const p = personByIdPre.get(pid);
       if (!p) continue;
       let rel = 'distant relative'; let pct = '~0.8%';
-      if (d === 1) { rel = 'parent/child/spouse'; pct = '50% (parent/child)'; }
-      else if (d === 2) { rel = 'sibling/grandparent/grandchild'; pct = '25–50%'; }
-      else if (d === 3) { rel = 'aunt/uncle/niece/nephew'; pct = '25%'; }
-      else if (d === 4) { rel = 'first cousin'; pct = '12.5%'; }
-      else if (d === 5) { rel = 'first cousin once removed'; pct = '6.25%'; }
-      else if (d === 6) { rel = 'second cousin'; pct = '3.125%'; }
+      let firstDegree = false;
+      if (isParentOf(p, base)) { rel = 'parent'; pct = '50%'; firstDegree = true; }
+      else if (isChildOf(p, base)) { rel = 'child'; pct = '50%'; firstDegree = true; }
+      else if (shareParent(base, p)) { rel = 'sibling'; pct = '25–50%'; }
+      else if (isGrandparentOf(p, base)) { rel = 'grandparent'; pct = '25%'; }
+      else if (isGrandchildOf(p, base)) { rel = 'grandchild'; pct = '25%'; }
+      else if (shareGrandparent(base, p)) { rel = 'first cousin'; pct = '12.5%'; }
+
       const line = document.createElement('div');
       line.style.display = 'flex';
       line.style.justifyContent = 'space-between';
       const txt = document.createElement('span');
       txt.textContent = `${p.firstName} ${p.lastName} – ${pct} – likely ${rel}`;
       line.appendChild(txt);
-      // First-degree = distance 1
-      if (d === 1) {
+      // First-degree genetic only: parent/child
+      if (firstDegree) {
         const actions = document.createElement('span');
         actions.style.display = 'inline-flex';
         actions.style.gap = '6px';
         const addGen = document.createElement('button'); addGen.className = 'start secondary'; addGen.textContent = '🧬 Add';
         addGen.title = 'Add genetic connection to Connections';
         addGen.addEventListener('click', () => addConnection(personId, pid, 'genetic'));
-        const addFam = document.createElement('button'); addFam.className = 'start secondary'; addFam.textContent = '💍 Add';
-        addFam.title = 'Add familial connection to Connections';
-        addFam.addEventListener('click', () => addConnection(personId, pid, 'familial'));
         actions.appendChild(addGen);
-        actions.appendChild(addFam);
         line.appendChild(actions);
       }
       rows.push(line);

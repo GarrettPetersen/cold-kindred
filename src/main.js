@@ -42,6 +42,9 @@ app.innerHTML = `
                 <option value="marriage">Marriages</option>
               </select>
             </label>
+            <label>Year
+              <input id="recYear" class="input" style="width:120px" placeholder="e.g. 1955" />
+            </label>
             <label>Letter range
               <select id="recRange" class="input" style="width:160px">
                 <option value="A-D">A–D</option>
@@ -147,6 +150,7 @@ const panelByName = (n) => document.getElementById(`panel-${n}`);
 const evSendDNA = document.getElementById('evSendDNA');
 const evStatus = document.getElementById('evStatus');
 const recTypeEl = document.getElementById('recType');
+const recYearEl = document.getElementById('recYear');
 const recRangeEl = document.getElementById('recRange');
 const recSearchBtn = document.getElementById('recSearch');
 const recResultsEl = document.getElementById('recResults');
@@ -1374,22 +1378,40 @@ async function runSimulation() {
       }
     }
 
-    // Divorces
-    const marriedAdults = adults.filter(p => p.spouseId);
-    const visited = new Set();
-    for (const p of marriedAdults) {
-      if (visited.has(p.id)) continue;
-      const spouse = result.people.find(q => q.id === p.spouseId);
-      if (!spouse) continue;
-      visited.add(p.id);
-      visited.add(spouse.id);
-      if (random() < PROB.divorce) {
-        const evt = addEvent({ year: y, type: 'DIVORCE', people: [p.id, spouse.id], details: { cityId: p.cityId } });
-        indexEventByYear(evt);
-        p.spouseId = null;
-        spouse.spouseId = null;
-      }
+  // Divorces (less likely without affairs; more likely after affairs)
+  const marriedAdults = adults.filter(p => p.spouseId);
+  const visited = new Set();
+  for (const p of marriedAdults) {
+    if (visited.has(p.id)) continue;
+    const spouse = result.people.find(q => q.id === p.spouseId);
+    if (!spouse) continue;
+    visited.add(p.id);
+    visited.add(spouse.id);
+    let hadAffair = false;
+    const ids = eventsByPerson.get(p.id) || [];
+    for (let i = ids.length - 1; i >= 0; i--) {
+      const e = result.events[ids[i] - 1];
+      if (!e) continue;
+      if (e.type === 'AFFAIR' && y - e.year <= 10) { hadAffair = true; break; }
+      if (e.year < y - 10) break;
     }
+    const spouseEvts = eventsByPerson.get(spouse.id) || [];
+    for (let i = spouseEvts.length - 1; i >= 0; i--) {
+      const e = result.events[spouseEvts[i] - 1];
+      if (!e) continue;
+      if (e.type === 'AFFAIR' && y - e.year <= 10) { hadAffair = true; break; }
+      if (e.year < y - 10) break;
+    }
+    let divorceProb = PROB.divorce || 0.01;
+    if (hadAffair) divorceProb = Math.min(0.5, divorceProb * 5);
+    else divorceProb = Math.max(divorceProb * 0.5, 0.002);
+    if (random() < divorceProb) {
+      const evt = addEvent({ year: y, type: 'DIVORCE', people: [p.id, spouse.id], details: { cityId: p.cityId } });
+      indexEventByYear(evt);
+      p.spouseId = null;
+      spouse.spouseId = null;
+    }
+  }
 
     // Affairs (informational)
     const marriedPool = result.people.filter(p => p.alive && p.spouseId);
@@ -2050,23 +2072,58 @@ async function runSimulation() {
   function renderRecords() {
     const type = recTypeEl.value;
     const range = recRangeEl.value;
+    const yFilter = Number(recYearEl.value || 0);
+    const cityId = result.playerCityId;
     const lines = [];
     if (type === 'birth') {
       for (const p of result.people) {
-        if (inRange(p.lastName, range)) lines.push(`${p.lastName}, ${p.firstName} – b. ${year(p.birthDate)} – ${getCityName(p.cityId)}`);
+        const yb = year(p.birthDate);
+        if (p.cityId !== cityId) continue;
+        if (yFilter && yb !== yFilter) continue;
+        if (!inRange(p.lastName, range)) continue;
+        const father = p.fatherId ? personByIdPre.get(p.fatherId) : null;
+        const mother = p.motherId ? personByIdPre.get(p.motherId) : null;
+        const parentText = `Parents: ${mother ? mother.firstName + ' ' + mother.lastName : 'Unknown'}${father ? ' & ' + father.firstName + ' ' + father.lastName : ''}`;
+        lines.push(`${p.lastName}, ${p.firstName} – b. ${yb} – ${getCityName(p.cityId)} — ${parentText}`);
       }
     } else if (type === 'death') {
       for (const e of result.events) {
         if (e.type !== 'DEATH') continue;
+        if (e.details?.cityId !== cityId) continue;
+        if (yFilter && e.year !== yFilter) continue;
         const pid = e.people[0]; const p = personByIdPre.get(pid);
         if (!p) continue;
-        if (inRange(p.lastName, range)) lines.push(`${p.lastName}, ${p.firstName} – d. ${e.year} – ${getCityName(e.details?.cityId)} (${e.details?.cause || 'cause unknown'})`);
+        if (!inRange(p.lastName, range)) continue;
+        const disp = e.details?.disposition || 'unknown';
+        let post = ` (${e.details?.cause || 'cause unknown'}) – ${disp}`;
+        if (disp === 'buried') {
+          const plot = e.details?.plotId || buriedPlotOf(pid);
+          post += plot != null ? ` – Plot ${plot} (${getCityName(e.details?.cityId)})` : '';
+        }
+        lines.push(`${p.lastName}, ${p.firstName} – d. ${e.year} – ${getCityName(e.details?.cityId)}${post}`);
       }
     } else if (type === 'marriage') {
       for (const m of result.marriages) {
+        if (yFilter && m.year !== yFilter) continue;
+        // Find the MARRIAGE event to get city (stored when marriage added)
+        const marriageEvt = result.events.find(ev => ev.type === 'MARRIAGE' && ev.details?.marriageId === m.id);
+        const mCityId = marriageEvt?.details?.cityId || null;
+        if (mCityId !== cityId) continue;
         const h = personByIdPre.get(m.husbandId); const w = personByIdPre.get(m.wifeId);
         const sortKey = (h?.lastName || '');
-        if (inRange(sortKey, range)) lines.push(`${h?.lastName || ''}, ${h?.firstName || ''} & ${w?.firstName || ''} ${w?.lastName || ''} – ${m.year}`);
+        if (!inRange(sortKey, range)) continue;
+        lines.push(`${h?.lastName || ''}, ${h?.firstName || ''} & ${w?.firstName || ''} ${w?.lastName || ''} – ${m.year}  [💍 Add connection]`);
+      }
+    } else if (type === 'divorce') {
+      for (const e of result.events) {
+        if (e.type !== 'DIVORCE') continue;
+        if (e.details?.cityId !== cityId) continue;
+        if (yFilter && e.year !== yFilter) continue;
+        const [aId,bId] = e.people;
+        const a = personByIdPre.get(aId); const b = personByIdPre.get(bId);
+        const sortKey = (a?.lastName || '');
+        if (!inRange(sortKey, range)) continue;
+        lines.push(`${a?.lastName || ''}, ${a?.firstName || ''} & ${b?.firstName || ''} ${b?.lastName || ''} – divorced in ${e.year}`);
       }
     }
     lines.sort((a,b) => a.localeCompare(b));

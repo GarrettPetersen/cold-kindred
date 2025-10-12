@@ -24,6 +24,7 @@ app.innerHTML = `
           <button class="menu-btn" data-panel="graveyard">Graveyard</button>
           <button class="menu-btn" data-panel="codis">CODIS</button>
           <button class="menu-btn" data-panel="airport">Airport</button>
+          <button class="menu-btn" data-panel="genealogy">Connections</button>
         </div>
         <div id="panel-evidence" class="panel tab-panel">
           <h2>Evidence locker</h2>
@@ -1733,6 +1734,28 @@ async function runSimulation() {
     }
   }
 
+  // Add connection to knowledge graph
+  function addConnection(aId, bId, kind) {
+    knowledge.knownPeople.add(aId);
+    knowledge.knownPeople.add(bId);
+    const type = kind === 'genetic' ? 'biological' : 'marriage';
+    // Avoid duplicates
+    if (!knowledge.knownRelationships.some(r => r.type === type && ((r.a === aId && r.b === bId) || (r.a === bId && r.b === aId)))) {
+      // For genetic, ensure parent-child if applicable; otherwise generic biological
+      const a = personById.get(aId);
+      const b = personById.get(bId);
+      let rel = type;
+      if (type === 'biological' && a && b) {
+        if (a.fatherId === b.id || a.motherId === b.id) rel = 'biological';
+        else if (b.fatherId === a.id || b.motherId === a.id) rel = 'biological';
+      }
+      knowledge.knownRelationships.push({ type: rel, a: aId, b: bId });
+    }
+    saveKnowledge(knowledge);
+    renderGenealogy();
+    setActivePanel('genealogy');
+  }
+
   // ----- Map Rendering -----
   function projectLatLngToSvg(lat, lng, viewW, viewH) {
     // Tweak the bounding box to better match this specific SVG's coastline placement
@@ -2115,16 +2138,35 @@ async function runSimulation() {
       else if (d === 4) { rel = 'first cousin'; pct = '12.5%'; }
       else if (d === 5) { rel = 'first cousin once removed'; pct = '6.25%'; }
       else if (d === 6) { rel = 'second cousin'; pct = '3.125%'; }
-      rows.push(`${p.firstName} ${p.lastName} – ${pct} – likely ${rel}`);
+      const line = document.createElement('div');
+      line.style.display = 'flex';
+      line.style.justifyContent = 'space-between';
+      const txt = document.createElement('span');
+      txt.textContent = `${p.firstName} ${p.lastName} – ${pct} – likely ${rel}`;
+      line.appendChild(txt);
+      // First-degree = distance 1
+      if (d === 1) {
+        const actions = document.createElement('span');
+        actions.style.display = 'inline-flex';
+        actions.style.gap = '6px';
+        const addGen = document.createElement('button'); addGen.className = 'start secondary'; addGen.textContent = '🧬 Add';
+        addGen.title = 'Add genetic connection to Connections';
+        addGen.addEventListener('click', () => addConnection(personId, pid, 'genetic'));
+        const addFam = document.createElement('button'); addFam.className = 'start secondary'; addFam.textContent = '💍 Add';
+        addFam.title = 'Add familial connection to Connections';
+        addFam.addEventListener('click', () => addConnection(personId, pid, 'familial'));
+        actions.appendChild(addGen);
+        actions.appendChild(addFam);
+        line.appendChild(actions);
+      }
+      rows.push(line);
     }
-    rows.sort();
     const back = document.createElement('button'); back.className='start secondary'; back.textContent='Back';
     back.addEventListener('click', renderCODIS);
     codisListEl.innerHTML='';
     codisListEl.appendChild(back);
     const box = document.createElement('div'); box.className='detail'; box.style.marginTop='8px';
-    box.textContent = rows.join('\n');
-    box.style.whiteSpace = 'pre-wrap';
+    rows.forEach(node => box.appendChild(node));
     codisListEl.appendChild(box);
   }
   codisRefreshBtn?.addEventListener('click', renderCODIS);

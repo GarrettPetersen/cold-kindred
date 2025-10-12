@@ -1742,6 +1742,9 @@ async function runSimulation() {
         mapSvg.appendChild(imported);
 
         // City markers
+        if (locText && result.playerCityId) {
+          locText.textContent = `Location: ${getCityName(result.playerCityId)}`;
+        }
         for (const c of CITIES) {
           const [lat, lng] = getCityLatLng(c.id);
           const [mx, my] = projectLatLngToSvg(lat, lng, 1000, 600);
@@ -1765,7 +1768,45 @@ async function runSimulation() {
           g.appendChild(label);
 
           g.addEventListener('click', () => {
-            locText.textContent = `Location: ${c.name}`;
+            const originId = result.playerCityId || c.id;
+            const origin = getCityName(originId);
+            const dest = c.name;
+            if (originId === c.id) return; // already here
+            const ok = window.confirm(`Fly from ${origin} to ${dest}?`);
+            if (!ok) return;
+            // Animate plane
+            const [olat, olng] = getCityLatLng(originId);
+            const [ox, oy] = projectLatLngToSvg(olat, olng, 1000, 600);
+            const plane = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            plane.setAttribute('text-anchor', 'middle');
+            plane.setAttribute('class', 'map-emoji');
+            plane.textContent = '✈️';
+            mapSvg.appendChild(plane);
+            const [dxp, dyp] = [mx + dx, my + dy];
+            const start = performance.now();
+            const duration = 1200;
+            function tick(now) {
+              const t = Math.min(1, (now - start) / duration);
+              // ease
+              const e = t < 0.5 ? 2*t*t : -1 + (4 - 2*t)*t;
+              const x = ox + (dxp - ox) * e;
+              const y = oy + (dyp - oy) * e;
+              plane.setAttribute('x', String(x));
+              plane.setAttribute('y', String(y));
+              if (t < 1) requestAnimationFrame(tick);
+              else {
+                plane.remove();
+                // Arrive
+                result.playerCityId = c.id;
+                if (playerCityNameEl) playerCityNameEl.textContent = c.name;
+                if (locText) locText.textContent = `Location: ${c.name}`;
+                // Go to main panel
+                if (typeof setActivePanel === 'function') {
+                  setActivePanel('evidence');
+                }
+              }
+            }
+            requestAnimationFrame(tick);
           });
 
           mapSvg.appendChild(g);

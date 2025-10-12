@@ -11,29 +11,67 @@ app.innerHTML = `
     </section>
 
     <section id="sim" class="sim hidden" aria-live="polite">
-      <div class="controls">
-        <span id="status" class="status idle">Idle</span>
-        <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-          <div id="progressBar" class="progress-bar"></div>
-        </div>
-        <button id="runAgain" class="start secondary" disabled>Run Again</button>
-      </div>
-
-      <div class="tabbar">
-        <button class="tab-btn active" data-tab="map">Map</button>
-        <button class="tab-btn" data-tab="genealogy">Genealogy</button>
-        <button class="tab-btn" data-tab="people">People</button>
-        <button class="tab-btn" data-tab="records">Records</button>
-        <button class="tab-btn" data-tab="log">Log</button>
-      </div>
 
       <div class="panels">
-        <div id="tab-map" class="panel tab-panel">
-          <h2>Map</h2>
+        <div class="sidebar">
+          <div class="city-banner">City: <span id="playerCityName">Unknown</span></div>
+          <button class="menu-btn active" data-panel="evidence">Evidence locker</button>
+          <button class="menu-btn" data-panel="records">Public records office</button>
+          <button class="menu-btn" data-panel="graveyard">Graveyard</button>
+          <button class="menu-btn" data-panel="codis">CODIS</button>
+          <button class="menu-btn" data-panel="airport">Airport</button>
+        </div>
+        <div id="panel-evidence" class="panel tab-panel">
+          <h2>Evidence locker</h2>
+          <div class="title-sub">Victim's clothes</div>
+          <button id="evSendDNA" class="start secondary">Send for DNA testing</button>
+          <div id="evStatus" class="title-sub"></div>
+        </div>
+        <div id="panel-records" class="panel tab-panel hidden">
+          <h2>Public records</h2>
+          <div class="section field-row">
+            <label>Type
+              <select id="recType" class="input" style="width:160px">
+                <option value="birth">Births</option>
+                <option value="death">Deaths</option>
+                <option value="marriage">Marriages</option>
+              </select>
+            </label>
+            <label>Letter range
+              <select id="recRange" class="input" style="width:160px">
+                <option value="A-D">A–D</option>
+                <option value="E-H">E–H</option>
+                <option value="I-L">I–L</option>
+                <option value="M-P">M–P</option>
+                <option value="Q-T">Q–T</option>
+                <option value="U-Z">U–Z</option>
+              </select>
+            </label>
+            <button id="recSearch" class="start secondary">Search</button>
+          </div>
+          <div id="recResults" class="detail"></div>
+        </div>
+        <div id="panel-graveyard" class="panel tab-panel hidden">
+          <h2>Graveyard</h2>
+          <div class="section field-row">
+            <label>Plot # <input id="gyPlot" class="input" type="number" style="width:120px" /></label>
+            <button id="gyLookup" class="start secondary">Lookup</button>
+          </div>
+          <div id="gyResults" class="detail"></div>
+        </div>
+        <div id="panel-codis" class="panel tab-panel hidden">
+          <h2>CODIS</h2>
+          <div class="section">
+            <button id="codisRefresh" class="start secondary">Refresh</button>
+          </div>
+          <div id="codisList" class="detail"></div>
+        </div>
+        <div id="panel-airport" class="panel tab-panel hidden">
+          <h2>Airport</h2>
           <div id="locText" class="location-text">Location: Unknown</div>
           <svg id="mapSvg" class="map-svg" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMid meet"></svg>
         </div>
-        <div id="tab-genealogy" class="panel tab-panel hidden">
+        <div id="panel-genealogy" class="panel tab-panel hidden">
           <h2>Genealogy</h2>
           <div class="gene-controls">
             <input id="geneSearch" class="input" placeholder="Add by name or ID…" autocomplete="off" />
@@ -45,15 +83,7 @@ app.innerHTML = `
           </div>
           <svg id="geneSvg" class="gene-svg" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMid meet"></svg>
         </div>
-        <div id="tab-people" class="panel tab-panel hidden">
-          <h2>People</h2>
-          <p class="title-sub">Directory coming soon.</p>
-        </div>
-        <div id="tab-records" class="panel tab-panel hidden">
-          <h2>Records</h2>
-          <p class="title-sub">Records search coming soon.</p>
-        </div>
-        <div id="tab-log" class="panel tab-panel hidden">
+        <div id="panel-log" class="panel tab-panel hidden">
           <h2>Run Log</h2>
           <div id="log" class="log" aria-label="Simulation log"></div>
           <div style="margin-top:8px">
@@ -81,9 +111,9 @@ const heroEl = document.getElementById('hero');
 const simEl = document.getElementById('sim');
 const startBtn = document.getElementById('start');
 const runAgainBtn = document.getElementById('runAgain');
-const statusEl = document.getElementById('status');
-const progressEl = document.querySelector('.progress');
-const progressBarEl = document.getElementById('progressBar');
+const statusEl = { textContent: '' , classList: { remove(){}, add(){} } };
+const progressEl = { setAttribute(){} };
+const progressBarEl = { style: { width: '0%' } };
 const logEl = document.getElementById('log');
 const outputJsonEl = document.getElementById('outputJson');
 const toggleJsonBtn = document.getElementById('toggleJson');
@@ -97,6 +127,20 @@ const geneClearBtn = document.getElementById('geneClear');
 const geneSvg = document.getElementById('geneSvg');
 const mapSvg = document.getElementById('mapSvg');
 const locText = document.getElementById('locText');
+const playerCityNameEl = document.getElementById('playerCityName');
+const menuButtons = Array.from(document.querySelectorAll('.menu-btn'));
+const panelByName = (n) => document.getElementById(`panel-${n}`);
+const evSendDNA = document.getElementById('evSendDNA');
+const evStatus = document.getElementById('evStatus');
+const recTypeEl = document.getElementById('recType');
+const recRangeEl = document.getElementById('recRange');
+const recSearchBtn = document.getElementById('recSearch');
+const recResultsEl = document.getElementById('recResults');
+const gyPlotEl = document.getElementById('gyPlot');
+const gyLookupBtn = document.getElementById('gyLookup');
+const gyResultsEl = document.getElementById('gyResults');
+const codisRefreshBtn = document.getElementById('codisRefresh');
+const codisListEl = document.getElementById('codisList');
 // removed offset tool
 const overlaySim = document.getElementById('overlaySim');
 const overlayTitle = document.getElementById('overlayTitle');
@@ -167,7 +211,8 @@ async function runSimulation() {
     steps: [],
     people: [],
     marriages: [],
-    events: []
+    events: [],
+    graveyards: {} // { [cityId]: { nextPlotId:number, plots: { [plotId]: number[] } } }
   };
 
   setStatus('Running…', 'running');
@@ -221,6 +266,7 @@ async function runSimulation() {
       hairColor: fields.hairColor || null, // 'black'|'brown'|'blonde'|'red'|'gray'|'bald'
       knowledgeRadius: fields.knowledgeRadius || null,
       knowsAffairs: fields.knowsAffairs ?? null,
+      disposition: fields.disposition || null, // 'buried' | 'cremated'
       retired: false,
       alive: true
     };
@@ -682,6 +728,74 @@ async function runSimulation() {
     if (age < 65) return Math.random() < 0.55 ? 'cancer' : (Math.random() < 0.5 ? 'heart disease' : 'stroke');
     if (age < 85) return Math.random() < 0.6 ? 'heart disease' : (Math.random() < 0.5 ? 'cancer' : 'stroke');
     return Math.random() < 0.6 ? 'natural causes' : 'heart failure';
+  }
+  function burialDispositionFor(year) {
+    // Rough cremation rates: ~5% (1960s), ~25% (1990s), ~50% (2010s+). Interpolate.
+    if (year < 1970) return Math.random() < 0.05 ? 'cremated' : 'buried';
+    if (year < 1990) return Math.random() < 0.12 ? 'cremated' : 'buried';
+    if (year < 2005) return Math.random() < 0.25 ? 'cremated' : 'buried';
+    if (year < 2015) return Math.random() < 0.4 ? 'cremated' : 'buried';
+    return Math.random() < 0.55 ? 'cremated' : 'buried';
+  }
+
+  // Graveyard helpers
+  function getGraveyard(cityId) {
+    const gy = result.graveyards[cityId];
+    if (gy) return gy;
+    const created = { nextPlotId: 1, plots: {} };
+    result.graveyards[cityId] = created;
+    return created;
+  }
+  function buriedPlotOf(personId) {
+    // Scan all graveyards to find the plot (rarely needed for small scale); optimize later with an index if required
+    const p = personByIdPre.get(personId);
+    if (!p || !p.disposition || p.disposition !== 'buried') return null;
+    const cityId = p.cityId;
+    const gy = result.graveyards[cityId];
+    if (!gy) return null;
+    const plots = gy.plots;
+    for (const pid in plots) {
+      if (plots[pid].includes(personId)) return Number(pid);
+    }
+    return null;
+  }
+  function assignBurialPlot(person) {
+    const cityId = person.cityId;
+    const gy = getGraveyard(cityId);
+    // Prefer existing plot of spouse or direct family (parents/children) in same city
+    const relatives = new Set();
+    if (person.spouseId) relatives.add(person.spouseId);
+    if (person.fatherId) relatives.add(person.fatherId);
+    if (person.motherId) relatives.add(person.motherId);
+    // children
+    for (const c of result.people) {
+      if (c.fatherId === person.id || c.motherId === person.id) relatives.add(c.id);
+    }
+    // choose first relative with buried plot in same city
+    for (const rid of relatives) {
+      const r = personByIdPre.get(rid);
+      if (!r || !r.cityId || r.cityId !== cityId) continue;
+      if (r.disposition === 'buried') {
+        const plot = buriedPlotOf(r.id);
+        if (plot != null) {
+          gy.plots[plot] = gy.plots[plot] || [];
+          gy.plots[plot].push(person.id);
+          return plot;
+        }
+      }
+    }
+    // Otherwise place in first empty plot or create new
+    let chosen = null;
+    for (let pid = 1; pid < gy.nextPlotId; pid++) {
+      const occ = gy.plots[pid] || [];
+      if (occ.length === 0) { chosen = pid; break; }
+    }
+    if (chosen == null) {
+      chosen = gy.nextPlotId++;
+    }
+    gy.plots[chosen] = gy.plots[chosen] || [];
+    gy.plots[chosen].push(person.id);
+    return chosen;
   }
 
   // ---------- Step 1: Founders (G0) with unique last names, first names, birthdates ----------
@@ -1343,7 +1457,12 @@ async function runSimulation() {
       if (hazard > 0 && random() < hazard) {
         p.alive = false;
         const cause = deathCauseFor(age, y, p.sex);
-        const evt = addEvent({ year: y, type: 'DEATH', people: [p.id], details: { cityId: p.cityId, age, cause } });
+        p.disposition = burialDispositionFor(y);
+        let plotId = null;
+        if (p.disposition === 'buried') {
+          plotId = assignBurialPlot(p);
+        }
+        const evt = addEvent({ year: y, type: 'DEATH', people: [p.id], details: { cityId: p.cityId, age, cause, disposition: p.disposition, plotId } });
         indexEventByYear(evt);
         if (Math.random() < 0.02) pushFlash(`${p.firstName} ${p.lastName} died in ${getCityName(p.cityId)} (${cause}).`);
       }
@@ -1447,6 +1566,11 @@ async function runSimulation() {
     return name;
   }
   const moniker = killerMoniker(murderEvt?.details?.cityId, seed);
+  if (murderEvt) {
+    result.killerMoniker = moniker;
+    result.murderVictimId = murderEvt.people[1];
+    result.playerCityId = murderEvt.details?.cityId || null;
+  }
   overlaySim.classList.remove('visible');
   titleHeadlineEl.textContent = 'Case Brief';
   titleSubEl.textContent = `In ${murderEvt?.year || 'an unknown year'}, a dead body was found in ${murderCityName}. The police never had any strong leads, and the trail went cold. Can you solve the case of the ${moniker}?`;
@@ -1750,6 +1874,89 @@ async function runSimulation() {
   }
   tabButtons.forEach(btn => btn.addEventListener('click', () => setActiveTab(btn.dataset.tab)));
   setActiveTab('map');
+
+  // Sidebar menu navigation
+  function setActivePanel(name) {
+    menuButtons.forEach(b => b.classList.toggle('active', b.dataset.panel === name));
+    const names = ['evidence','records','graveyard','codis','airport','genealogy','log'];
+    names.forEach(n => panelByName(n)?.classList.toggle('hidden', n !== name));
+  }
+  menuButtons.forEach(btn => btn.addEventListener('click', () => setActivePanel(btn.dataset.panel)));
+  // Initialize player city to murder city if available
+  if (result.playerCityId && playerCityNameEl) {
+    playerCityNameEl.textContent = getCityName(result.playerCityId);
+  }
+  setActivePanel('evidence');
+
+  // Evidence locker: send victim clothes for DNA testing
+  evSendDNA?.addEventListener('click', () => {
+    const victimId = result.murderVictimId;
+    const killerId = result.killerId;
+    let added = 0;
+    if (killerId) { result.codis.profiles.push({ personId: killerId, year: (murderEvt?.year || 2000), moniker: result.killerMoniker || null }); added++; }
+    if (victimId) { result.codis.profiles.push({ personId: victimId, year: (murderEvt?.year || 2000) }); added++; }
+    evStatus.textContent = added ? `Submitted evidence. Added ${added} profile(s) to CODIS.` : 'No evidence available.';
+    setActivePanel('codis');
+    renderCODIS();
+  });
+
+  // Records search
+  function inRange(lastName, range) {
+    if (!lastName) return false;
+    const c = lastName[0].toUpperCase();
+    const [a,b] = range.split('-');
+    const start = a.trim()[0]; const end = b.trim()[0];
+    return c >= start && c <= end;
+  }
+  function renderRecords() {
+    const type = recTypeEl.value;
+    const range = recRangeEl.value;
+    const lines = [];
+    if (type === 'birth') {
+      for (const p of result.people) {
+        if (inRange(p.lastName, range)) lines.push(`${p.lastName}, ${p.firstName} – b. ${year(p.birthDate)} – ${getCityName(p.cityId)}`);
+      }
+    } else if (type === 'death') {
+      for (const e of result.events) {
+        if (e.type !== 'DEATH') continue;
+        const pid = e.people[0]; const p = personByIdPre.get(pid);
+        if (!p) continue;
+        if (inRange(p.lastName, range)) lines.push(`${p.lastName}, ${p.firstName} – d. ${e.year} – ${getCityName(e.details?.cityId)} (${e.details?.cause || 'cause unknown'})`);
+      }
+    } else if (type === 'marriage') {
+      for (const m of result.marriages) {
+        const h = personByIdPre.get(m.husbandId); const w = personByIdPre.get(m.wifeId);
+        const sortKey = (h?.lastName || '');
+        if (inRange(sortKey, range)) lines.push(`${h?.lastName || ''}, ${h?.firstName || ''} & ${w?.firstName || ''} ${w?.lastName || ''} – ${m.year}`);
+      }
+    }
+    lines.sort((a,b) => a.localeCompare(b));
+    recResultsEl.textContent = lines.join('\n');
+  }
+  recSearchBtn?.addEventListener('click', renderRecords);
+
+  // Graveyard lookup
+  gyLookupBtn?.addEventListener('click', () => {
+    const cityId = result.playerCityId || result.murderVictimId?.cityId;
+    const plot = Number(gyPlotEl.value || 0);
+    const gy = result.graveyards[cityId];
+    if (!gy || !plot || !gy.plots[plot]) { gyResultsEl.textContent = 'No records for that plot.'; return; }
+    const names = gy.plots[plot].map(id => {
+      const p = personByIdPre.get(id); return p ? `${p.firstName} ${p.lastName}` : `Person #${id}`;
+    });
+    gyResultsEl.textContent = `Plot ${plot}:\n` + names.join('\n');
+  });
+
+  // CODIS rendering
+  function renderCODIS() {
+    const lines = result.codis.profiles.map((pr, idx) => {
+      const p = personByIdPre.get(pr.personId);
+      const label = p ? `${p.firstName} ${p.lastName}` : (pr.moniker ? pr.moniker : `Profile #${idx+1}`);
+      return `${label} – added ${pr.year || ''}`;
+    });
+    codisListEl.textContent = lines.join('\n');
+  }
+  codisRefreshBtn?.addEventListener('click', renderCODIS);
 
   // Person inspector: build indexes and bind search
   function renderPersonResults(query) {

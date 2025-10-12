@@ -1537,8 +1537,7 @@ async function runSimulation() {
   outputJsonEl.textContent = JSON.stringify(result, null, 2);
 
   setStatus('Done', 'done');
-  startBtn.disabled = false;
-  runAgainBtn.disabled = false;
+  // no-op: startBtn/runAgainBtn removed from UX
 
   // Build killer moniker and show title card
   const murderEvt = result.events.find(e => e.type === 'MURDER');

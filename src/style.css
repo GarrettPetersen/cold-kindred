@@ -125,6 +125,10 @@ button.secondary {
     flex-direction: column;
     gap: 6px;
 }
+.sidebar .city-search { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.sidebar .typeahead { max-height: 180px; overflow: auto; border: 1px solid #e5e5e5; border-radius: 8px; background: #fff; }
+.sidebar .typeahead .item { padding: 6px 8px; cursor: pointer; }
+.sidebar .typeahead .item:hover { background: #f5f5f5; }
 .sidebar .menu-btn {
     -webkit-appearance: none; appearance: none;
     background: #fff; border: 1px solid #e5e5e5; border-radius: 8px; padding: 10px 12px; cursor: pointer; text-align: left;

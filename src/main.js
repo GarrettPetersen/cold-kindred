@@ -15,6 +15,10 @@ app.innerHTML = `
       <div class="panels">
         <div class="sidebar">
           <div class="city-banner">City: <span id="playerCityName">Unknown</span></div>
+          <div class="city-search">
+            <input id="residentSearch" class="input" placeholder="Search residents… (last name)" autocomplete="off" />
+            <div id="residentList" class="typeahead"></div>
+          </div>
           <button class="menu-btn active" data-panel="evidence">Evidence locker</button>
           <button class="menu-btn" data-panel="records">Public records office</button>
           <button class="menu-btn" data-panel="graveyard">Graveyard</button>
@@ -65,6 +69,15 @@ app.innerHTML = `
             <button id="codisRefresh" class="start secondary">Refresh</button>
           </div>
           <div id="codisList" class="detail"></div>
+        </div>
+        <div id="panel-interview" class="panel tab-panel hidden">
+          <h2>Interview</h2>
+          <div id="intHeader" class="title-sub"></div>
+          <div id="intTranscript" class="detail" style="height:200px; overflow:auto"></div>
+          <div class="section">
+            <button id="intHello" class="start secondary">Say "hello"</button>
+            <button id="intBack" class="start secondary">Back</button>
+          </div>
         </div>
         <div id="panel-airport" class="panel tab-panel hidden">
           <h2>Airport</h2>
@@ -213,7 +226,8 @@ async function runSimulation() {
     marriages: [],
     events: [],
     graveyards: {}, // { [cityId]: { nextPlotId:number, plots: { [plotId]: number[] } } }
-    evidence: {} // { [cityId]: Array<{ id:string, name:string, type:string, actions?:string[] }> }
+    evidence: {}, // { [cityId]: Array<{ id:string, name:string, type:string, actions?:string[] }> }
+    conversations: {} // { [personId]: Array<{ from:'you'|'npc', text:string, ts:number }> }
   };
 
   setStatus('Running…', 'running');
@@ -1926,7 +1940,7 @@ async function runSimulation() {
   // Sidebar menu navigation
   function setActivePanel(name) {
     menuButtons.forEach(b => b.classList.toggle('active', b.dataset.panel === name));
-    const names = ['evidence','records','graveyard','codis','airport','genealogy','log'];
+    const names = ['evidence','records','graveyard','codis','airport','genealogy','log','interview'];
     names.forEach(n => panelByName(n)?.classList.toggle('hidden', n !== name));
     if (name === 'evidence') renderEvidence();
     if (name === 'codis') renderCODIS();
@@ -2085,6 +2099,78 @@ async function runSimulation() {
     codisListEl.appendChild(box);
   }
   codisRefreshBtn?.addEventListener('click', renderCODIS);
+
+  // -------- Residents typeahead & Interviews --------
+  const residentSearchEl = document.getElementById('residentSearch');
+  const residentListEl = document.getElementById('residentList');
+  const intHeader = document.getElementById('intHeader');
+  const intTranscript = document.getElementById('intTranscript');
+  const intHello = document.getElementById('intHello');
+  const intBack = document.getElementById('intBack');
+  let interviewingPersonId = null;
+
+  function renderResidentMatches(query) {
+    if (!residentListEl) return;
+    const cityId = result.playerCityId;
+    const q = (query || '').trim().toUpperCase();
+    const residents = result.people.filter(p => p.cityId === cityId && p.lastName);
+    const filtered = q ? residents.filter(p => p.lastName.toUpperCase().startsWith(q)) : [];
+    filtered.sort((a,b) => a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName));
+    residentListEl.innerHTML = '';
+    const top = filtered.slice(0, 30);
+    top.forEach(p => {
+      const div = document.createElement('div');
+      div.className = 'item';
+      div.textContent = `${p.lastName}, ${p.firstName}`;
+      div.addEventListener('click', () => openInterview(p.id));
+      residentListEl.appendChild(div);
+    });
+  }
+
+  function openInterview(personId) {
+    interviewingPersonId = personId;
+    const p = personByIdPre.get(personId);
+    if (!p) return;
+    const emoji = personEmojiFor(p);
+    const greetings = [
+      'Hi there.',
+      'Good day.',
+      'Hello.',
+      'Hey.'
+    ];
+    const greet = greetings[Math.floor(Math.random()*greetings.length)];
+    if (!result.conversations[personId]) result.conversations[personId] = [];
+    intHeader.textContent = `${emoji} ${p.firstName} ${p.lastName}`;
+    renderTranscript(personId);
+    if (result.conversations[personId].length === 0) {
+      // start with a greeting from NPC
+      result.conversations[personId].push({ from: 'npc', text: greet, ts: Date.now() });
+      renderTranscript(personId);
+    }
+    setActivePanel('interview');
+  }
+
+  function renderTranscript(personId) {
+    const conv = result.conversations[personId] || [];
+    intTranscript.innerHTML = '';
+    conv.forEach(line => {
+      const div = document.createElement('div');
+      div.textContent = (line.from === 'you' ? 'You: ' : 'Them: ') + line.text;
+      intTranscript.appendChild(div);
+    });
+    intTranscript.scrollTop = intTranscript.scrollHeight;
+  }
+
+  residentSearchEl?.addEventListener('input', (e) => renderResidentMatches(e.target.value));
+  intHello?.addEventListener('click', () => {
+    if (!interviewingPersonId) return;
+    result.conversations[interviewingPersonId].push({ from: 'you', text: 'hello', ts: Date.now() });
+    result.conversations[interviewingPersonId].push({ from: 'npc', text: 'Hello.', ts: Date.now() });
+    renderTranscript(interviewingPersonId);
+  });
+  intBack?.addEventListener('click', () => {
+    setActivePanel('evidence');
+  });
 
   // Person inspector: build indexes and bind search
   function renderPersonResults(query) {

@@ -129,6 +129,10 @@ button.secondary {
 .sidebar .typeahead { max-height: 180px; overflow: auto; border: 1px solid #e5e5e5; border-radius: 8px; background: #fff; }
 .sidebar .typeahead .item { padding: 6px 8px; cursor: pointer; }
 .sidebar .typeahead .item:hover { background: #f5f5f5; }
+.codis-list .row { padding: 6px 8px; border: 1px solid #e5e5e5; border-radius: 8px; background:#fff; margin: 6px 0; cursor: pointer; }
+.codis-list .row:hover { background:#f5f5f5; }
+.codis-dropdown { margin-top: 6px; }
+.codis-status { color:#555; font-style: italic; margin-top: 6px; }
 .sidebar .menu-btn {
     -webkit-appearance: none; appearance: none;
     background: #fff; border: 1px solid #e5e5e5; border-radius: 8px; padding: 10px 12px; cursor: pointer; text-align: left;

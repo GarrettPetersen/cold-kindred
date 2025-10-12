@@ -1978,8 +1978,13 @@ async function runSimulation() {
             let added = 0;
             if (killerId) { result.codis.profiles.push({ personId: killerId, year: (murderEvt?.year || 2000), moniker: result.killerMoniker || null }); added++; }
             if (victimId) { result.codis.profiles.push({ personId: victimId, year: (murderEvt?.year || 2000) }); added++; }
-            evStatus.textContent = added ? `Submitted evidence. Added ${added} profile(s) to CODIS.` : 'No evidence available.';
-            setActivePanel('codis');
+            if (added) {
+              a.textContent = 'Victim and Killer DNA profiles added to CODIS.';
+              a.disabled = true;
+              evStatus.textContent = '';
+            } else {
+              evStatus.textContent = 'No evidence available.';
+            }
           });
           actions.appendChild(a);
         }
@@ -2043,10 +2048,33 @@ async function runSimulation() {
       const p = personByIdPre.get(pr.personId);
       const label = p ? `${p.firstName} ${p.lastName}` : (pr.moniker ? pr.moniker : `Profile #${idx+1}`);
       const row = document.createElement('div');
+      row.className = 'row';
       row.textContent = `${label} – added ${pr.year || ''}`;
       if (!p && pr.moniker) row.classList.add('killer');
-      row.addEventListener('click', () => renderCODISMatches(pr.personId));
+      row.addEventListener('click', () => showCodisDropdown(row, pr.personId));
       codisListEl.appendChild(row);
+    });
+  }
+
+  function showCodisDropdown(container, personId) {
+    // Clear any existing dropdowns
+    Array.from(codisListEl.querySelectorAll('.codis-dropdown')).forEach(el => el.remove());
+    const dd = document.createElement('div');
+    dd.className = 'codis-dropdown';
+    const btn = document.createElement('button');
+    btn.className = 'start secondary';
+    btn.textContent = 'Find relatives';
+    const status = document.createElement('div');
+    status.className = 'codis-status';
+    dd.appendChild(btn);
+    dd.appendChild(status);
+    container.appendChild(dd);
+    btn.addEventListener('click', () => {
+      status.textContent = 'Searching for matches…';
+      btn.disabled = true;
+      setTimeout(() => {
+        renderCODISMatches(personId);
+      }, 2000);
     });
   }
 
@@ -2096,6 +2124,7 @@ async function runSimulation() {
     codisListEl.appendChild(back);
     const box = document.createElement('div'); box.className='detail'; box.style.marginTop='8px';
     box.textContent = rows.join('\n');
+    box.style.whiteSpace = 'pre-wrap';
     codisListEl.appendChild(box);
   }
   codisRefreshBtn?.addEventListener('click', renderCODIS);
@@ -2279,10 +2308,12 @@ async function runSimulation() {
     }
   }
 
-  personSearchEl.addEventListener('input', (e) => {
-    renderPersonResults(e.target.value || '');
-  });
-  renderPersonResults('');
+  if (personSearchEl) {
+    personSearchEl.addEventListener('input', (e) => {
+      renderPersonResults(e.target.value || '');
+    });
+    renderPersonResults('');
+  }
 }
 
 function startGame() {

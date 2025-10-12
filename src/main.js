@@ -1580,7 +1580,11 @@ async function runSimulation() {
   titleHeadlineEl.textContent = 'Case Brief';
   titleSubEl.textContent = `In ${murderEvt?.year || 'an unknown year'}, a dead body was found in ${murderCityName}. The police never had any strong leads, and the trail went cold. Can you solve the case of the ${moniker}?`;
   overlayTitle.classList.add('visible');
-  titleContinueBtn.onclick = () => { overlayTitle.classList.remove('visible'); };
+  titleContinueBtn.onclick = () => {
+    overlayTitle.classList.remove('visible');
+    if (typeof setActivePanel === 'function') setActivePanel('evidence');
+    if (playerCityNameEl && result.playerCityId) playerCityNameEl.textContent = getCityName(result.playerCityId);
+  };
 
   // Build quick lookup before any genealogy rendering
   const personById = new Map(result.people.map(p => [p.id, p]));

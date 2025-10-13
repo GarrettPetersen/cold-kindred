@@ -17,17 +17,26 @@ app.innerHTML = `
       <div class="panels">
         <div class="sidebar">
           <div class="city-banner">City: <span id="playerCityName">Unknown</span></div>
-          <div class="city-search">
-            <input id="residentSearch" class="input" placeholder="Search residents… (last name)" autocomplete="off" />
-            <div id="residentList" class="typeahead"></div>
-          </div>
-          <button class="menu-btn active" data-panel="evidence">Evidence locker</button>
+          <button class="menu-btn active" data-panel="home">Homepage</button>
+          <button class="menu-btn" data-panel="evidence">Evidence locker</button>
           <button class="menu-btn" data-panel="records">Public records office</button>
           <button class="menu-btn" data-panel="graveyard">Graveyard</button>
           <button class="menu-btn" data-panel="codis">CODIS</button>
           <button class="menu-btn" data-panel="airport">Airport</button>
           <button class="menu-btn" data-panel="genealogy">Connections</button>
           <button class="menu-btn" data-panel="news">Newspaper archive</button>
+        </div>
+        <div id="panel-home" class="panel tab-panel">
+          <h2>City Homepage</h2>
+          <div class="city-search">
+            <input id="residentSearch" class="input" placeholder="Search residents… (last name)" autocomplete="off" />
+            <div id="residentList" class="typeahead"></div>
+          </div>
+          <div class="section">
+            <div id="skylineBox" style="border:1px solid #000; background:#fff; padding:8px; height:260px; display:flex; align-items:center; justify-content:center;">
+              <img id="skylineImg" alt="City skyline" style="max-width:100%; max-height:100%; object-fit:contain" />
+            </div>
+          </div>
         </div>
         <div id="panel-evidence" class="panel tab-panel">
           <h2>Evidence locker</h2>
@@ -149,6 +158,7 @@ const geneClearBtn = document.getElementById('geneClear');
 const geneSvg = document.getElementById('geneSvg');
 const mapSvg = document.getElementById('mapSvg');
 const locText = document.getElementById('locText');
+const skylineImg = document.getElementById('skylineImg');
 const playerCityNameEl = document.getElementById('playerCityName');
 const menuButtons = Array.from(document.querySelectorAll('.menu-btn'));
 const panelByName = (n) => document.getElementById(`panel-${n}`);
@@ -1848,6 +1858,16 @@ async function runSimulation() {
   }
 
   // ----- Map Rendering -----
+  function renderHomepage() {
+    const cityId = result.playerCityId;
+    if (playerCityNameEl) playerCityNameEl.textContent = getCityName(cityId);
+    if (!skylineImg) return;
+    const name = getCityName(cityId) || '';
+    const city = name.split(',')[0].trim().toLowerCase().replace(/\s+/g,'-');
+    const src = `assets/skyline-${city}.svg`;
+    skylineImg.src = src;
+    skylineImg.onerror = () => { skylineImg.removeAttribute('src'); };
+  }
   function projectLatLngToSvg(lat, lng, viewW, viewH) {
     // Tweak the bounding box to better match this specific SVG's coastline placement
     const minLat = 24, maxLat = 50;   // slightly expanded
@@ -2049,8 +2069,9 @@ async function runSimulation() {
   // Sidebar menu navigation
   function setActivePanel(name) {
     menuButtons.forEach(b => b.classList.toggle('active', b.dataset.panel === name));
-    const names = ['evidence','records','graveyard','codis','airport','genealogy','log','interview','news'];
+    const names = ['home','evidence','records','graveyard','codis','airport','genealogy','log','interview','news'];
     names.forEach(n => panelByName(n)?.classList.toggle('hidden', n !== name));
+    if (name === 'home') renderHomepage();
     if (name === 'evidence') renderEvidence();
     if (name === 'codis') renderCODIS();
   }
@@ -2064,7 +2085,7 @@ async function runSimulation() {
   if (result.playerCityId && playerCityNameEl) {
     playerCityNameEl.textContent = getCityName(result.playerCityId);
   }
-  setActivePanel('evidence');
+  setActivePanel('home');
 
   // Evidence locker rendering & actions
   function renderEvidence() {

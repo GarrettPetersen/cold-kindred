@@ -999,7 +999,11 @@ async function runSimulation() {
         let bioFatherId = father.id;
         const fromAffair = isMarriedPair ? (random() < 0.08) : (random() < 0.12);
         if (fromAffair) {
-          const maleAdultsSameCity = result.people.filter(p => p.sex === 'M' && p.id !== father.id && (year(birthDate) - year(p.birthDate)) >= 18 && p.cityId === (mother.cityId || father.cityId));
+          const city = mother.cityId || father.cityId;
+          const ids = (adultsByCity.get(city) || { M:[], F:[] }).M;
+          const maleAdultsSameCity = ids
+            .map(id => personByIdSim.get(id))
+            .filter(p => p && p.id !== father.id && (by - p.birthYear) >= 18);
           if (maleAdultsSameCity.length) bioFatherId = maleAdultsSameCity[Math.floor(random() * maleAdultsSameCity.length)].id;
         }
         const child = createPerson({
@@ -1316,6 +1320,13 @@ async function runSimulation() {
     
     // Adults for stochastic events
     const adults = result.people.filter(p => p.alive && (y - p.birthYear) >= 18);
+    // Index adults by city and sex for fast candidate lookups
+    const adultsByCity = new Map(); // cityId -> { M:number[], F:number[] }
+    for (const a of adults) {
+      const entry = adultsByCity.get(a.cityId) || { M: [], F: [] };
+      (a.sex === 'M' ? entry.M : entry.F).push(a.id);
+      adultsByCity.set(a.cityId, entry);
+    }
 
     // One-time: extremely high marriage rate in 1900 to model pre-1900 marriages
     if (y === 1900) {
@@ -1379,12 +1390,14 @@ async function runSimulation() {
         for (let tries = 0; tries < 5 && toId === fromId; tries++) toId = pickWeightedCityId();
         const unit = [p];
         if (p.spouseId) {
-          const spouse = result.people.find(q => q.id === p.spouseId && q.alive && (y - q.birthYear) >= 18);
-          if (spouse && spouse.cityId === fromId) unit.push(spouse);
+          const spouse = personByIdSim.get(p.spouseId);
+          if (spouse && spouse.alive && (y - spouse.birthYear) >= 18 && spouse.cityId === fromId)
+            unit.push(spouse);
         }
         if (p.partnerId) {
-          const partner = result.people.find(q => q.id === p.partnerId && q.alive && (y - q.birthYear) >= 18);
-          if (partner && partner.cityId === fromId) unit.push(partner);
+          const partner = personByIdSim.get(p.partnerId);
+          if (partner && partner.alive && (y - partner.birthYear) >= 18 && partner.cityId === fromId)
+            unit.push(partner);
         }
         const kids = (childrenByParent.get(p.id) || []).map(cid => personByIdSim.get(cid)).filter(Boolean);
         for (const c of kids) {
@@ -1416,7 +1429,7 @@ async function runSimulation() {
   const visited = new Set();
   for (const p of marriedAdults) {
     if (visited.has(p.id)) continue;
-    const spouse = result.people.find(q => q.id === p.spouseId);
+    const spouse = personByIdSim.get(p.spouseId);
     if (!spouse) continue;
     visited.add(p.id);
     visited.add(spouse.id);
@@ -1447,12 +1460,15 @@ async function runSimulation() {
   }
 
     // Affairs (informational)
-    const marriedPool = result.people.filter(p => p.alive && p.spouseId);
+    const marriedPool = adults.filter(p => p.spouseId);
     for (const p of marriedPool) {
       if (random() < PROB.affair) {
         // majority heterosexual: pick candidates of opposite sex most of the time
         const preferOpposite = random() < 0.95; // 95% heterosexual
-        const candidates = adults.filter(a => a.id !== p.id && a.id !== p.spouseId && (!preferOpposite || a.sex !== p.sex) && !isCloseKin(p, a));
+        const poolIds = (adultsByCity.get(p.cityId) || { M:[], F:[] })[preferOpposite ? (p.sex === 'M' ? 'F' : 'M') : (p.sex === 'M' ? 'M' : 'F')];
+        const candidates = poolIds
+          .map(id => personByIdSim.get(id))
+          .filter(a => a && a.id !== p.id && a.id !== p.spouseId && !isCloseKin(p, a));
         if (candidates.length) {
           const other = candidates[Math.floor(random() * candidates.length)];
           const evt = addEvent({ year: y, type: 'AFFAIR', people: [p.id, other.id], details: { cityId: p.cityId } });

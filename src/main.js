@@ -280,6 +280,7 @@ async function runSimulation() {
       maidenName: fields.maidenName || null,
       sex: fields.sex, // 'M' | 'F'
       birthDate: fields.birthDate,
+      birthYear: year(fields.birthDate),
       generation: fields.generation,
       fatherId: fields.fatherId || null,
       motherId: fields.motherId || null,
@@ -321,6 +322,7 @@ async function runSimulation() {
       }
     }
     result.people.push(person);
+    personByIdSim.set(person.id, person);
     return person;
   }
 
@@ -364,6 +366,9 @@ async function runSimulation() {
 
   // Events registry and helpers
   const eventsByPerson = new Map();
+  // Parent -> children index and id -> person map during sim
+  const childrenByParent = new Map(); // parentId -> number[] of childIds
+  const personByIdSim = new Map(); // id -> person (available during simulation)
   function addEvent(evt) {
     // evt: { year, type, people:[ids], details?:{} }
     evt.id = result.events.length + 1;
@@ -1310,7 +1315,7 @@ async function runSimulation() {
     }
     
     // Adults for stochastic events
-    const adults = result.people.filter(p => p.alive && (y - year(p.birthDate)) >= 18);
+    const adults = result.people.filter(p => p.alive && (y - p.birthYear) >= 18);
 
     // One-time: extremely high marriage rate in 1900 to model pre-1900 marriages
     if (y === 1900) {
@@ -1354,7 +1359,7 @@ async function runSimulation() {
     // Retirements (before processing jobs): only for non-retired adults
     for (const p of adults) {
       if (!p.retired) {
-        const age = y - year(p.birthDate);
+        const age = y - p.birthYear;
         const pr = retirementProb(age);
         if (pr > 0 && random() < pr) {
           p.retired = true;
@@ -1374,19 +1379,18 @@ async function runSimulation() {
         for (let tries = 0; tries < 5 && toId === fromId; tries++) toId = pickWeightedCityId();
         const unit = [p];
         if (p.spouseId) {
-          const spouse = result.people.find(q => q.id === p.spouseId && q.alive && (y - year(q.birthDate)) >= 18);
+          const spouse = result.people.find(q => q.id === p.spouseId && q.alive && (y - q.birthYear) >= 18);
           if (spouse && spouse.cityId === fromId) unit.push(spouse);
         }
         if (p.partnerId) {
-          const partner = result.people.find(q => q.id === p.partnerId && q.alive && (y - year(q.birthDate)) >= 18);
+          const partner = result.people.find(q => q.id === p.partnerId && q.alive && (y - q.birthYear) >= 18);
           if (partner && partner.cityId === fromId) unit.push(partner);
         }
-        for (const c of result.people) {
+        const kids = (childrenByParent.get(p.id) || []).map(cid => personByIdSim.get(cid)).filter(Boolean);
+        for (const c of kids) {
           if (!c.alive) continue;
-          const age = y - year(c.birthDate);
-          if (age < 18 && c.cityId === fromId && (c.fatherId === p.id || c.motherId === p.id)) {
-            unit.push(c);
-          }
+          const age = y - c.birthYear;
+          if (age < 18 && c.cityId === fromId) unit.push(c);
         }
         for (const mbr of unit) {
           mbr.cityId = toId;
@@ -1463,7 +1467,7 @@ async function runSimulation() {
       if (adultPool.length >= 2) {
         // Choose killer: prefer preselected, but ensure adult & alive at this year
         let killer = personByIdPre.get(killerIdFixed) || adultPool[Math.floor(random() * adultPool.length)];
-        if ((y - year(killer.birthDate)) < 18 || !killer.alive) {
+        if ((y - killer.birthYear) < 18 || !killer.alive) {
           killer = adultPool[Math.floor(random() * adultPool.length)];
           killerIdFixed = killer.id; // update stored killer if we had to swap
         }
@@ -1513,7 +1517,7 @@ async function runSimulation() {
     // Mortality: check all alive persons (adults and minors)
     for (const p of result.people) {
       if (!p.alive) continue;
-      const age = y - year(p.birthDate);
+      const age = y - p.birthYear;
       if (age < 0) continue;
       let hazard = mortalityHazard(age);
       // Increase hazard for combat-age men during war periods
@@ -2837,4 +2841,11 @@ startBtn.addEventListener('click', startGame);
 if (toggleJsonBtn) toggleJsonBtn.addEventListener('click', () => {
   outputJsonEl.classList.toggle('hidden');
 });
+
+function addChildToIndex(parentId, childId) {
+  if (!parentId) return;
+  const arr = childrenByParent.get(parentId) || [];
+  arr.push(childId);
+  childrenByParent.set(parentId, arr);
+}
 

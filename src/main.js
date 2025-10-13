@@ -2315,6 +2315,25 @@ async function runSimulation() {
       return (f && (f.fatherId === a.id || f.motherId === a.id)) || (m && (m.fatherId === a.id || m.motherId === a.id));
     }
     function isGrandchildOf(a, b) { return isGrandparentOf(b, a); }
+    function isFullSibling(a, b) {
+      const sharedFather = a.fatherId && b.fatherId && a.fatherId === b.fatherId;
+      const sharedMother = a.motherId && b.motherId && a.motherId === b.motherId;
+      return !!(sharedFather && sharedMother);
+    }
+    function isHalfSibling(a, b) {
+      const sharedFather = a.fatherId && b.fatherId && a.fatherId === b.fatherId;
+      const sharedMother = a.motherId && b.motherId && a.motherId === b.motherId;
+      return (sharedFather && !sharedMother) || (!sharedFather && sharedMother);
+    }
+    function isAvuncular(a, b) { // a is aunt/uncle of b or vice-versa
+      const bf = personByIdPre.get(b.fatherId || -1);
+      const bm = personByIdPre.get(b.motherId || -1);
+      return (bf && shareParent(a, bf)) || (bm && shareParent(a, bm)) || (function(){
+        const af = personByIdPre.get(a.fatherId || -1);
+        const am = personByIdPre.get(a.motherId || -1);
+        return (af && shareParent(b, af)) || (am && shareParent(b, am));
+      })();
+    }
     function shareGrandparent(a, b) {
       const aGP = new Set();
       const af = personByIdPre.get(a.fatherId || -1); const am = personByIdPre.get(a.motherId || -1);
@@ -2336,14 +2355,21 @@ async function runSimulation() {
       const p = personByIdPre.get(pid);
       if (!p) continue;
       if (!codisIds.has(pid)) continue;
+      // Only show up to third cousins (distance <= 8)
+      if ((dist.get(pid) || 99) > 8) continue;
       let rel = 'distant relative'; let pct = '~0.8%';
       let firstDegree = false;
-      if (isParentOf(p, base)) { rel = 'parent'; pct = '50%'; firstDegree = true; }
-      else if (isChildOf(p, base)) { rel = 'child'; pct = '50%'; firstDegree = true; }
-      else if (shareParent(base, p)) { rel = 'sibling'; pct = '25–50%'; }
-      else if (isGrandparentOf(p, base)) { rel = 'grandparent'; pct = '25%'; }
-      else if (isGrandchildOf(p, base)) { rel = 'grandchild'; pct = '25%'; }
-      else if (shareGrandparent(base, p)) { rel = 'first cousin'; pct = '12.5%'; }
+      if (isParentOf(p, base) || isChildOf(p, base)) {
+        rel = 'parent/child'; pct = '50%'; firstDegree = true;
+      } else if (isFullSibling(p, base)) {
+        rel = 'sibling'; pct = '25–50%';
+      } else if (isHalfSibling(p, base) || isGrandparentOf(p, base) || isGrandchildOf(p, base) || isAvuncular(p, base)) {
+        rel = 'second-degree (grandparent/grandchild/avuncular/half-sibling)'; pct = '~25%';
+      } else if (d === 4) { rel = 'first cousin (± one removal)'; pct = '≈12.5%'; }
+      else if (d === 5) { rel = 'first cousin once removed (±)'; pct = '≈6.25%'; }
+      else if (d === 6) { rel = 'second cousin (± one removal)'; pct = '≈3.1%'; }
+      else if (d === 7) { rel = 'second cousin once removed (±)'; pct = '≈1.6%'; }
+      else if (d === 8) { rel = 'third cousin (± one removal)'; pct = '≈0.8%'; }
 
       const line = document.createElement('div');
       const txt = document.createElement('span');

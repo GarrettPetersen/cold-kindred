@@ -239,7 +239,8 @@ async function runSimulation() {
     events: [],
     graveyards: {}, // { [cityId]: { nextPlotId:number, plots: { [plotId]: number[] } } }
     evidence: {}, // { [cityId]: Array<{ id:string, name:string, type:string, actions?:string[] }> }
-    conversations: {} // { [personId]: Array<{ from:'you'|'npc', text:string, ts:number }> }
+    conversations: {}, // { [personId]: Array<{ from:'you'|'npc', text:string, ts:number }> }
+    conversationsState: {} // { [personId]: { ended?:boolean, droppedCig?:boolean } }
   };
 
   setStatus('Running…', 'running');
@@ -289,6 +290,7 @@ async function runSimulation() {
       city: fields.cityId ? getCityName(fields.cityId) : (fields.city || null),
       skinTone: fields.skinTone || null, // 1..5 Fitzpatrick
       hairColor: fields.hairColor || null, // 'black'|'brown'|'blonde'|'red'|'gray'|'bald'
+      friendly: (fields.friendly != null) ? !!fields.friendly : null, // social temperament (true=friendly, false=hostile)
       knowledgeRadius: fields.knowledgeRadius || null,
       knowsAffairs: fields.knowsAffairs ?? null,
       disposition: fields.disposition || null, // 'buried' | 'cremated'
@@ -301,6 +303,21 @@ async function runSimulation() {
       const dad = fields.fatherId ? result.people.find(p => p.id === fields.fatherId) : null;
       const fallback = mom?.lastName || dad?.lastName;
       person.lastName = fallback && fallback !== 'Unknown' ? fallback : pick(COMMON_SURNAMES);
+    }
+
+    // Assign friendly/hostile temperament with simple heritability
+    if (person.friendly == null) {
+      const dad = person.fatherId ? result.people.find(p => p.id === person.fatherId) : null;
+      const mom = person.motherId ? result.people.find(p => p.id === person.motherId) : null;
+      if (dad || mom) {
+        const d = (dad && typeof dad.friendly === 'boolean') ? (dad.friendly ? 1 : 0) : 0.5;
+        const m = (mom && typeof mom.friendly === 'boolean') ? (mom.friendly ? 1 : 0) : 0.5;
+        const avg = (d + m) / 2;
+        const base = avg < 0.34 ? 0.35 : avg > 0.66 ? 0.65 : 0.5;
+        person.friendly = random() < base;
+      } else {
+        person.friendly = random() < 0.55;
+      }
     }
     result.people.push(person);
     return person;
@@ -1449,6 +1466,8 @@ async function runSimulation() {
           killer = adultPool[Math.floor(random() * adultPool.length)];
           killerIdFixed = killer.id; // update stored killer if we had to swap
         }
+        // Murderer temperament: always unfriendly
+        killer.friendly = false;
         // Choose victim: not killer and not a banned close relative of killer
         let victimCandidates = adultPool.filter(p => p.id !== killer.id && !isBannedRelative(p));
         if (victimCandidates.length === 0) victimCandidates = adultPool.filter(p => p.id !== killer.id);
@@ -1794,7 +1813,6 @@ async function runSimulation() {
     }
     saveKnowledge(knowledge);
     renderGenealogy();
-    setActivePanel('genealogy');
   }
 
   function doneBadge() {
@@ -2058,6 +2076,21 @@ async function runSimulation() {
               evStatus.textContent = '';
             } else {
               evStatus.textContent = 'No evidence available.';
+            }
+          });
+          actions.appendChild(a);
+        } else if (it.actions?.includes('dna-person') && it.personId) {
+          const a = document.createElement('button'); a.className = 'start secondary'; a.textContent = 'Send for DNA testing';
+          a.addEventListener('click', () => {
+            const pid = it.personId;
+            const already = result.codis.profiles.some(pr => pr.personId === pid);
+            if (!already) {
+              result.codis.profiles.push({ personId: pid, year: END_YEAR });
+              a.textContent = 'Profile added to CODIS.';
+              a.disabled = true;
+              evStatus.textContent = '';
+            } else {
+              evStatus.textContent = 'Already in CODIS.';
             }
           });
           actions.appendChild(a);
@@ -2450,20 +2483,43 @@ async function runSimulation() {
     const p = personByIdPre.get(personId);
     if (!p) return;
     const emoji = personEmojiFor(p);
-    const greetings = [
-      'Hi there.',
-      'Good day.',
-      'Hello.',
-      'Hey.'
-    ];
-    const greet = greetings[Math.floor(Math.random()*greetings.length)];
     if (!result.conversations[personId]) result.conversations[personId] = [];
     intHeader.textContent = `${emoji} ${p.firstName} ${p.lastName}`;
     renderTranscript(personId);
     if (result.conversations[personId].length === 0) {
-      // start with a greeting from NPC
-      result.conversations[personId].push({ from: 'npc', text: greet, ts: Date.now() });
+      // FBI introduction + NPC response based on temperament
+      result.conversations[personId].push({ from: 'you', text: 'I’m with the FBI. I have a few questions.', ts: Date.now() });
+      const friendlyLines = [
+        'Of course, officer. What would you like to know?',
+        'I’ll help any way I can.',
+        'Sure. Ask away.'
+      ];
+      const hostileLines = [
+        'I don’t have anything to say to you.',
+        'Get off my porch.',
+        'Not interested. Move along.'
+      ];
+      let line;
+      let dropped = false;
+      if (p.friendly) {
+        line = friendlyLines[Math.floor(Math.random()*friendlyLines.length)];
+      } else {
+        line = hostileLines[Math.floor(Math.random()*hostileLines.length)];
+        dropped = Math.random() < 0.2; // 1/5 chance to drop cigarette
+      }
+      result.conversations[personId].push({ from: 'npc', text: line, ts: Date.now() });
+      result.conversationsState[personId] = result.conversationsState[personId] || {};
+      if (!p.friendly) {
+        result.conversationsState[personId].ended = true;
+        result.conversationsState[personId].droppedCig = dropped;
+      }
       renderTranscript(personId);
+      // If unfriendly and dropped, add cigarette to evidence locker (current city)
+      if (!p.friendly && dropped) {
+        const cityId = result.playerCityId;
+        result.evidence[cityId] = result.evidence[cityId] || [];
+        result.evidence[cityId].push({ id: `cig-${personId}`, name: `${p.firstName} ${p.lastName}’s Cigarette`, type: 'cigarette', actions: ['dna-person'], personId });
+      }
     }
     setActivePanel('interview');
   }
@@ -2482,6 +2538,8 @@ async function runSimulation() {
   residentSearchEl?.addEventListener('input', (e) => renderResidentMatches(e.target.value));
   intHello?.addEventListener('click', () => {
     if (!interviewingPersonId) return;
+    const state = result.conversationsState[interviewingPersonId] || {};
+    if (state.ended) return; // conversation closed for hostile NPCs
     result.conversations[interviewingPersonId].push({ from: 'you', text: 'hello', ts: Date.now() });
     result.conversations[interviewingPersonId].push({ from: 'npc', text: 'Hello.', ts: Date.now() });
     renderTranscript(interviewingPersonId);

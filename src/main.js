@@ -33,8 +33,8 @@ app.innerHTML = `
             <div id="residentList" class="typeahead"></div>
           </div>
           <div class="section">
-            <div id="skylineBox" style="border:1px solid #000; background:#fff; padding:0; height:260px; display:flex; align-items:flex-end; justify-content:center;">
-              <img id="skylineImg" alt="City skyline" style="width:100%; height:auto; object-fit:contain" />
+            <div id="skylineBox" style="border:1px solid #000; background:#fff; padding:0; height:260px; display:flex; align-items:stretch; justify-content:center;">
+              <img id="skylineImg" alt="City skyline" style="width:100%; height:100%; object-fit:contain; object-position:bottom center; display:block;" />
             </div>
           </div>
         </div>

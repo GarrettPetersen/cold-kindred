@@ -1693,24 +1693,7 @@ async function runSimulation() {
   }
   const knowledge = loadKnowledge();
 
-  // Seed demo if empty: reveal one person and their spouse/parents
-  if (knowledge.knownPeople.size === 0 && result.people.length) {
-    const seed = result.people[Math.floor(Math.random() * result.people.length)];
-    knowledge.knownPeople.add(seed.id);
-    if (seed.spouseId) {
-      knowledge.knownPeople.add(seed.spouseId);
-      knowledge.knownRelationships.push({ type: 'marriage', a: seed.id, b: seed.spouseId });
-    }
-    if (seed.fatherId) {
-      knowledge.knownPeople.add(seed.fatherId);
-      knowledge.knownRelationships.push({ type: 'biological', a: seed.fatherId, b: seed.id });
-    }
-    if (seed.motherId) {
-      knowledge.knownPeople.add(seed.motherId);
-      knowledge.knownRelationships.push({ type: 'biological', a: seed.motherId, b: seed.id });
-    }
-    saveKnowledge(knowledge);
-  }
+  // Do not auto-seed knowledge; player reveals connections during play
 
   // ----- Genealogy Rendering (simple layered layout) -----
   function renderGenealogy() {
@@ -1810,6 +1793,10 @@ async function runSimulation() {
     saveKnowledge(knowledge);
     renderGenealogy();
     setActivePanel('genealogy');
+  }
+
+  function doneBadge() {
+    const s = document.createElement('span'); s.className='inline-done'; s.textContent='✓ added'; return s;
   }
 
   // ----- Map Rendering -----
@@ -2279,21 +2266,20 @@ async function runSimulation() {
       else if (shareGrandparent(base, p)) { rel = 'first cousin'; pct = '12.5%'; }
 
       const line = document.createElement('div');
-      line.style.display = 'flex';
-      line.style.justifyContent = 'space-between';
       const txt = document.createElement('span');
       txt.textContent = `${p.firstName} ${p.lastName} – ${pct} – likely ${rel}`;
       line.appendChild(txt);
       // First-degree genetic only: parent/child
       if (firstDegree) {
-        const actions = document.createElement('span');
-        actions.style.display = 'inline-flex';
-        actions.style.gap = '6px';
-        const addGen = document.createElement('button'); addGen.className = 'start secondary'; addGen.textContent = '🧬 Add';
-        addGen.title = 'Add genetic connection to Connections';
-        addGen.addEventListener('click', () => addConnection(personId, pid, 'genetic'));
-        actions.appendChild(addGen);
-        line.appendChild(actions);
+        const already = knowledge.knownRelationships.some(r => r.type==='biological' && ((r.a===personId&&r.b===pid)||(r.a===pid&&r.b===personId)));
+        if (!already) {
+          const addGen = document.createElement('button'); addGen.className = 'inline-link'; addGen.textContent = '🧬 add';
+          addGen.title = 'Add genetic connection to Connections';
+          addGen.addEventListener('click', () => { addConnection(personId, pid, 'genetic'); addGen.replaceWith(doneBadge()); });
+          line.appendChild(addGen);
+        } else {
+          const done = doneBadge(); line.appendChild(done);
+        }
       }
       rows.push(line);
     }
@@ -2336,7 +2322,18 @@ async function runSimulation() {
       const mom = p.motherId ? personByIdPre.get(p.motherId) : null;
       const dad = p.fatherId ? personByIdPre.get(p.fatherId) : null;
       const line = document.createElement('div'); line.className='story-line';
-      line.textContent = `${p.firstName} ${p.lastName}, born ${ev.details?.date || y}, to ${mom ? mom.firstName + ' ' + mom.lastName : 'Unknown'}${dad ? ' and ' + dad.firstName + ' ' + dad.lastName : ''}.`;
+      const span = document.createElement('span');
+      span.textContent = `${p.firstName} ${p.lastName}, born ${ev.details?.date || y}, to ${mom ? mom.firstName + ' ' + mom.lastName : 'Unknown'}${dad ? ' and ' + dad.firstName + ' ' + dad.lastName : ''}.`;
+      line.appendChild(span);
+      // Inline familial add buttons for first-degree knowledge
+      if (mom) {
+        const exists = knowledge.knownRelationships.some(r => r.type==='biological' && ((r.a===p.id&&r.b===mom.id)||(r.a===mom.id&&r.b===p.id)));
+        if (!exists) { const b=document.createElement('button'); b.className='inline-link'; b.textContent='💍 add'; b.title='Add familial connection'; b.addEventListener('click',()=>{addConnection(p.id,mom.id,'familial'); b.replaceWith(doneBadge());}); line.appendChild(b);} else { line.appendChild(doneBadge()); }
+      }
+      if (dad) {
+        const exists = knowledge.knownRelationships.some(r => r.type==='biological' && ((r.a===p.id&&r.b===dad.id)||(r.a===dad.id&&r.b===p.id)));
+        if (!exists) { const b=document.createElement('button'); b.className='inline-link'; b.textContent='💍 add'; b.title='Add familial connection'; b.addEventListener('click',()=>{addConnection(p.id,dad.id,'familial'); b.replaceWith(doneBadge());}); line.appendChild(b);} else { line.appendChild(doneBadge()); }
+      }
       paper.appendChild(line);
     }
     // Marriage announcements
@@ -2347,7 +2344,13 @@ async function runSimulation() {
       if (ev.details?.cityId !== cityId) continue;
       const [a,b] = ev.people; const h = personByIdPre.get(a); const w = personByIdPre.get(b);
       const line = document.createElement('div'); line.className='story-line';
-      line.textContent = `${h?.firstName || ''} ${h?.lastName || ''} and ${w?.firstName || ''} ${w?.lastName || ''} were married ${ev.details?.date || y}.`;
+      const span = document.createElement('span');
+      span.textContent = `${h?.firstName || ''} ${h?.lastName || ''} and ${w?.firstName || ''} ${w?.lastName || ''} were married ${ev.details?.date || y}.`;
+      line.appendChild(span);
+      if (h && w) {
+        const exists = knowledge.knownRelationships.some(r => r.type==='marriage' && ((r.a===h.id&&r.b===w.id)||(r.a===w.id&&r.b===h.id)));
+        if (!exists) { const b=document.createElement('button'); b.className='inline-link'; b.textContent='💍 add'; b.title='Add marriage connection'; b.addEventListener('click',()=>{addConnection(h.id,w.id,'familial'); b.replaceWith(doneBadge());}); line.appendChild(b);} else { line.appendChild(doneBadge()); }
+      }
       paper.appendChild(line);
     }
     // Obituaries
@@ -2384,14 +2387,12 @@ async function runSimulation() {
       const container = document.createElement('div');
       container.style.display = 'flex';
       container.style.justifyContent = 'space-between';
-      const text = document.createElement('span'); text.textContent = parts.join('\n');
-      container.appendChild(text);
-      const actions = document.createElement('span'); actions.style.display='inline-flex'; actions.style.gap='6px';
-      if (father) { const b=document.createElement('button'); b.className='start secondary'; b.textContent='💍 Add'; b.title='Add familial connection'; b.addEventListener('click',()=>addConnection(p.id,father.id,'familial')); actions.appendChild(b); }
-      if (mother) { const b=document.createElement('button'); b.className='start secondary'; b.textContent='💍 Add'; b.title='Add familial connection'; b.addEventListener('click',()=>addConnection(p.id,mother.id,'familial')); actions.appendChild(b); }
-      if (spouse) { const b=document.createElement('button'); b.className='start secondary'; b.textContent='💍 Add'; b.title='Add familial connection'; b.addEventListener('click',()=>addConnection(p.id,spouse.id,'familial')); actions.appendChild(b); }
-      for (const c of children) { const b=document.createElement('button'); b.className='start secondary'; b.textContent='💍 Add'; b.title='Add familial connection'; b.addEventListener('click',()=>addConnection(p.id,c.id,'familial')); actions.appendChild(b); }
-      if (actions.childNodes.length) container.appendChild(actions);
+      const text = document.createElement('span'); text.textContent = parts.join('\n'); container.appendChild(text);
+      // Inline familial buttons
+      if (father) { const ex=knowledge.knownRelationships.some(r=>r.type==='biological'&&((r.a===p.id&&r.b===father.id)||(r.a===father.id&&r.b===p.id))); if(!ex){const b=document.createElement('button'); b.className='inline-link'; b.textContent='💍 add'; b.title='Add familial connection'; b.addEventListener('click',()=>{addConnection(p.id,father.id,'familial'); b.replaceWith(doneBadge());}); container.appendChild(b);} else { container.appendChild(doneBadge()); } }
+      if (mother) { const ex=knowledge.knownRelationships.some(r=>r.type==='biological'&&((r.a===p.id&&r.b===mother.id)||(r.a===mother.id&&r.b===p.id))); if(!ex){const b=document.createElement('button'); b.className='inline-link'; b.textContent='💍 add'; b.title='Add familial connection'; b.addEventListener('click',()=>{addConnection(p.id,mother.id,'familial'); b.replaceWith(doneBadge());}); container.appendChild(b);} else { container.appendChild(doneBadge()); } }
+      if (spouse) { const ex=knowledge.knownRelationships.some(r=>r.type==='marriage'&&((r.a===p.id&&r.b===spouse.id)||(r.a===spouse.id&&r.b===p.id))); if(!ex){const b=document.createElement('button'); b.className='inline-link'; b.textContent='💍 add'; b.title='Add familial connection'; b.addEventListener('click',()=>{addConnection(p.id,spouse.id,'familial'); b.replaceWith(doneBadge());}); container.appendChild(b);} else { container.appendChild(doneBadge()); } }
+      for (const c of children) { const ex=knowledge.knownRelationships.some(r=>r.type==='biological'&&((r.a===p.id&&r.b===c.id)||(r.a===c.id&&r.b===p.id))); if(!ex){const b=document.createElement('button'); b.className='inline-link'; b.textContent='💍 add'; b.title='Add familial connection'; b.addEventListener('click',()=>{addConnection(p.id,c.id,'familial'); b.replaceWith(doneBadge());}); container.appendChild(b);} else { container.appendChild(doneBadge()); } }
       paper.appendChild(container);
     }
     if (paper.childNodes.length <= 1 && !global) { const none=document.createElement('div'); none.textContent='No items for that year.'; paper.appendChild(none); }

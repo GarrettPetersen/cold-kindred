@@ -251,6 +251,9 @@ button.secondary {
 .lede { font-size: 14px; line-height: 1.5; margin-bottom: 12px; }
 .section-cap { font-weight: 700; margin-top: 10px; border-top: 1px solid #e0dccf; padding-top: 6px; }
 .story-line { margin: 4px 0; }
+.inline-btn { display: inline-block; margin-left: 6px; padding: 2px 6px; font-size: 12px; line-height: 1.2; border-radius: 999px; }
+.inline-link { background: transparent; border: none; color: #095aba; text-decoration: underline; cursor: pointer; padding: 0 4px; font: inherit; }
+.inline-done { color: #2e7d32; margin-left: 6px; font-size: 12px; }
 
 .person-header {
     font-weight: 600;

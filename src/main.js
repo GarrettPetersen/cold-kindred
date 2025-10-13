@@ -2491,14 +2491,14 @@ async function runSimulation() {
     renderInterviewMenu(personId);
     if (result.conversations[personId].length === 0) {
       // FBI introduction + NPC response based on temperament
-      result.conversations[personId].push({ from: 'you', text: 'I'm with the FBI. I have a few questions.', ts: Date.now() });
+      result.conversations[personId].push({ from: 'you', text: "I'm with the FBI. I have a few questions.", ts: Date.now() });
       const friendlyLines = [
         'Of course, officer. What would you like to know?',
-        'I'll help any way I can.',
+        "I'll help any way I can.",
         'Sure. Ask away.'
       ];
       const hostileLines = [
-        'I don't have anything to say to you.',
+        "I don't have anything to say to you.",
         'Get off my porch.',
         'Not interested. Move along.'
       ];

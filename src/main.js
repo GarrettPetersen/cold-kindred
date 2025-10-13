@@ -4,6 +4,7 @@ const app = document.getElementById('app');
 
 app.innerHTML = `
   <main>
+    <button id="menuToggle" class="hamburger" aria-label="Menu">☰</button>
     <section class="hero" id="hero">
       <h1>Cold Kindred</h1>
       <p class="tagline">A procedural cold case investigation.</p>
@@ -88,22 +89,6 @@ app.innerHTML = `
           <h2>Newspaper archive</h2>
           <div class="section field-row">
             <label>Year <input id="newsYear" class="input" style="width:120px" placeholder="e.g. 1972" /></label>
-            <label>Month
-              <select id="newsMonth" class="input" style="width:140px">
-                <option value="1">January</option>
-                <option value="2">February</option>
-                <option value="3">March</option>
-                <option value="4">April</option>
-                <option value="5">May</option>
-                <option value="6">June</option>
-                <option value="7">July</option>
-                <option value="8">August</option>
-                <option value="9">September</option>
-                <option value="10">October</option>
-                <option value="11">November</option>
-                <option value="12">December</option>
-              </select>
-            </label>
             <button id="newsSearch" class="start secondary">Search</button>
           </div>
           <div id="newsResults" class="detail"></div>
@@ -151,6 +136,7 @@ const progressBarEl = { style: { width: '0%' } };
 const logEl = document.getElementById('log');
 const outputJsonEl = document.getElementById('outputJson');
 const toggleJsonBtn = document.getElementById('toggleJson');
+const menuToggleBtn = document.getElementById('menuToggle');
 const personSearchEl = document.getElementById('personSearch');
 const personResultsEl = document.getElementById('personResults');
 const personDetailEl = document.getElementById('personDetail');
@@ -177,7 +163,6 @@ const gyResultsEl = document.getElementById('gyResults');
 const codisRefreshBtn = document.getElementById('codisRefresh');
 const codisListEl = document.getElementById('codisList');
 const newsYearEl = document.getElementById('newsYear');
-const newsMonthEl = document.getElementById('newsMonth');
 const newsSearchBtn = document.getElementById('newsSearch');
 const newsResultsEl = document.getElementById('newsResults');
 // removed offset tool
@@ -2034,6 +2019,11 @@ async function runSimulation() {
     if (name === 'codis') renderCODIS();
   }
   menuButtons.forEach(btn => btn.addEventListener('click', () => setActivePanel(btn.dataset.panel)));
+  menuToggleBtn?.addEventListener('click', () => {
+    const sidebar = document.querySelector('.sidebar');
+    if (!sidebar) return;
+    sidebar.classList.toggle('open');
+  });
   // Initialize player city to murder city if available
   if (result.playerCityId && playerCityNameEl) {
     playerCityNameEl.textContent = getCityName(result.playerCityId);
@@ -2232,8 +2222,9 @@ async function runSimulation() {
       if (p.motherId) { link(p.id, p.motherId); link(p.motherId, p.id); }
       // Note: do NOT link spouse/partner for genetic matches
     }
-    const dist = new Map([[personId,0]]);
-    const q = [personId];
+    const startId = base.id;
+    const dist = new Map([[startId,0]]);
+    const q = [startId];
     while (q.length) {
       const u = q.shift();
       const du = dist.get(u) || 0;
@@ -2269,11 +2260,14 @@ async function runSimulation() {
       return false;
     }
 
+    // Limit matches to people who have profiles in CODIS
+    const codisIds = new Set(result.codis.profiles.map(pr => pr.personId).filter(Boolean));
     const rows = [];
     for (const [pid, d] of dist.entries()) {
       if (pid === personId) continue;
       const p = personByIdPre.get(pid);
       if (!p) continue;
+      if (!codisIds.has(pid)) continue;
       let rel = 'distant relative'; let pct = '~0.8%';
       let firstDegree = false;
       if (isParentOf(p, base)) { rel = 'parent'; pct = '50%'; firstDegree = true; }
@@ -2313,15 +2307,36 @@ async function runSimulation() {
   codisRefreshBtn?.addEventListener('click', renderCODIS);
 
   // Newspaper archive - Obituaries
-  function monthFromISO(dateStr) {
-    const d = new Date(dateStr);
-    return d.getUTCMonth() + 1; // 1..12
-  }
-  function renderObits() {
+  function renderNewsYear() {
     const y = Number(newsYearEl.value || 0);
-    const m = Number(newsMonthEl.value || 0);
     const cityId = result.playerCityId;
     newsResultsEl.innerHTML = '';
+    // Birth announcements
+    const birthsHeader = document.createElement('div'); birthsHeader.textContent = 'Birth Announcements'; birthsHeader.style.fontWeight='600'; newsResultsEl.appendChild(birthsHeader);
+    for (const ev of result.events) {
+      if (ev.type !== 'BIRTH') continue;
+      if (ev.year !== y) continue;
+      if (ev.details?.cityId !== cityId) continue;
+      const pid = ev.people[0]; const p = personByIdPre.get(pid); if (!p) continue;
+      const mom = p.motherId ? personByIdPre.get(p.motherId) : null;
+      const dad = p.fatherId ? personByIdPre.get(p.fatherId) : null;
+      const line = document.createElement('div');
+      line.textContent = `${p.firstName} ${p.lastName} – born ${ev.details?.date || y} – to ${mom ? mom.firstName + ' ' + mom.lastName : 'Unknown'}${dad ? ' and ' + dad.firstName + ' ' + dad.lastName : ''}`;
+      newsResultsEl.appendChild(line);
+    }
+    // Marriage announcements
+    const marrHeader = document.createElement('div'); marrHeader.textContent = 'Marriage Announcements'; marrHeader.style.fontWeight='600'; marrHeader.style.marginTop='8px'; newsResultsEl.appendChild(marrHeader);
+    for (const ev of result.events) {
+      if (ev.type !== 'MARRIAGE') continue;
+      if (ev.year !== y) continue;
+      if (ev.details?.cityId !== cityId) continue;
+      const [a,b] = ev.people; const h = personByIdPre.get(a); const w = personByIdPre.get(b);
+      const line = document.createElement('div');
+      line.textContent = `${h?.firstName || ''} ${h?.lastName || ''} & ${w?.firstName || ''} ${w?.lastName || ''} – married ${ev.details?.date || y}`;
+      newsResultsEl.appendChild(line);
+    }
+    // Obituaries
+    const obitHeader = document.createElement('div'); obitHeader.textContent = 'Obituaries'; obitHeader.style.fontWeight='600'; obitHeader.style.marginTop='8px'; newsResultsEl.appendChild(obitHeader);
     for (const e of result.events) {
       if (e.type !== 'DEATH') continue;
       if (e.details?.cityId !== cityId) continue;
@@ -2329,14 +2344,7 @@ async function runSimulation() {
       const pid = e.people[0];
       const p = personByIdPre.get(pid);
       if (!p) continue;
-      if (m) {
-        // Use exact month with obituary carryover: if death is within last 5 days of month, obit next month
-        const deathMonth = e.details?.month || monthFromISO(e.details?.date || `${e.year}-06-15`);
-        const d = e.details?.date ? new Date(e.details.date).getUTCDate() : 15;
-        const daysInMonth = new Date(Date.UTC(e.year, deathMonth, 0)).getUTCDate();
-        const obitMonth = (daysInMonth - d < 5) ? (deathMonth === 12 ? 1 : deathMonth + 1) : deathMonth;
-        if (obitMonth !== m) continue;
-      }
+      // year-only; no month filter
       // Build survivors/predeceased list
       const relatives = [];
       const father = p.fatherId ? personByIdPre.get(p.fatherId) : null;
@@ -2373,7 +2381,7 @@ async function runSimulation() {
     }
     if (!newsResultsEl.childNodes.length) newsResultsEl.textContent = 'No obituaries for that selection.';
   }
-  newsSearchBtn?.addEventListener('click', () => { newsResultsEl.innerHTML=''; renderObits(); });
+  newsSearchBtn?.addEventListener('click', () => { newsResultsEl.innerHTML=''; renderNewsYear(); });
 
   // -------- Residents typeahead & Interviews --------
   const residentSearchEl = document.getElementById('residentSearch');

@@ -1000,10 +1000,7 @@ async function runSimulation() {
         const fromAffair = isMarriedPair ? (random() < 0.08) : (random() < 0.12);
         if (fromAffair) {
           const city = mother.cityId || father.cityId;
-          const ids = (adultsByCity.get(city) || { M:[], F:[] }).M;
-          const maleAdultsSameCity = ids
-            .map(id => personByIdSim.get(id))
-            .filter(p => p && p.id !== father.id && (by - p.birthYear) >= 18);
+          const maleAdultsSameCity = result.people.filter(p => p.sex === 'M' && p.id !== father.id && (by - p.birthYear) >= 18 && p.cityId === city);
           if (maleAdultsSameCity.length) bioFatherId = maleAdultsSameCity[Math.floor(random() * maleAdultsSameCity.length)].id;
         }
         const child = createPerson({
@@ -1695,6 +1692,16 @@ async function runSimulation() {
 
   // Build quick lookup before any genealogy rendering
   const personById = new Map(result.people.map(p => [p.id, p]));
+  // Build marriages-by-person index for fast dialogue lookups
+  const marriagesByPerson = new Map(); // id -> number[] spouse ids
+  for (const m of result.marriages) {
+    const a = marriagesByPerson.get(m.husbandId) || [];
+    a.push(m.wifeId);
+    marriagesByPerson.set(m.husbandId, a);
+    const b = marriagesByPerson.get(m.wifeId) || [];
+    b.push(m.husbandId);
+    marriagesByPerson.set(m.wifeId, b);
+  }
 
   // ----- Player Knowledge Model -----
   const STORAGE_KEY = 'ck:v1:knowledge';
@@ -2678,13 +2685,11 @@ async function runSimulation() {
       if (target.spouseId && withinHorizon(speaker, target.spouseId)) {
         const s = personByIdPre.get(target.spouseId); if (s) pushLine(`Spouse: ${s.firstName} ${s.lastName} 👪`);
       }
-      // Past marriages: scan events
-      for (const e of result.events) {
-        if (e.type==='MARRIAGE' && e.people.includes(target.id)) {
-          const otherId = e.people[0]===target.id? e.people[1]: e.people[0];
-          if (withinHorizon(speaker, otherId)) {
-            const o = personByIdPre.get(otherId); if (o) pushLine(`Past marriage: ${o.firstName} ${o.lastName} 👪`);
-          }
+      // Past marriages: use marriage index
+      const past = (marriagesByPerson.get(target.id) || []).filter(id => id !== target.spouseId);
+      for (const otherId of past) {
+        if (withinHorizon(speaker, otherId)) {
+          const o = personByIdPre.get(otherId); if (o) pushLine(`Past marriage: ${o.firstName} ${o.lastName} 👪`);
         }
       }
     }

@@ -2557,6 +2557,11 @@ async function runSimulation() {
     famBtn.addEventListener('click', () => showFamilyQuestions(personId, personId));
     ul.appendChild(famBtn);
 
+    // Origin (birthplace and moves)
+    const originBtn = document.createElement('button'); originBtn.className='menu-btn'; originBtn.textContent='Where do you come from?';
+    originBtn.addEventListener('click', () => answerOriginQuestion(personId, personId));
+    ul.appendChild(originBtn);
+
     // Ask about a known person
     const aboutWrap = document.createElement('div'); aboutWrap.className='section';
     const aboutLabel = document.createElement('div'); aboutLabel.textContent = 'Tell me about a person:'; aboutWrap.appendChild(aboutLabel);
@@ -2596,7 +2601,8 @@ async function runSimulation() {
       { k:'siblings', text:'Who are your siblings?' },
       { k:'children', text:'Who are your children?' },
       { k:'spouse', text:'Who is your spouse?' },
-      { k:'past', text:'Any past marriages?' }
+      { k:'past', text:'Any past marriages?' },
+      { k:'origin', text:'Where do you come from?' }
     ];
     qs.forEach(q => {
       const b = document.createElement('button'); b.className='menu-btn'; b.textContent=label(targetId, q.text);
@@ -2662,7 +2668,24 @@ async function runSimulation() {
         }
       }
     }
+    if (kind==='origin') {
+      // Birthplace
+      const birthCity = getCityName(target.cityId);
+      pushLine(`I was born in ${birthCity}.`);
+      // Moves
+      const moves = result.events.filter(e => e.type==='MOVE' && e.people.includes(target.id)).sort((a,b)=>a.year-b.year);
+      for (const mv of moves) {
+        const from = mv.details?.fromCityId ? getCityName(mv.details.fromCityId) : (mv.details?.from || 'Unknown');
+        const to = mv.details?.toCityId ? getCityName(mv.details.toCityId) : (mv.details?.to || 'Unknown');
+        pushLine(`In ${mv.year} I moved from ${from} to ${to}.`);
+      }
+      if (!moves.length) pushLine('I haven’t moved much since then.');
+    }
     renderTranscript(speakerId);
+  }
+
+  function answerOriginQuestion(speakerId, targetId) {
+    answerFamilyQuestion(speakerId, targetId, 'origin');
   }
 
   function renderTranscript(personId) {

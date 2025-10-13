@@ -1000,7 +1000,8 @@ async function runSimulation() {
         const fromAffair = isMarriedPair ? (random() < 0.08) : (random() < 0.12);
         if (fromAffair) {
           const city = mother.cityId || father.cityId;
-          const maleAdultsSameCity = result.people.filter(p => p.sex === 'M' && p.id !== father.id && (by - p.birthYear) >= 18 && p.cityId === city);
+          const yb = year(birthDate);
+          const maleAdultsSameCity = result.people.filter(p => p.sex === 'M' && p.id !== father.id && (yb - p.birthYear) >= 18 && p.cityId === city);
           if (maleAdultsSameCity.length) bioFatherId = maleAdultsSameCity[Math.floor(random() * maleAdultsSameCity.length)].id;
         }
         const child = createPerson({

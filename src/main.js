@@ -33,8 +33,8 @@ app.innerHTML = `
             <div id="residentList" class="typeahead"></div>
           </div>
           <div class="section">
-            <div id="skylineBox" style="border:1px solid #000; background:#fff; padding:8px; height:260px; display:flex; align-items:center; justify-content:center;">
-              <img id="skylineImg" alt="City skyline" style="max-width:100%; max-height:100%; object-fit:contain" />
+            <div id="skylineBox" style="border:1px solid #000; background:#fff; padding:0; height:260px; display:flex; align-items:flex-end; justify-content:center;">
+              <img id="skylineImg" alt="City skyline" style="width:100%; height:auto; object-fit:contain" />
             </div>
           </div>
         </div>
@@ -1865,8 +1865,8 @@ async function runSimulation() {
     const name = getCityName(cityId) || '';
     const city = name.split(',')[0].trim().toLowerCase().replace(/\s+/g,'-');
     const src = `assets/skyline-${city}.svg`;
+    skylineImg.onerror = () => { skylineImg.src = 'assets/skyline-generic.svg'; };
     skylineImg.src = src;
-    skylineImg.onerror = () => { skylineImg.removeAttribute('src'); };
   }
   function projectLatLngToSvg(lat, lng, viewW, viewH) {
     // Tweak the bounding box to better match this specific SVG's coastline placement

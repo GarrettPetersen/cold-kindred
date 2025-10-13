@@ -1119,10 +1119,10 @@ async function runSimulation() {
   };
   function consumerDNAProb(y) {
     if (y < 1990) return 0;
-    if (y < 2007) return 0.00015;
-    if (y < 2013) return 0.0007;
-    if (y < 2020) return 0.0015;
-    return 0.0025;
+    if (y < 2007) return 0.0003;
+    if (y < 2013) return 0.0014;
+    if (y < 2020) return 0.003;
+    return 0.005;
   }
 
   // Choose one murder year and assign once
@@ -1480,7 +1480,7 @@ async function runSimulation() {
 
     // Occasional CODIS (law-enforcement) DNA profile creation, very rare
     if (y >= 1990) {
-      const pLE = 0.00005;
+      const pLE = 0.0001;
       for (const p of adults) {
         if (random() < pLE) {
           result.codis.profiles.push({ personId: p.id, year: y });
@@ -2045,10 +2045,10 @@ async function runSimulation() {
             const alreadyV = result.codis.profiles.some(pr => pr.personId === victimId);
             // Add moniker as standalone profile sharing the killer's DNA id
             if (killerId && !alreadyKMoniker) {
-              result.codis.profiles.push({ personId: null, year: (murderEvt?.year || 2000), moniker: result.killerMoniker || null, dnaId: `killer-${killerId}` });
+              result.codis.profiles.push({ personId: null, year: END_YEAR, moniker: result.killerMoniker || null, dnaId: `killer-${killerId}` });
               added++;
             }
-            if (victimId && !alreadyV) { result.codis.profiles.push({ personId: victimId, year: (murderEvt?.year || 2000), dnaId: `person-${victimId}` }); added++; }
+            if (victimId && !alreadyV) { result.codis.profiles.push({ personId: victimId, year: END_YEAR, dnaId: `person-${victimId}` }); added++; }
             if (added) {
               a.textContent = 'Victim and Killer DNA profiles added to CODIS.';
               a.disabled = true;
@@ -2182,7 +2182,7 @@ async function runSimulation() {
     dd.appendChild(status);
     container.appendChild(dd);
     btn.addEventListener('click', () => {
-      status.textContent = 'Searching for matches…';
+      status.innerHTML = '<span class="spinner" aria-hidden="true"></span> Searching for matches…';
       btn.disabled = true;
       setTimeout(() => {
         renderCODISMatches(personId);

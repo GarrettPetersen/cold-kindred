@@ -2115,10 +2115,10 @@ async function runSimulation() {
             const alreadyV = result.codis.profiles.some(pr => pr.personId === victimId);
             // Add moniker as standalone profile sharing the killer's DNA id
             if (killerId && !alreadyKMoniker) {
-              result.codis.profiles.push({ personId: null, year: END_YEAR, moniker: result.killerMoniker || null, dnaId: `killer-${killerId}` });
+              result.codis.profiles.push({ personId: null, year: END_YEAR, cityId: result.playerCityId || null, moniker: result.killerMoniker || null, dnaId: `killer-${killerId}` });
               added++;
             }
-            if (victimId && !alreadyV) { result.codis.profiles.push({ personId: victimId, year: END_YEAR, dnaId: `person-${victimId}` }); added++; }
+            if (victimId && !alreadyV) { result.codis.profiles.push({ personId: victimId, year: END_YEAR, cityId: result.playerCityId || null, dnaId: `person-${victimId}` }); added++; }
             if (added) {
               a.textContent = 'Victim and Killer DNA profiles added to CODIS.';
               a.disabled = true;
@@ -2258,13 +2258,18 @@ async function runSimulation() {
   function renderCODIS() {
     codisListEl.innerHTML = '';
     codisListEl.classList.add('codis-list');
-    result.codis.profiles.forEach((pr, idx) => {
-      const p = personByIdPre.get(pr.personId);
-      // Prefer moniker if present (e.g., killer). Do NOT show real name in that case.
+    const entries = result.codis.profiles.map((pr, idx) => {
+      const p = personByIdPre.get(pr.personId || -1);
       const label = pr.moniker ? pr.moniker : (p ? `${p.firstName} ${p.lastName}` : `Profile #${idx+1}`);
+      const sortKey = pr.moniker ? pr.moniker.toUpperCase() : (p ? `${p.lastName || ''} ${p.firstName || ''}`.toUpperCase() : label.toUpperCase());
+      const cityName = pr.cityId ? getCityName(pr.cityId) : '';
+      return { pr, idx, label, sortKey, cityName };
+    }).sort((a,b) => a.sortKey.localeCompare(b.sortKey));
+    entries.forEach(({ pr, idx, label, cityName }) => {
       const row = document.createElement('div');
       row.className = 'row';
-      row.textContent = `${label} – added ${pr.year || ''}`;
+      const victimTag = (pr.personId && pr.personId === result.murderVictimId) ? ' (Murder victim)' : '';
+      row.textContent = `${label}${victimTag} – added ${pr.year || ''}${cityName ? ' — ' + cityName : ''}`;
       if (pr.moniker) row.classList.add('killer');
       row.addEventListener('click', () => showCodisDropdown(row, pr.personId));
       codisListEl.appendChild(row);
@@ -2305,6 +2310,10 @@ async function runSimulation() {
       }
     }
     if (!base) { codisListEl.textContent = 'Profile not linked to a person yet.'; return; }
+    // Header: which profile we are matching from
+    const header = document.createElement('div');
+    header.className = 'title-sub';
+    header.textContent = `Matches for ${base.firstName} ${base.lastName}`;
     const adj = new Map();
     function link(u, v) { const a = adj.get(u) || new Set(); a.add(v); adj.set(u, a); }
     for (const p of result.people) {
@@ -2370,7 +2379,13 @@ async function runSimulation() {
     }
 
     // Limit matches to people who have profiles in CODIS
+    // Treat killer moniker as a full genetic person equivalent: include moniker DNA id mapping
     const codisIds = new Set(result.codis.profiles.map(pr => pr.personId).filter(Boolean));
+    const moniker = result.codis.profiles.find(pr => pr.personId === null && pr.moniker && pr.dnaId && pr.dnaId.startsWith('killer-'));
+    if (moniker) {
+      const kid = Number(moniker.dnaId.slice('killer-'.length));
+      if (!Number.isNaN(kid)) codisIds.add(kid);
+    }
     const rows = [];
     for (const [pid, d] of dist.entries()) {
       if (pid === personId) continue;
@@ -2415,6 +2430,7 @@ async function runSimulation() {
     back.addEventListener('click', renderCODIS);
     codisListEl.innerHTML='';
     codisListEl.appendChild(back);
+    codisListEl.appendChild(header);
     const box = document.createElement('div'); box.className='detail'; box.style.marginTop='8px';
     rows.forEach(node => box.appendChild(node));
     codisListEl.appendChild(box);

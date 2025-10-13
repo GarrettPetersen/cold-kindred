@@ -293,6 +293,7 @@ async function runSimulation() {
       skinTone: fields.skinTone || null, // 1..5 Fitzpatrick
       hairColor: fields.hairColor || null, // 'black'|'brown'|'blonde'|'red'|'gray'|'bald'
       friendly: (fields.friendly != null) ? !!fields.friendly : null, // social temperament (true=friendly, false=hostile)
+      lastAffairYear: null,
       knowledgeRadius: fields.knowledgeRadius || null,
       knowsAffairs: fields.knowsAffairs ?? null,
       disposition: fields.disposition || null, // 'buried' | 'cremated'
@@ -1431,21 +1432,7 @@ async function runSimulation() {
     if (!spouse) continue;
     visited.add(p.id);
     visited.add(spouse.id);
-    let hadAffair = false;
-    const ids = eventsByPerson.get(p.id) || [];
-    for (let i = ids.length - 1; i >= 0; i--) {
-      const e = result.events[ids[i] - 1];
-      if (!e) continue;
-      if (e.type === 'AFFAIR' && y - e.year <= 10) { hadAffair = true; break; }
-      if (e.year < y - 10) break;
-    }
-    const spouseEvts = eventsByPerson.get(spouse.id) || [];
-    for (let i = spouseEvts.length - 1; i >= 0; i--) {
-      const e = result.events[spouseEvts[i] - 1];
-      if (!e) continue;
-      if (e.type === 'AFFAIR' && y - e.year <= 10) { hadAffair = true; break; }
-      if (e.year < y - 10) break;
-    }
+    const hadAffair = (p.lastAffairYear != null && y - p.lastAffairYear <= 10) || (spouse.lastAffairYear != null && y - spouse.lastAffairYear <= 10);
     let divorceProb = PROB.divorce || 0.01;
     if (hadAffair) divorceProb = Math.min(0.5, divorceProb * 5);
     else divorceProb = Math.max(divorceProb * 0.5, 0.002);
@@ -1471,6 +1458,8 @@ async function runSimulation() {
           const other = candidates[Math.floor(random() * candidates.length)];
           const evt = addEvent({ year: y, type: 'AFFAIR', people: [p.id, other.id], details: { cityId: p.cityId } });
           indexEventByYear(evt);
+          p.lastAffairYear = y;
+          other.lastAffairYear = y;
         }
       }
     }

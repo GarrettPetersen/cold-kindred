@@ -1450,16 +1450,26 @@ async function runSimulation() {
       if (random() < PROB.affair) {
         // majority heterosexual: pick candidates of opposite sex most of the time
         const preferOpposite = random() < 0.95; // 95% heterosexual
-        const poolIds = (adultsByCity.get(p.cityId) || { M:[], F:[] })[preferOpposite ? (p.sex === 'M' ? 'F' : 'M') : (p.sex === 'M' ? 'M' : 'F')];
-        const candidates = poolIds
-          .map(id => personByIdSim.get(id))
-          .filter(a => a && a.id !== p.id && a.id !== p.spouseId && !isCloseKin(p, a));
-        if (candidates.length) {
-          const other = candidates[Math.floor(random() * candidates.length)];
-          const evt = addEvent({ year: y, type: 'AFFAIR', people: [p.id, other.id], details: { cityId: p.cityId } });
+        const buckets = adultsByCity.get(p.cityId) || { M:[], F:[] };
+        const pool = preferOpposite ? (p.sex === 'M' ? buckets.F : buckets.M) : (p.sex === 'M' ? buckets.M : buckets.F);
+        // Try a small number of random picks; stop at first eligible
+        const MAX_TRIES = 12;
+        let chosen = null;
+        for (let t = 0; t < MAX_TRIES && pool && pool.length; t++) {
+          const id = pool[Math.floor(random() * pool.length)];
+          const cand = personByIdSim.get(id);
+          if (!cand) continue;
+          if (cand.id === p.id) continue;
+          if (cand.id === p.spouseId) continue;
+          if (isCloseKin(p, cand)) continue;
+          chosen = cand; break;
+        }
+        if (chosen) {
+          const evt = addEvent({ year: y, type: 'AFFAIR', people: [p.id, chosen.id], details: { cityId: p.cityId } });
           indexEventByYear(evt);
+          // Mark both participants so each of their marriages reflects an affair recently
           p.lastAffairYear = y;
-          other.lastAffairYear = y;
+          chosen.lastAffairYear = y;
         }
       }
     }

@@ -85,6 +85,7 @@ app.innerHTML = `
             <button id="intHello" class="start secondary">Say "hello"</button>
             <button id="intBack" class="start secondary">Back</button>
           </div>
+          <div id="intMenu" class="section"></div>
         </div>
         <div id="panel-news" class="panel tab-panel hidden">
           <h2>Newspaper archive</h2>
@@ -2458,6 +2459,7 @@ async function runSimulation() {
   const intTranscript = document.getElementById('intTranscript');
   const intHello = document.getElementById('intHello');
   const intBack = document.getElementById('intBack');
+  const intMenu = document.getElementById('intMenu');
   let interviewingPersonId = null;
 
   function renderResidentMatches(query) {
@@ -2486,6 +2488,7 @@ async function runSimulation() {
     if (!result.conversations[personId]) result.conversations[personId] = [];
     intHeader.textContent = `${emoji} ${p.firstName} ${p.lastName}`;
     renderTranscript(personId);
+    renderInterviewMenu(personId);
     if (result.conversations[personId].length === 0) {
       // FBI introduction + NPC response based on temperament
       result.conversations[personId].push({ from: 'you', text: 'I’m with the FBI. I have a few questions.', ts: Date.now() });
@@ -2522,6 +2525,144 @@ async function runSimulation() {
       }
     }
     setActivePanel('interview');
+  }
+
+  function renderInterviewMenu(personId) {
+    const p = personByIdPre.get(personId);
+    if (!p) return;
+    const state = result.conversationsState[personId] || {};
+    intMenu.innerHTML = '';
+    if (state.ended) return; // hostile ended
+    // Base options
+    const ul = document.createElement('div');
+    ul.className = 'list';
+    // DNA sample request
+    const dnaBtn = document.createElement('button'); dnaBtn.className='menu-btn'; dnaBtn.textContent='Would you be willing to give a DNA sample?';
+    dnaBtn.addEventListener('click', () => {
+      const yes = Math.random() < 0.5;
+      if (yes) {
+        result.conversations[personId].push({ from:'npc', text: 'Sure. If it helps.', ts: Date.now() });
+        const cityId = result.playerCityId;
+        result.evidence[cityId] = result.evidence[cityId] || [];
+        result.evidence[cityId].push({ id:`swab-${personId}`, name: `${p.firstName} ${p.lastName}’s Cheek Swab`, type:'swab', actions:['dna-person'], personId });
+      } else {
+        result.conversations[personId].push({ from:'npc', text: 'I’m not comfortable with that.', ts: Date.now() });
+      }
+      renderTranscript(personId);
+    });
+    ul.appendChild(dnaBtn);
+
+    // Family exploration
+    const famBtn = document.createElement('button'); famBtn.className='menu-btn'; famBtn.textContent='Tell me about your family.';
+    famBtn.addEventListener('click', () => showFamilyQuestions(personId, personId));
+    ul.appendChild(famBtn);
+
+    // Ask about a known person
+    const aboutWrap = document.createElement('div'); aboutWrap.className='section';
+    const aboutLabel = document.createElement('div'); aboutLabel.textContent = 'Tell me about a person:'; aboutWrap.appendChild(aboutLabel);
+    const input = document.createElement('input'); input.className='input'; input.placeholder='Start typing a known name…'; aboutWrap.appendChild(input);
+    const submit = document.createElement('button'); submit.className='start secondary'; submit.textContent='Ask'; aboutWrap.appendChild(submit);
+    const known = Array.from(knowledge.knownPeople).map(id => personByIdPre.get(id)).filter(Boolean);
+    input.addEventListener('input', () => {
+      const q = input.value.toLowerCase();
+      const hit = known.find(k => (`${k.firstName} ${k.lastName}`).toLowerCase().startsWith(q));
+      if (hit) input.dataset.personId = String(hit.id); else delete input.dataset.personId;
+    });
+    submit.addEventListener('click', () => {
+      const pid = Number(input.dataset.personId || 0);
+      if (!pid) { result.conversations[personId].push({ from:'npc', text: 'I don’t know them.', ts: Date.now() }); renderTranscript(personId); return; }
+      // Horizon check: reuse family questions with target
+      showFamilyQuestions(personId, pid);
+    });
+    ul.appendChild(aboutWrap);
+
+    // Navigation options
+    const otherBtn = document.createElement('button'); otherBtn.className='menu-btn'; otherBtn.textContent='Let’s talk about something else'; otherBtn.addEventListener('click', ()=>renderInterviewMenu(personId));
+    const byeBtn = document.createElement('button'); byeBtn.className='menu-btn'; byeBtn.textContent='Goodbye for now'; byeBtn.addEventListener('click', ()=>{ result.conversations[personId].push({ from:'you', text:'Goodbye for now.', ts:Date.now() }); renderTranscript(personId); });
+    ul.appendChild(otherBtn); ul.appendChild(byeBtn);
+    intMenu.appendChild(ul);
+  }
+
+  function showFamilyQuestions(speakerId, targetId) {
+    const who = personByIdPre.get(targetId);
+    if (!who) return;
+    const p = personByIdPre.get(speakerId);
+    if (!p) return;
+    intMenu.innerHTML = '';
+    const ul = document.createElement('div'); ul.className='list';
+    const label = (me,str)=> (targetId===speakerId? str.replaceAll('your', 'your') : str.replaceAll('your', `${who.firstName}’s`));
+    const qs = [
+      { k:'parents', text:'Who are your parents?' },
+      { k:'siblings', text:'Who are your siblings?' },
+      { k:'children', text:'Who are your children?' },
+      { k:'spouse', text:'Who is your spouse?' },
+      { k:'past', text:'Any past marriages?' }
+    ];
+    qs.forEach(q => {
+      const b = document.createElement('button'); b.className='menu-btn'; b.textContent=label(targetId, q.text);
+      b.addEventListener('click', ()=>answerFamilyQuestion(speakerId, targetId, q.k));
+      ul.appendChild(b);
+    });
+    const back = document.createElement('button'); back.className='start secondary'; back.textContent='Back'; back.addEventListener('click', ()=>renderInterviewMenu(speakerId));
+    intMenu.appendChild(ul); intMenu.appendChild(back);
+  }
+
+  function withinHorizon(speaker, personId) {
+    const { nodes, dist } = knownSubgraphFrom(speaker.id);
+    return nodes.has(personId) && (dist.get(personId) || 99) <= Math.max(2, Math.min(5, speaker.knowledgeRadius || 3));
+  }
+
+  function answerFamilyQuestion(speakerId, targetId, kind) {
+    const speaker = personByIdPre.get(speakerId);
+    const target = personByIdPre.get(targetId);
+    if (!speaker || !target) return;
+    const lines = [];
+    const pushLine = (txt)=>{ result.conversations[speakerId].push({ from:'npc', text: txt, ts: Date.now() }); };
+    // Parents
+    if (kind==='parents') {
+      if (target.motherId && withinHorizon(speaker, target.motherId)) {
+        const m = personByIdPre.get(target.motherId); if (m) pushLine(`Mother: ${m.firstName} ${m.lastName} 👪`);
+      }
+      if (target.fatherId && withinHorizon(speaker, target.fatherId)) {
+        const f = personByIdPre.get(target.fatherId); if (f) pushLine(`Father: ${f.firstName} ${f.lastName} 👪`);
+      }
+      // Bio father if affair knowledge
+      if (speaker.knowsAffairs && target.bioFatherId && target.bioFatherId !== target.fatherId && withinHorizon(speaker, target.bioFatherId)) {
+        const bf = personByIdPre.get(target.bioFatherId); if (bf) pushLine(`Biological father: ${bf.firstName} ${bf.lastName} 🧬`);
+      }
+    }
+    if (kind==='siblings') {
+      for (const s of result.people) {
+        if (s.id===target.id) continue;
+        const sib = (s.fatherId && s.fatherId===target.fatherId) || (s.motherId && s.motherId===target.motherId);
+        if (sib && withinHorizon(speaker, s.id)) pushLine(`Sibling: ${s.firstName} ${s.lastName} 👪`);
+      }
+    }
+    if (kind==='children') {
+      for (const c of result.people) {
+        if (c.fatherId===target.id || c.motherId===target.id) {
+          if (withinHorizon(speaker, c.id)) pushLine(`Child: ${c.firstName} ${c.lastName} 👪`);
+          if (speaker.knowsAffairs && c.bioFatherId && c.bioFatherId!==target.id && withinHorizon(speaker, c.bioFatherId)) {
+            const bf = personByIdPre.get(c.bioFatherId); if (bf) pushLine(`Biological father of ${c.firstName}: ${bf.firstName} ${bf.lastName} 🧬`);
+          }
+        }
+      }
+    }
+    if (kind==='spouse' || kind==='past') {
+      if (target.spouseId && withinHorizon(speaker, target.spouseId)) {
+        const s = personByIdPre.get(target.spouseId); if (s) pushLine(`Spouse: ${s.firstName} ${s.lastName} 👪`);
+      }
+      // Past marriages: scan events
+      for (const e of result.events) {
+        if (e.type==='MARRIAGE' && e.people.includes(target.id)) {
+          const otherId = e.people[0]===target.id? e.people[1]: e.people[0];
+          if (withinHorizon(speaker, otherId)) {
+            const o = personByIdPre.get(otherId); if (o) pushLine(`Past marriage: ${o.firstName} ${o.lastName} 👪`);
+          }
+        }
+      }
+    }
+    renderTranscript(speakerId);
   }
 
   function renderTranscript(personId) {

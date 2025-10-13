@@ -374,10 +374,7 @@ async function runSimulation() {
     { id: 4, name: 'Houston, TX', weight: 2320268, offsetX: 0, offsetY: 46 },
     { id: 5, name: 'Phoenix, AZ', weight: 1680992, offsetX: 6, offsetY: 14 },
     { id: 6, name: 'Philadelphia, PA', weight: 1584064 },
-    { id: 7, name: 'San Antonio, TX', weight: 1547253, offsetX: -8, offsetY: 40 },
     { id: 8, name: 'San Diego, CA', weight: 1423851, offsetX: -32, offsetY: -6 },
-    { id: 9, name: 'Dallas, TX', weight: 1343573, offsetX: -4, offsetY: 62 },
-    { id: 10, name: 'San Jose, CA', weight: 1030119, offsetX: 6, offsetY: -40 },
     { id: 11, name: 'San Francisco, CA', weight: 883305, offsetX: -8, offsetY: -18 },
     { id: 12, name: 'Seattle, WA', weight: 744955, offsetX: 56, offsetY: -14 },
     { id: 13, name: 'Portland, OR', weight: 653115, offsetX: 48, offsetY: -8 },
@@ -386,7 +383,6 @@ async function runSimulation() {
     { id: 16, name: 'New Orleans, LA', weight: 391006, offsetX: 26, offsetY: 26 },
     { id: 17, name: 'Denver, CO', weight: 715522 },
     { id: 18, name: 'Salt Lake City, UT', weight: 200133 },
-    { id: 19, name: 'Kansas City, MO', weight: 508090, offsetX: 0, offsetY: 14 },
     { id: 20, name: 'Oklahoma City, OK', weight: 681054 },
     { id: 21, name: 'St. Louis, MO', weight: 301578, offsetX: 0, offsetY: 20 },
     { id: 22, name: 'Minneapolis, MN', weight: 429954, offsetX: 0, offsetY: 28 }
@@ -413,10 +409,10 @@ async function runSimulation() {
       case 4: return [29.7604, -95.3698]; // Houston
       case 5: return [33.4484, -112.0740]; // Phoenix
       case 6: return [39.9526, -75.1652]; // Philadelphia
-      case 7: return [29.4241, -98.4936]; // San Antonio
+      // removed San Antonio
       case 8: return [32.7157, -117.1611]; // San Diego
-      case 9: return [32.7767, -96.7970]; // Dallas
-      case 10: return [37.3382, -121.8863]; // San Jose (ensure north of Mexico)
+      // removed Dallas
+      // removed San Jose
       case 11: return [37.7749, -122.4194]; // San Francisco
       case 12: return [47.6062, -122.3321]; // Seattle
       case 13: return [45.5152, -122.6784]; // Portland
@@ -425,7 +421,7 @@ async function runSimulation() {
       case 16: return [29.9511, -90.0715]; // New Orleans
       case 17: return [39.7392, -104.9903]; // Denver
       case 18: return [40.7608, -111.8910]; // Salt Lake City
-      case 19: return [39.0997, -94.5786]; // Kansas City
+      // removed Kansas City
       case 20: return [35.4676, -97.5164]; // Oklahoma City
       case 21: return [38.6270, -90.1994]; // St. Louis
       case 22: return [44.9778, -93.2650]; // Minneapolis
@@ -952,14 +948,17 @@ async function runSimulation() {
       // Era-based total fertility number (TFN) sampling per couple/partnership
       const motherBirthYear = year(mother.birthDate);
       let expected = 0;
-      if (motherBirthYear < 1945) expected = 3.0 + random() * 1.0;       // Silent gen
-      else if (motherBirthYear < 1965) expected = 3.5 + random() * 1.5;  // Boomers higher
-      else if (motherBirthYear < 1985) expected = 2.3 + random() * 1.2;  // Gen X
-      else expected = 1.7 + random() * 0.9;                              // Millennials+
+      if (motherBirthYear < 1910) expected = 5.0 + random() * 2.0;        // 5–7
+      else if (motherBirthYear < 1945) expected = 4.0 + random() * 2.0;   // 4–6
+      else if (motherBirthYear < 1965) expected = 3.75 + random() * 1.5;  // Boom 3.75–5.25
+      else if (motherBirthYear < 1985) expected = 2.4 + random() * 0.8;   // Gen X 2.4–3.2
+      else expected = 1.7 + random() * 0.8;                               // 1.7–2.5
 
-      // Married couples more fertile; partnerships slightly less
+      // Married couples more fertile; partnerships slightly less (higher early)
       const isMarriedPair = couples.some(([fh, mw]) => fh.id === father.id && mw.id === mother.id);
-      const baseKids = expected * (isMarriedPair ? 1.0 : 0.75);
+      const early = motherBirthYear < 1950;
+      const partnerFactor = early ? 0.85 : 0.75;
+      const baseKids = expected * (isMarriedPair ? 1.0 : partnerFactor);
       // Sample integer around expectation (Poisson-ish approximation)
       let numKids = Math.max(0, Math.round(baseKids + (random() - 0.5)));
       numKids = Math.min(numKids, 8);
@@ -1016,7 +1015,7 @@ async function runSimulation() {
 
     // Marry within generation for next-gen parents
     // Marriage/partnership rates slightly lower for later generations
-    const marriageRate = Math.max(0.6, 0.9 - gen * 0.07);      // G1: ~0.83, G4: ~0.6
+    const marriageRate = gen <= 1 ? 0.95 : Math.max(0.6, 0.9 - gen * 0.07);      // Early gens very high
     const partnershipRate = Math.min(0.7, 0.6 + gen * 0.05);    // G1: ~0.65, G4: ~0.7
     const next = pairAndMarry(genMales, genFemales, marriageRate, partnershipRate);
     generations[gen + 1] = { males: genMales, females: genFemales, couples: next.couples, partners: next.partners };

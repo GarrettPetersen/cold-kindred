@@ -1776,7 +1776,10 @@ async function runSimulation() {
   function addConnection(aId, bId, kind) {
     knowledge.knownPeople.add(aId);
     knowledge.knownPeople.add(bId);
-    const type = kind === 'genetic' ? 'biological' : 'marriage';
+    let type;
+    if (kind === 'genetic') type = 'biological';
+    else if (kind === 'familialParent') type = 'guardian';
+    else type = 'marriage';
     // Avoid duplicates
     if (!knowledge.knownRelationships.some(r => r.type === type && ((r.a === aId && r.b === bId) || (r.a === bId && r.b === aId)))) {
       // For genetic, ensure parent-child if applicable; otherwise generic biological
@@ -2120,7 +2123,7 @@ async function runSimulation() {
         const sortKey = (h?.lastName || '');
         if (!inRange(sortKey, range)) continue;
         const dt = marriageEvt?.details?.date ? ` on ${marriageEvt.details.date}` : '';
-        lines.push(`${h?.lastName || ''}, ${h?.firstName || ''} & ${w?.firstName || ''} ${w?.lastName || ''} – ${m.year}${dt}  [💍 Add connection]`);
+        lines.push(`${h?.lastName || ''}, ${h?.firstName || ''} & ${w?.firstName || ''} ${w?.lastName || ''} – ${m.year}${dt}`);
       }
     } else if (type === 'divorce') {
       for (const e of result.events) {
@@ -2162,7 +2165,7 @@ async function runSimulation() {
       const dY = deathYearOf(p.id);
       const maiden = (p.sex === 'F' && p.maidenName) ? ` (née ${p.maidenName})` : '';
       const spousePresent = p.spouseId && occupantIds.includes(p.spouseId);
-      const ring = spousePresent ? ' 💍' : '';
+      const ring = spousePresent ? ' 👪' : '';
       lines.push(`${p.firstName} ${p.lastName}${maiden} (${bY}–${dY ?? ''})${ring}`);
     }
     gyResultsEl.textContent = `Plot ${plot}:\n` + lines.join('\n');
@@ -2344,11 +2347,11 @@ async function runSimulation() {
       // Inline familial add buttons for first-degree knowledge
       if (mom) {
         const exists = knowledge.knownRelationships.some(r => r.type==='biological' && ((r.a===p.id&&r.b===mom.id)||(r.a===mom.id&&r.b===p.id)));
-        if (!exists) { const b=document.createElement('button'); b.className='inline-link'; b.textContent='💍 add'; b.title='Add familial connection'; b.addEventListener('click',()=>{addConnection(p.id,mom.id,'familial'); b.replaceWith(doneBadge());}); line.appendChild(b);} else { line.appendChild(doneBadge()); }
+        if (!exists) { const b=document.createElement('button'); b.className='inline-link'; b.textContent='👪 add'; b.title='Add familial connection'; b.addEventListener('click',()=>{addConnection(p.id,mom.id,'familialParent'); b.replaceWith(doneBadge());}); line.appendChild(b);} else { line.appendChild(doneBadge()); }
       }
       if (dad) {
         const exists = knowledge.knownRelationships.some(r => r.type==='biological' && ((r.a===p.id&&r.b===dad.id)||(r.a===dad.id&&r.b===p.id)));
-        if (!exists) { const b=document.createElement('button'); b.className='inline-link'; b.textContent='💍 add'; b.title='Add familial connection'; b.addEventListener('click',()=>{addConnection(p.id,dad.id,'familial'); b.replaceWith(doneBadge());}); line.appendChild(b);} else { line.appendChild(doneBadge()); }
+        if (!exists) { const b=document.createElement('button'); b.className='inline-link'; b.textContent='👪 add'; b.title='Add familial connection'; b.addEventListener('click',()=>{addConnection(p.id,dad.id,'familialParent'); b.replaceWith(doneBadge());}); line.appendChild(b);} else { line.appendChild(doneBadge()); }
       }
       paper.appendChild(line);
     }
@@ -2365,7 +2368,7 @@ async function runSimulation() {
       line.appendChild(span);
       if (h && w) {
         const exists = knowledge.knownRelationships.some(r => r.type==='marriage' && ((r.a===h.id&&r.b===w.id)||(r.a===w.id&&r.b===h.id)));
-        if (!exists) { const b=document.createElement('button'); b.className='inline-link'; b.textContent='💍 add'; b.title='Add marriage connection'; b.addEventListener('click',()=>{addConnection(h.id,w.id,'familial'); b.replaceWith(doneBadge());}); line.appendChild(b);} else { line.appendChild(doneBadge()); }
+        if (!exists) { const b=document.createElement('button'); b.className='inline-link'; b.textContent='👪 add'; b.title='Add marriage connection'; b.addEventListener('click',()=>{addConnection(h.id,w.id,'familial'); b.replaceWith(doneBadge());}); line.appendChild(b);} else { line.appendChild(doneBadge()); }
       }
       paper.appendChild(line);
     }
@@ -2405,10 +2408,10 @@ async function runSimulation() {
       container.style.justifyContent = 'space-between';
       const text = document.createElement('span'); text.textContent = parts.join('\n'); container.appendChild(text);
       // Inline familial buttons
-      if (father) { const ex=knowledge.knownRelationships.some(r=>r.type==='biological'&&((r.a===p.id&&r.b===father.id)||(r.a===father.id&&r.b===p.id))); if(!ex){const b=document.createElement('button'); b.className='inline-link'; b.textContent='💍 add'; b.title='Add familial connection'; b.addEventListener('click',()=>{addConnection(p.id,father.id,'familial'); b.replaceWith(doneBadge());}); container.appendChild(b);} else { container.appendChild(doneBadge()); } }
-      if (mother) { const ex=knowledge.knownRelationships.some(r=>r.type==='biological'&&((r.a===p.id&&r.b===mother.id)||(r.a===mother.id&&r.b===p.id))); if(!ex){const b=document.createElement('button'); b.className='inline-link'; b.textContent='💍 add'; b.title='Add familial connection'; b.addEventListener('click',()=>{addConnection(p.id,mother.id,'familial'); b.replaceWith(doneBadge());}); container.appendChild(b);} else { container.appendChild(doneBadge()); } }
-      if (spouse) { const ex=knowledge.knownRelationships.some(r=>r.type==='marriage'&&((r.a===p.id&&r.b===spouse.id)||(r.a===spouse.id&&r.b===p.id))); if(!ex){const b=document.createElement('button'); b.className='inline-link'; b.textContent='💍 add'; b.title='Add familial connection'; b.addEventListener('click',()=>{addConnection(p.id,spouse.id,'familial'); b.replaceWith(doneBadge());}); container.appendChild(b);} else { container.appendChild(doneBadge()); } }
-      for (const c of children) { const ex=knowledge.knownRelationships.some(r=>r.type==='biological'&&((r.a===p.id&&r.b===c.id)||(r.a===c.id&&r.b===p.id))); if(!ex){const b=document.createElement('button'); b.className='inline-link'; b.textContent='💍 add'; b.title='Add familial connection'; b.addEventListener('click',()=>{addConnection(p.id,c.id,'familial'); b.replaceWith(doneBadge());}); container.appendChild(b);} else { container.appendChild(doneBadge()); } }
+      if (father) { const ex=knowledge.knownRelationships.some(r=>r.type==='biological'&&((r.a===p.id&&r.b===father.id)||(r.a===father.id&&r.b===p.id))); if(!ex){const b=document.createElement('button'); b.className='inline-link'; b.textContent='👪 add'; b.title='Add familial connection'; b.addEventListener('click',()=>{addConnection(p.id,father.id,'familialParent'); b.replaceWith(doneBadge());}); container.appendChild(b);} else { container.appendChild(doneBadge()); } }
+      if (mother) { const ex=knowledge.knownRelationships.some(r=>r.type==='biological'&&((r.a===p.id&&r.b===mother.id)||(r.a===mother.id&&r.b===p.id))); if(!ex){const b=document.createElement('button'); b.className='inline-link'; b.textContent='👪 add'; b.title='Add familial connection'; b.addEventListener('click',()=>{addConnection(p.id,mother.id,'familialParent'); b.replaceWith(doneBadge());}); container.appendChild(b);} else { container.appendChild(doneBadge()); } }
+      if (spouse) { const ex=knowledge.knownRelationships.some(r=>r.type==='marriage'&&((r.a===p.id&&r.b===spouse.id)||(r.a===spouse.id&&r.b===p.id))); if(!ex){const b=document.createElement('button'); b.className='inline-link'; b.textContent='👪 add'; b.title='Add familial connection'; b.addEventListener('click',()=>{addConnection(p.id,spouse.id,'familial'); b.replaceWith(doneBadge());}); container.appendChild(b);} else { container.appendChild(doneBadge()); } }
+      for (const c of children) { const ex=knowledge.knownRelationships.some(r=>r.type==='biological'&&((r.a===p.id&&r.b===c.id)||(r.a===c.id&&r.b===p.id))); if(!ex){const b=document.createElement('button'); b.className='inline-link'; b.textContent='👪 add'; b.title='Add familial connection'; b.addEventListener('click',()=>{addConnection(p.id,c.id,'familialParent'); b.replaceWith(doneBadge());}); container.appendChild(b);} else { container.appendChild(doneBadge()); } }
       paper.appendChild(container);
     }
     if (paper.childNodes.length <= 1 && !global) { const none=document.createElement('div'); none.textContent='No items for that year.'; paper.appendChild(none); }

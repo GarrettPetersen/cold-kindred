@@ -227,6 +227,23 @@ button.secondary {
     overflow: auto;
     white-space: pre-wrap;
 }
+.newspaper {
+    background: #fffdf5;
+    color: #111;
+    border: 1px solid #e0dccf;
+    border-radius: 8px;
+    padding: 12px;
+}
+.masthead {
+    font-family: "UnifrakturCook", "Old English Text MT", "IM Fell English SC", Georgia, serif;
+    font-size: 28px;
+    text-align: center;
+    margin-bottom: 8px;
+}
+.headline { font-weight: 700; font-size: 18px; margin: 12px 0 6px; text-align: center; }
+.lede { font-size: 14px; line-height: 1.5; margin-bottom: 12px; }
+.section-cap { font-weight: 700; margin-top: 10px; border-top: 1px solid #e0dccf; padding-top: 6px; }
+.story-line { margin: 4px 0; }
 
 .person-header {
     font-weight: 600;

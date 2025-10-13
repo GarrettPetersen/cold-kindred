@@ -1,4 +1,5 @@
 // styles are linked in index.html
+import { getGlobalNewsStory } from './newsStories.js';
 
 const app = document.getElementById('app');
 
@@ -2311,8 +2312,21 @@ async function runSimulation() {
     const y = Number(newsYearEl.value || 0);
     const cityId = result.playerCityId;
     newsResultsEl.innerHTML = '';
+    // Newspaper masthead and lead story
+    const cityName = getCityName(cityId) || 'City';
+    const papers = ['Times','Tribune','Herald','Post','Gazette','Courier','Sun','Star'];
+    const pick = papers[Math.floor((result.seed + cityId + y) % papers.length)];
+    const mast = document.createElement('div'); mast.className = 'masthead'; mast.textContent = `${cityName} ${pick}`;
+    const paper = document.createElement('div'); paper.className = 'newspaper';
+    paper.appendChild(mast);
+    const global = getGlobalNewsStory(y);
+    if (global) {
+      const h = document.createElement('div'); h.className = 'headline'; h.textContent = global.title; paper.appendChild(h);
+      const b = document.createElement('div'); b.className = 'lede'; b.textContent = global.body; paper.appendChild(b);
+    }
+    newsResultsEl.appendChild(paper);
     // Birth announcements
-    const birthsHeader = document.createElement('div'); birthsHeader.textContent = 'Birth Announcements'; birthsHeader.style.fontWeight='600'; newsResultsEl.appendChild(birthsHeader);
+    const birthsHeader = document.createElement('div'); birthsHeader.className='section-cap'; birthsHeader.textContent = 'Birth Announcements'; paper.appendChild(birthsHeader);
     for (const ev of result.events) {
       if (ev.type !== 'BIRTH') continue;
       if (ev.year !== y) continue;
@@ -2320,23 +2334,23 @@ async function runSimulation() {
       const pid = ev.people[0]; const p = personByIdPre.get(pid); if (!p) continue;
       const mom = p.motherId ? personByIdPre.get(p.motherId) : null;
       const dad = p.fatherId ? personByIdPre.get(p.fatherId) : null;
-      const line = document.createElement('div');
-      line.textContent = `${p.firstName} ${p.lastName} – born ${ev.details?.date || y} – to ${mom ? mom.firstName + ' ' + mom.lastName : 'Unknown'}${dad ? ' and ' + dad.firstName + ' ' + dad.lastName : ''}`;
-      newsResultsEl.appendChild(line);
+      const line = document.createElement('div'); line.className='story-line';
+      line.textContent = `${p.firstName} ${p.lastName}, born ${ev.details?.date || y}, to ${mom ? mom.firstName + ' ' + mom.lastName : 'Unknown'}${dad ? ' and ' + dad.firstName + ' ' + dad.lastName : ''}.`;
+      paper.appendChild(line);
     }
     // Marriage announcements
-    const marrHeader = document.createElement('div'); marrHeader.textContent = 'Marriage Announcements'; marrHeader.style.fontWeight='600'; marrHeader.style.marginTop='8px'; newsResultsEl.appendChild(marrHeader);
+    const marrHeader = document.createElement('div'); marrHeader.className='section-cap'; marrHeader.textContent = 'Marriage Announcements'; paper.appendChild(marrHeader);
     for (const ev of result.events) {
       if (ev.type !== 'MARRIAGE') continue;
       if (ev.year !== y) continue;
       if (ev.details?.cityId !== cityId) continue;
       const [a,b] = ev.people; const h = personByIdPre.get(a); const w = personByIdPre.get(b);
-      const line = document.createElement('div');
-      line.textContent = `${h?.firstName || ''} ${h?.lastName || ''} & ${w?.firstName || ''} ${w?.lastName || ''} – married ${ev.details?.date || y}`;
-      newsResultsEl.appendChild(line);
+      const line = document.createElement('div'); line.className='story-line';
+      line.textContent = `${h?.firstName || ''} ${h?.lastName || ''} and ${w?.firstName || ''} ${w?.lastName || ''} were married ${ev.details?.date || y}.`;
+      paper.appendChild(line);
     }
     // Obituaries
-    const obitHeader = document.createElement('div'); obitHeader.textContent = 'Obituaries'; obitHeader.style.fontWeight='600'; obitHeader.style.marginTop='8px'; newsResultsEl.appendChild(obitHeader);
+    const obitHeader = document.createElement('div'); obitHeader.className='section-cap'; obitHeader.textContent = 'Obituaries'; paper.appendChild(obitHeader);
     for (const e of result.events) {
       if (e.type !== 'DEATH') continue;
       if (e.details?.cityId !== cityId) continue;
@@ -2377,9 +2391,9 @@ async function runSimulation() {
       if (spouse) { const b=document.createElement('button'); b.className='start secondary'; b.textContent='💍 Add'; b.title='Add familial connection'; b.addEventListener('click',()=>addConnection(p.id,spouse.id,'familial')); actions.appendChild(b); }
       for (const c of children) { const b=document.createElement('button'); b.className='start secondary'; b.textContent='💍 Add'; b.title='Add familial connection'; b.addEventListener('click',()=>addConnection(p.id,c.id,'familial')); actions.appendChild(b); }
       if (actions.childNodes.length) container.appendChild(actions);
-      newsResultsEl.appendChild(container);
+      paper.appendChild(container);
     }
-    if (!newsResultsEl.childNodes.length) newsResultsEl.textContent = 'No obituaries for that selection.';
+    if (paper.childNodes.length <= 1 && !global) { const none=document.createElement('div'); none.textContent='No items for that year.'; paper.appendChild(none); }
   }
   newsSearchBtn?.addEventListener('click', () => { newsResultsEl.innerHTML=''; renderNewsYear(); });
 

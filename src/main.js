@@ -8,7 +8,7 @@ app.innerHTML = `
     <button id="menuToggle" class="hamburger" aria-label="Menu">☰</button>
     <section class="hero" id="hero">
       <h1>Cold Kindred</h1>
-      <p class="tagline">A procedural cold case investigation.</p>
+      <p class="tagline">A procedurally generated genealogical murder mystery.</p>
       <button id="start" class="start">Start Investigation</button>
     </section>
 
@@ -2491,14 +2491,14 @@ async function runSimulation() {
     renderInterviewMenu(personId);
     if (result.conversations[personId].length === 0) {
       // FBI introduction + NPC response based on temperament
-      result.conversations[personId].push({ from: 'you', text: 'I’m with the FBI. I have a few questions.', ts: Date.now() });
+      result.conversations[personId].push({ from: 'you', text: 'I'm with the FBI. I have a few questions.', ts: Date.now() });
       const friendlyLines = [
         'Of course, officer. What would you like to know?',
-        'I’ll help any way I can.',
+        'I'll help any way I can.',
         'Sure. Ask away.'
       ];
       const hostileLines = [
-        'I don’t have anything to say to you.',
+        'I don't have anything to say to you.',
         'Get off my porch.',
         'Not interested. Move along.'
       ];
@@ -2521,7 +2521,7 @@ async function runSimulation() {
       if (!p.friendly && dropped) {
         const cityId = result.playerCityId;
         result.evidence[cityId] = result.evidence[cityId] || [];
-        result.evidence[cityId].push({ id: `cig-${personId}`, name: `${p.firstName} ${p.lastName}’s Cigarette`, type: 'cigarette', actions: ['dna-person'], personId });
+        result.evidence[cityId].push({ id: `cig-${personId}`, name: `${p.firstName} ${p.lastName}'s Cigarette`, type: 'cigarette', actions: ['dna-person'], personId });
       }
     }
     setActivePanel('interview');
@@ -2544,9 +2544,9 @@ async function runSimulation() {
         result.conversations[personId].push({ from:'npc', text: 'Sure. If it helps.', ts: Date.now() });
         const cityId = result.playerCityId;
         result.evidence[cityId] = result.evidence[cityId] || [];
-        result.evidence[cityId].push({ id:`swab-${personId}`, name: `${p.firstName} ${p.lastName}’s Cheek Swab`, type:'swab', actions:['dna-person'], personId });
+        result.evidence[cityId].push({ id:`swab-${personId}`, name: `${p.firstName} ${p.lastName}'s Cheek Swab`, type:'swab', actions:['dna-person'], personId });
       } else {
-        result.conversations[personId].push({ from:'npc', text: 'I’m not comfortable with that.', ts: Date.now() });
+        result.conversations[personId].push({ from:'npc', text: 'I'm not comfortable with that.', ts: Date.now() });
       }
       renderTranscript(personId);
     });
@@ -2575,14 +2575,14 @@ async function runSimulation() {
     });
     submit.addEventListener('click', () => {
       const pid = Number(input.dataset.personId || 0);
-      if (!pid) { result.conversations[personId].push({ from:'npc', text: 'I don’t know them.', ts: Date.now() }); renderTranscript(personId); return; }
+      if (!pid) { result.conversations[personId].push({ from:'npc', text: 'I don't know them.', ts: Date.now() }); renderTranscript(personId); return; }
       // Horizon check: reuse family questions with target
       showFamilyQuestions(personId, pid);
     });
     ul.appendChild(aboutWrap);
 
     // Navigation options
-    const otherBtn = document.createElement('button'); otherBtn.className='menu-btn'; otherBtn.textContent='Let’s talk about something else'; otherBtn.addEventListener('click', ()=>renderInterviewMenu(personId));
+    const otherBtn = document.createElement('button'); otherBtn.className='menu-btn'; otherBtn.textContent='Let's talk about something else'; otherBtn.addEventListener('click', ()=>renderInterviewMenu(personId));
     const byeBtn = document.createElement('button'); byeBtn.className='menu-btn'; byeBtn.textContent='Goodbye for now'; byeBtn.addEventListener('click', ()=>{ result.conversations[personId].push({ from:'you', text:'Goodbye for now.', ts:Date.now() }); renderTranscript(personId); });
     ul.appendChild(otherBtn); ul.appendChild(byeBtn);
     intMenu.appendChild(ul);
@@ -2595,7 +2595,7 @@ async function runSimulation() {
     if (!p) return;
     intMenu.innerHTML = '';
     const ul = document.createElement('div'); ul.className='list';
-    const label = (me,str)=> (targetId===speakerId? str.replaceAll('your', 'your') : str.replaceAll('your', `${who.firstName}’s`));
+    const label = (me,str)=> (targetId===speakerId? str.replaceAll('your', 'your') : str.replaceAll('your', `${who.firstName}'s`));
     const qs = [
       { k:'parents', text:'Who are your parents?' },
       { k:'siblings', text:'Who are your siblings?' },
@@ -2679,7 +2679,7 @@ async function runSimulation() {
         const to = mv.details?.toCityId ? getCityName(mv.details.toCityId) : (mv.details?.to || 'Unknown');
         pushLine(`In ${mv.year} I moved from ${from} to ${to}.`);
       }
-      if (!moves.length) pushLine('I haven’t moved much since then.');
+      if (!moves.length) pushLine('I haven't moved much since then.');
     }
     renderTranscript(speakerId);
   }

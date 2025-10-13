@@ -2248,7 +2248,8 @@ async function runSimulation() {
       const maiden = (p.sex === 'F' && p.maidenName) ? ` (née ${p.maidenName})` : '';
       const spousePresent = p.spouseId && occupantIds.includes(p.spouseId);
       const ring = spousePresent ? ' 👪' : '';
-      lines.push(`${p.firstName} ${p.lastName}${maiden} (${bY}–${dY ?? ''})${ring}`);
+      const birthCity = p.cityId ? getCityName(p.cityId) : 'Unknown';
+      lines.push(`${p.firstName} ${p.lastName}${maiden} (${bY}–${dY ?? ''})${ring} — Born in ${birthCity}`);
     }
     gyResultsEl.textContent = `Plot ${plot}:\n` + lines.join('\n');
   });

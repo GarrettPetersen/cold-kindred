@@ -2313,7 +2313,8 @@ async function runSimulation() {
     const cityId = result.playerCityId;
     newsResultsEl.innerHTML = '';
     // Newspaper masthead and lead story
-    const cityName = getCityName(cityId) || 'City';
+    const fullName = getCityName(cityId) || 'City, ST';
+    const cityName = fullName.split(',')[0];
     const papers = ['Times','Tribune','Herald','Post','Gazette','Courier','Sun','Star'];
     const pick = papers[Math.floor((result.seed + cityId + y) % papers.length)];
     const mast = document.createElement('div'); mast.className = 'masthead'; mast.textContent = `${cityName} ${pick}`;

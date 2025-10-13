@@ -2,13 +2,13 @@
 
 A single-player, browser-based cold case investigation game inspired by the Golden State Killer investigation. The game simulates a multi-generation US population, injects a murder, and challenges the player to use DNA genealogy plus detective work to identify the killer.
 
-### Vision
-- Procedurally generate five generations from ~200 founders (100 men, 100 women).
-- Model marriages, births (including affairs), moves between cities, and deaths.
-- Choose murderer and victim(s) mid-simulation; store year, location, modus operandi.
-- Randomly sample non-murderers who submit DNA to a consumer database.
-- Let the player use tools (DNA queries, interviews, records search, map, family tree) to triangulate via relatives (e.g., “second cousin match: John Brown, Chicago, b. 1966”).
-- Persist game state to `localStorage` on the player’s device.
+### Vision (current)
+- Year-by-year US population simulation (1900–2025) with founders backdated to 1865–1895 to create early-1900 births.
+- Model marriages, non-married partnerships, births (incl. out-of-wedlock and affair-born), moves, jobs, retirement, and deaths with era-aware mortality (war risks for combat-age men).
+- Cremation/burial modeled with era-appropriate probabilities; per-city graveyards with shared plots and lookups.
+- Murder injected (1970–2000); killer/victim selected with close-kin bans; narrative overlays and generated killer moniker.
+- DNA systems: CODIS and consumer DNA databases with increased modern adoption; close-kin bans; guaranteed distant (blood) relative if none found.
+- Player tools: map/airport travel, newspaper archives, public records, CODIS, graveyard, evidence locker, resident interviews, and a knowledge-limited Connections graph.
 
 ### Tech Stack
 - Vanilla JS + Vite for dev/build
@@ -22,7 +22,8 @@ A single-player, browser-based cold case investigation game inspired by the Gold
 ├─ index.html          # App shell
 ├─ src/
 │  ├─ main.js          # Entry point
-│  └─ style.css        # Base styles
+│  ├─ style.css        # Styles (UI, newspaper, spinner, mobile menu)
+│  └─ newsStories.js   # Global news stories (1900–2025) { title, body }
 ├─ package.json        # Scripts and dependencies
 └─ dist/               # Production build output (generated)
 ```
@@ -32,20 +33,30 @@ A single-player, browser-based cold case investigation game inspired by the Gold
 - `npm run build` – build production assets to `dist/`
 - `npm run preview` – preview built app locally
 
-### Gameplay Outline
-1. Population Simulation (G0 → G4)
-   - Founders: ~100 men, ~100 women.
-   - Lifecycle: pairings/marriages, births (incl. out-of-wedlock), moves, deaths.
-   - Geography: US cities with migration probabilities.
-2. Crime Injection
-   - Choose murderer and victim(s) in G2–G3.
-   - Store year, city, MO, starting clues.
-3. DNA Database Sampling
-   - Random sample of non‑murderers submit DNA; store identifiers and kinship links.
-4. Player Experience
-   - Intro narrative with generated case title.
-   - Tools: DNA match search, map view, family tree, records, interviews (consent/refusal), request DNA.
-   - Goal: identify the murderer and support with evidence.
+### Simulation Highlights
+- Founders: 765 with unique surnames; traits (skin tone, hair) region-weighted and heritable.
+- Fertility (per mother birth cohort):
+  - <1910: 5–7; 1910–1944: 4–6; 1945–1964: 3.75–5.25; 1965–1984: 2.4–3.2; 1985+: 1.7–2.5
+  - Partnerships: 0.85× before 1950; 0.75× after
+- Marriage rates: very high early generations (~0.95), taper for later cohorts.
+- Jobs: period-appropriate; job-change events skip retirees.
+- Events: all linked to cityId; family units move together; marriages only within same city.
+- Deaths: cause of death (age/year-aware), exact dates; burials assign plots, survivors/predeceased tracked for obits.
+
+### Cities
+- Trimmed for density: New York, Los Angeles, Chicago, Houston, Phoenix, Philadelphia, San Diego, San Francisco, Seattle, Portland, Miami, Atlanta, New Orleans, Denver, Salt Lake City, Oklahoma City, St. Louis, Minneapolis.
+
+### DNA & CODIS
+- Consumer DNA: probability increases after 1990 (higher modern adoption).
+- CODIS: rare LE profiles yearly; killer moniker and victim added upon testing evidence (current year).
+- Matches: CODIS search shows only profiles in CODIS; close-kin bans applied; forced distant blood relative guaranteed if none present.
+- Moniker: killer has a separate moniker profile sharing DNA with the real person (100% match).
+
+### UI / UX
+- Overlays: Simulation feed and title card with generated case narrative.
+- Tabs: Evidence, Records (city/year/letter filters; inline add), Graveyard (plot lookup), CODIS (spinner + results; inline 🧬 add), Airport/Map (travel with animation), Connections (knowledge-limited graph), Newspaper (city masthead with UnifrakturMaguntia; global lead; births/marriages/obits with inline 💍 add).
+- Mobile: hamburger menu toggles full-screen sidebar.
+- Interviews: resident search with typeahead; simple greeting loop; conversations persisted.
 
 ### Save/Load
 - State saved under a namespaced key, e.g. `ck:v1:save:<slot>`.

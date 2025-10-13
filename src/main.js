@@ -2145,10 +2145,27 @@ async function runSimulation() {
     const plot = Number(gyPlotEl.value || 0);
     const gy = result.graveyards[cityId];
     if (!gy || !plot || !gy.plots[plot]) { gyResultsEl.textContent = 'No records for that plot.'; return; }
-    const names = gy.plots[plot].map(id => {
-      const p = personByIdPre.get(id); return p ? `${p.firstName} ${p.lastName}` : `Person #${id}`;
-    });
-    gyResultsEl.textContent = `Plot ${plot}:\n` + names.join('\n');
+    const occupantIds = gy.plots[plot].slice();
+    function deathYearOf(pid) {
+      const list = eventsByPerson.get(pid) || [];
+      for (let i = list.length - 1; i >= 0; i--) {
+        const e = result.events[list[i] - 1];
+        if (e && e.type === 'DEATH') return e.year;
+      }
+      return null;
+    }
+    const lines = [];
+    for (const id of occupantIds) {
+      const p = personByIdPre.get(id);
+      if (!p) { lines.push(`Person #${id}`); continue; }
+      const bY = year(p.birthDate);
+      const dY = deathYearOf(p.id);
+      const maiden = (p.sex === 'F' && p.maidenName) ? ` (née ${p.maidenName})` : '';
+      const spousePresent = p.spouseId && occupantIds.includes(p.spouseId);
+      const ring = spousePresent ? ' 💍' : '';
+      lines.push(`${p.firstName} ${p.lastName}${maiden} (${bY}–${dY ?? ''})${ring}`);
+    }
+    gyResultsEl.textContent = `Plot ${plot}:\n` + lines.join('\n');
   });
 
   // CODIS rendering

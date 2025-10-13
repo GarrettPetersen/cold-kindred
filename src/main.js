@@ -1696,7 +1696,7 @@ async function runSimulation() {
   overlayTitle.classList.add('visible');
   titleContinueBtn.onclick = () => {
     overlayTitle.classList.remove('visible');
-    if (typeof setActivePanel === 'function') setActivePanel('evidence');
+    if (typeof setActivePanel === 'function') setActivePanel('home');
     if (playerCityNameEl && result.playerCityId) playerCityNameEl.textContent = getCityName(result.playerCityId);
   };
 
@@ -1956,7 +1956,7 @@ async function runSimulation() {
                 if (locText) locText.textContent = `Location: ${c.name}`;
                 // Go to main panel
                 if (typeof setActivePanel === 'function') {
-                  setActivePanel('evidence');
+                  setActivePanel('home');
                 }
               }
             }

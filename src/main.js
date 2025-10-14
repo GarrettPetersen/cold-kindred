@@ -283,6 +283,7 @@ async function runSimulation() {
 
   // ---------- Helpers ----------
   let nextId = 1;
+  let nextTwinGroupId = 1;
   function createPerson(fields) {
     const person = {
       id: nextId++,
@@ -299,6 +300,10 @@ async function runSimulation() {
       partnerId: fields.partnerId || null,
       bioFatherId: fields.bioFatherId || null,
       bioMotherId: fields.bioMotherId || null,
+      twinGroupId: fields.twinGroupId || null, // shared id for twins
+      twinType: fields.twinType || null, // 'MZ' (identical) | 'DZ' (fraternal)
+      fingerprintHash: fields.fingerprintHash || (`fp-${Math.floor(random()*1e9).toString(36)}`),
+      hasPrintsOnFile: fields.hasPrintsOnFile != null ? !!fields.hasPrintsOnFile : (random() < 0.12),
       cityId: fields.cityId || null,
       city: fields.cityId ? getCityName(fields.cityId) : (fields.city || null),
       skinTone: fields.skinTone || null, // 1..5 Fitzpatrick
@@ -997,9 +1002,9 @@ async function runSimulation() {
       // Sample integer around expectation (Poisson-ish approximation)
       let numKids = Math.max(0, Math.round(baseKids + (random() - 0.5)));
       numKids = Math.min(numKids, 8);
-      for (let k = 0; k < numKids; k++) {
-        const sex = random() < 0.5 ? 'M' : 'F';
-        const firstName = sex === 'M' ? pick(MALE_FIRST) : pick(FEMALE_FIRST);
+      // Pregnancy-level generation; may yield twins at real-life rates
+      let k = 0;
+      while (k < numKids) {
         // Choose family surname: if out of wedlock (partner pair), take mother's surname; if affair in marriage, keep family (husband's) surname; otherwise father's
         let lastName = father.lastName;
         const isPartnerPair = !isMarriedPair;
@@ -1007,6 +1012,8 @@ async function runSimulation() {
           lastName = mother.lastName || lastName;
         }
         const birthDate = randomChildBirthDate(year(mother.birthDate));
+        const by = year(birthDate);
+        const ageAtBirth = by - year(mother.birthDate);
         // Determine biological father (affair-born children possible only heterosexual)
         let bioFatherId = father.id;
         const fromAffair = isMarriedPair ? (random() < 0.08) : (random() < 0.12);
@@ -1016,32 +1023,85 @@ async function runSimulation() {
           const maleAdultsSameCity = result.people.filter(p => p.sex === 'M' && p.id !== father.id && (yb - p.birthYear) >= 18 && p.cityId === city);
           if (maleAdultsSameCity.length) bioFatherId = maleAdultsSameCity[Math.floor(random() * maleAdultsSameCity.length)].id;
         }
-        const child = createPerson({
-          firstName,
+        // Twin probabilities
+        function fraternalTwinProb(age, birthYear) {
+          let base = 0.0;
+          if (age < 20) base = 0.006;
+          else if (age < 25) base = 0.008;
+          else if (age < 30) base = 0.012;
+          else if (age < 35) base = 0.016;
+          else if (age < 40) base = 0.022;
+          else if (age < 45) base = 0.018;
+          else base = 0.010;
+          const era = birthYear >= 2000 ? 1.2 : (birthYear >= 1980 ? 1.0 : 0.7);
+          return Math.min(0.04, base * era);
+        }
+        const pMZ = 0.0035; // identical ~0.35%
+        const pDZ = fraternalTwinProb(ageAtBirth, by);
+        const twinRoll = random();
+        const isTwin = twinRoll < (pMZ + pDZ);
+        const twinType = isTwin ? (twinRoll < pMZ ? 'MZ' : 'DZ') : null;
+        const groupId = isTwin ? nextTwinGroupId++ : null;
+        // First baby
+        const sexA = random() < 0.5 ? 'M' : 'F';
+        const firstNameA = sexA === 'M' ? pick(MALE_FIRST) : pick(FEMALE_FIRST);
+        const childA = createPerson({
+          firstName: firstNameA,
           lastName,
-          sex,
+          sex: sexA,
           birthDate,
           generation: gen + 1,
-          fatherId: father.id, // family father (partner or spouse)
+          fatherId: father.id,
           motherId: mother.id,
           bioFatherId,
           bioMotherId: mother.id,
-          cityId: (random() < 0.5 ? father.cityId : mother.cityId) || pickWeightedCityId()
+          cityId: (random() < 0.5 ? father.cityId : mother.cityId) || pickWeightedCityId(),
+          twinGroupId: groupId,
+          twinType
         });
-        child.skinTone = inheritSkinTone(father, mother);
-        child.hairColor = inheritHairColor(father, mother);
-        // Knowledge inheritance with noise
+        childA.skinTone = inheritSkinTone(father, mother);
+        childA.hairColor = inheritHairColor(father, mother);
         const baseKR = Math.round(((father.knowledgeRadius || 3) + (mother.knowledgeRadius || 3)) / 2);
-        child.knowledgeRadius = Math.max(2, Math.min(5, baseKR + (random() < 0.2 ? (random() < 0.5 ? -1 : 1) : 0)));
-        child.knowsAffairs = random() < 0.35 || (father.knowsAffairs || mother.knowsAffairs);
-        validateBabyAttributes(child, father, mother);
-        children.push(child);
+        childA.knowledgeRadius = Math.max(2, Math.min(5, baseKR + (random() < 0.2 ? (random() < 0.5 ? -1 : 1) : 0)));
+        childA.knowsAffairs = random() < 0.35 || (father.knowsAffairs || mother.knowsAffairs);
+        validateBabyAttributes(childA, father, mother);
+        children.push(childA);
         births++;
-        // record birth event with exact date
-        const outOfWedlock = isPartnerPair;
-        const by = year(birthDate); const bm = new Date(birthDate).getUTCMonth() + 1; const bd = new Date(birthDate).getUTCDate();
-        addEvent({ year: by, type: 'BIRTH', people: [child.id], details: { cityId: child.cityId, outOfWedlock, fromAffair: fromAffair && bioFatherId !== father.id, date: isoFromYMD(by, bm, bd), month: bm } });
-        
+        const bmA = new Date(birthDate).getUTCMonth() + 1; const bdA = new Date(birthDate).getUTCDate();
+        addEvent({ year: by, type: 'BIRTH', people: [childA.id], details: { cityId: childA.cityId, outOfWedlock: isPartnerPair, fromAffair: fromAffair && bioFatherId !== father.id, date: isoFromYMD(by, bmA, bdA), month: bmA } });
+
+        // Optional second twin baby
+        if (isTwin) {
+          const sexB = twinType === 'MZ' ? sexA : (random() < 0.5 ? 'M' : 'F');
+          const firstNameB = sexB === 'M' ? pick(MALE_FIRST) : pick(FEMALE_FIRST);
+          const childB = createPerson({
+            firstName: firstNameB,
+            lastName,
+            sex: sexB,
+            birthDate,
+            generation: gen + 1,
+            fatherId: father.id,
+            motherId: mother.id,
+            bioFatherId,
+            bioMotherId: mother.id,
+            cityId: (random() < 0.5 ? father.cityId : mother.cityId) || pickWeightedCityId(),
+            twinGroupId: groupId,
+            twinType
+          });
+          childB.skinTone = inheritSkinTone(father, mother);
+          childB.hairColor = inheritHairColor(father, mother);
+          const baseKRB = Math.round(((father.knowledgeRadius || 3) + (mother.knowledgeRadius || 3)) / 2);
+          childB.knowledgeRadius = Math.max(2, Math.min(5, baseKRB + (random() < 0.2 ? (random() < 0.5 ? -1 : 1) : 0)));
+          childB.knowsAffairs = random() < 0.35 || (father.knowsAffairs || mother.knowsAffairs);
+          validateBabyAttributes(childB, father, mother);
+          children.push(childB);
+          births++;
+          const bmB = bmA; const bdB = bdA;
+          addEvent({ year: by, type: 'BIRTH', people: [childB.id], details: { cityId: childB.cityId, outOfWedlock: isPartnerPair, fromAffair: fromAffair && bioFatherId !== father.id, date: isoFromYMD(by, bmB, bdB), month: bmB } });
+          k += 2; // count as two children against expectation
+        } else {
+          k += 1;
+        }
       }
     }
 
@@ -1489,11 +1549,22 @@ async function runSimulation() {
     if (!murderCommitted && y === murderYear) {
       const adultPool = adults.slice();
       if (adultPool.length >= 2) {
-        // Choose killer: prefer preselected, but ensure adult & alive at this year
-        let killer = personByIdPre.get(killerIdFixed) || adultPool[Math.floor(random() * adultPool.length)];
-        if ((y - killer.birthYear) < 18 || !killer.alive) {
-          killer = adultPool[Math.floor(random() * adultPool.length)];
-          killerIdFixed = killer.id; // update stored killer if we had to swap
+        // Choose killer: prefer preselected, but ensure adult & alive at this year.
+        // Bias to 90% male if possible.
+        const pre = personByIdPre.get(killerIdFixed);
+        let killer = pre && (y - pre.birthYear) >= 18 && pre.alive ? pre : null;
+        if (!killer) {
+          const males = adultPool.filter(p => p.sex === 'M');
+          const females = adultPool.filter(p => p.sex === 'F');
+          if (males.length && females.length) {
+            const pickMale = random() < 0.9; // 90% male killers
+            const pool = pickMale ? males : females;
+            killer = pool[Math.floor(random() * pool.length)];
+          } else {
+            const pool = males.length ? males : adultPool;
+            killer = pool[Math.floor(random() * pool.length)];
+          }
+          killerIdFixed = killer.id;
         }
         // Murderer temperament: always unfriendly
         killer.friendly = false;
@@ -2321,13 +2392,21 @@ async function runSimulation() {
       const label = pr.moniker ? pr.moniker : (p ? `${p.firstName} ${p.lastName}` : `Profile #${idx+1}`);
       const sortKey = pr.moniker ? pr.moniker.toUpperCase() : (p ? `${p.lastName || ''} ${p.firstName || ''}`.toUpperCase() : label.toUpperCase());
       const cityName = pr.cityId ? getCityName(pr.cityId) : '';
-      return { pr, idx, label, sortKey, cityName };
+      // Determine sex for display: derive from linked person, or killer mapping for moniker
+      let sex = p ? p.sex : '';
+      if (!sex && pr.moniker && pr.dnaId && pr.dnaId.startsWith('killer-')) {
+        const kid = Number(pr.dnaId.slice('killer-'.length));
+        const kp = personByIdPre.get(kid);
+        if (kp) sex = kp.sex;
+      }
+      return { pr, idx, label, sortKey, cityName, sex };
     }).sort((a,b) => a.sortKey.localeCompare(b.sortKey));
-    entries.forEach(({ pr, idx, label, cityName }) => {
+    entries.forEach(({ pr, idx, label, cityName, sex }) => {
       const row = document.createElement('div');
       row.className = 'row';
       const victimTag = (pr.personId && pr.personId === result.murderVictimId) ? ' (Murder victim)' : '';
-      row.textContent = `${label}${victimTag} – added ${pr.year || ''}${cityName ? ' — ' + cityName : ''}`;
+      const sexPart = sex ? ` · ${sex}` : '';
+      row.textContent = `${label}${sexPart}${victimTag} – added ${pr.year || ''}${cityName ? ' — ' + cityName : ''}`;
       if (pr.moniker) row.classList.add('killer');
       row.addEventListener('click', () => showCodisDropdown(row, pr.personId));
       codisListEl.appendChild(row);
@@ -2371,7 +2450,15 @@ async function runSimulation() {
     // Header: which profile we are matching from
     const header = document.createElement('div');
     header.className = 'title-sub';
-    header.textContent = `Matches for ${base.firstName} ${base.lastName}`;
+    let displayLabel = '';
+    if (personId == null) {
+      const mon = result.codis.profiles.find(pr => pr.personId === null && pr.moniker);
+      displayLabel = mon ? mon.moniker : `${base.firstName} ${base.lastName}`;
+    } else {
+      displayLabel = `${base.firstName} ${base.lastName}`;
+    }
+    const sx = base.sex ? ` · ${base.sex}` : '';
+    header.textContent = `Matches for ${displayLabel}${sx}`;
     const adj = new Map();
     function link(u, v) { const a = adj.get(u) || new Set(); a.add(v); adj.set(u, a); }
     for (const p of result.people) {
@@ -2445,6 +2532,30 @@ async function runSimulation() {
       if (!Number.isNaN(kid)) codisIds.add(kid);
     }
     const rows = [];
+    // If both profiles exist (moniker and real person), add an explicit 100% line
+    // Case A: searching from moniker (personId == null) and real-person CODIS profile exists
+    if (personId == null) {
+      const hasRealProfile = result.codis.profiles.some(pr => pr.personId === base.id);
+      if (hasRealProfile) {
+        const line = document.createElement('div');
+        const txt = document.createElement('span');
+        const sx2 = base.sex ? ` · ${base.sex}` : '';
+        txt.textContent = `${base.firstName} ${base.lastName}${sx2} – 100% – same person/identical twin`;
+        line.appendChild(txt);
+        rows.push(line);
+      }
+    } else {
+      // Case B: searching from real person and moniker CODIS profile exists for same DNA
+      const mon = result.codis.profiles.find(pr => pr.personId === null && pr.moniker && pr.dnaId === `killer-${base.id}`);
+      if (mon) {
+        const line = document.createElement('div');
+        const txt = document.createElement('span');
+        const sx2 = base.sex ? ` · ${base.sex}` : '';
+        txt.textContent = `${mon.moniker}${sx2} – 100% – same person/identical twin`;
+        line.appendChild(txt);
+        rows.push(line);
+      }
+    }
     for (const [pid, d] of dist.entries()) {
       if (pid === personId) continue;
       const p = personByIdPre.get(pid);
@@ -2468,7 +2579,8 @@ async function runSimulation() {
 
       const line = document.createElement('div');
       const txt = document.createElement('span');
-      txt.textContent = `${p.firstName} ${p.lastName} – ${pct} – likely ${rel}`;
+      const sx = p.sex ? ` · ${p.sex}` : '';
+      txt.textContent = `${p.firstName} ${p.lastName}${sx} – ${pct} – likely ${rel}`;
       line.appendChild(txt);
       // Inline: add person to knowledge graph (for distant matches especially)
       const known = knowledge.knownPeople.has(pid);
@@ -2523,28 +2635,40 @@ async function runSimulation() {
       const b = document.createElement('div'); b.className = 'lede'; b.textContent = global.body; paper.appendChild(b);
     }
     newsResultsEl.appendChild(paper);
-    // Birth announcements
+    // Birth announcements (twins collapsed into one line for identical or fraternal twins)
     const birthsHeader = document.createElement('div'); birthsHeader.className='section-cap'; birthsHeader.textContent = 'Birth Announcements'; paper.appendChild(birthsHeader);
-    for (const ev of result.events) {
-      if (ev.type !== 'BIRTH') continue;
-      if (ev.year !== y) continue;
-      if (ev.details?.cityId !== cityId) continue;
+    const births = result.events.filter(ev => ev.type==='BIRTH' && ev.year===y && ev.details?.cityId===cityId);
+    // Group by twinGroupId when present and same date
+    const seen = new Set();
+    for (const ev of births) {
+      if (seen.has(ev.people[0])) continue;
       const pid = ev.people[0]; const p = personByIdPre.get(pid); if (!p) continue;
+      const groupId = p.twinGroupId;
+      const sameGroup = groupId ? births.filter(e2 => {
+        const p2 = personByIdPre.get(e2.people[0]||-1);
+        return p2 && p2.twinGroupId===groupId && e2.details?.date===ev.details?.date;
+      }) : [ev];
+      for (const e2 of sameGroup) seen.add(e2.people[0]);
+      const babies = sameGroup.map(e2 => personByIdPre.get(e2.people[0]||-1)).filter(Boolean);
       const mom = p.motherId ? personByIdPre.get(p.motherId) : null;
       const dad = p.fatherId ? personByIdPre.get(p.fatherId) : null;
       const line = document.createElement('div'); line.className='story-line';
-      const span = document.createElement('span');
-      span.textContent = `${p.firstName} ${p.lastName}, born ${ev.details?.date || y}, to ${mom ? mom.firstName + ' ' + mom.lastName : 'Unknown'}${dad ? ' and ' + dad.firstName + ' ' + dad.lastName : ''}.`;
-      line.appendChild(span);
-      // Inline familial add buttons for first-degree knowledge
+      const names = babies.map(b => `${b.firstName} ${b.lastName}`).join(' and ');
+      const before = document.createElement('span'); before.textContent = `${names}, born ${ev.details?.date || y}, to `; line.appendChild(before);
       if (mom) {
-        const exists = knowledge.knownRelationships.some(r => r.type==='biological' && ((r.a===p.id&&r.b===mom.id)||(r.a===mom.id&&r.b===p.id)));
-        if (!exists) { const b=document.createElement('button'); b.className='inline-link'; b.textContent='👪 add'; b.title='Add familial connection'; b.addEventListener('click',()=>{addConnection(p.id,mom.id,'familialParent'); b.replaceWith(doneBadge());}); line.appendChild(b);} else { line.appendChild(doneBadge()); }
+        const momSpan = document.createElement('span'); momSpan.textContent = `${mom.firstName} ${mom.lastName}`; line.appendChild(momSpan);
+        const existsMAny = babies.every(b => knowledge.knownRelationships.some(r => r.type==='biological' && ((r.a===b.id&&r.b===mom.id)||(r.a===mom.id&&r.b===b.id))));
+        if (!existsMAny) { const bBtn=document.createElement('button'); bBtn.className='inline-link'; bBtn.textContent='👪 add'; bBtn.title='Add familial connection'; bBtn.addEventListener('click',()=>{ babies.forEach(baby=>addConnection(baby.id,mom.id,'familialParent')); bBtn.replaceWith(doneBadge());}); line.appendChild(bBtn);} else { line.appendChild(doneBadge()); }
+      } else {
+        const unk = document.createElement('span'); unk.textContent = 'Unknown'; line.appendChild(unk);
       }
       if (dad) {
-        const exists = knowledge.knownRelationships.some(r => r.type==='biological' && ((r.a===p.id&&r.b===dad.id)||(r.a===dad.id&&r.b===p.id)));
-        if (!exists) { const b=document.createElement('button'); b.className='inline-link'; b.textContent='👪 add'; b.title='Add familial connection'; b.addEventListener('click',()=>{addConnection(p.id,dad.id,'familialParent'); b.replaceWith(doneBadge());}); line.appendChild(b);} else { line.appendChild(doneBadge()); }
+        const andSpan = document.createElement('span'); andSpan.textContent = ' and '; line.appendChild(andSpan);
+        const dadSpan = document.createElement('span'); dadSpan.textContent = `${dad.firstName} ${dad.lastName}`; line.appendChild(dadSpan);
+        const existsDAny = babies.every(b => knowledge.knownRelationships.some(r => r.type==='biological' && ((r.a===b.id&&r.b===dad.id)||(r.a===dad.id&&r.b===b.id))));
+        if (!existsDAny) { const bBtn=document.createElement('button'); bBtn.className='inline-link'; bBtn.textContent='👪 add'; bBtn.title='Add familial connection'; bBtn.addEventListener('click',()=>{ babies.forEach(baby=>addConnection(baby.id,dad.id,'familialParent')); bBtn.replaceWith(doneBadge());}); line.appendChild(bBtn);} else { line.appendChild(doneBadge()); }
       }
+      const period = document.createElement('span'); period.textContent = '.'; line.appendChild(period);
       paper.appendChild(line);
     }
     // Marriage announcements
@@ -2594,16 +2718,14 @@ async function runSimulation() {
       const parts = [pre, header];
       if (predeceased.length) parts.push(`Pre-deceased by: ${predeceased.join(', ')}`);
       if (survivedBy.length) parts.push(`Survived by: ${survivedBy.join(', ')}`);
-      // Add first-degree connection buttons (ring) for parent/child and spouse
+      // Single block with inline buttons (no separate column)
       const container = document.createElement('div');
-      container.style.display = 'flex';
-      container.style.justifyContent = 'space-between';
-      const text = document.createElement('span'); text.textContent = parts.join('\n'); container.appendChild(text);
-      // Inline familial buttons
-      if (father) { const ex=knowledge.knownRelationships.some(r=>r.type==='biological'&&((r.a===p.id&&r.b===father.id)||(r.a===father.id&&r.b===p.id))); if(!ex){const b=document.createElement('button'); b.className='inline-link'; b.textContent='👪 add'; b.title='Add familial connection'; b.addEventListener('click',()=>{addConnection(p.id,father.id,'familialParent'); b.replaceWith(doneBadge());}); container.appendChild(b);} else { container.appendChild(doneBadge()); } }
-      if (mother) { const ex=knowledge.knownRelationships.some(r=>r.type==='biological'&&((r.a===p.id&&r.b===mother.id)||(r.a===mother.id&&r.b===p.id))); if(!ex){const b=document.createElement('button'); b.className='inline-link'; b.textContent='👪 add'; b.title='Add familial connection'; b.addEventListener('click',()=>{addConnection(p.id,mother.id,'familialParent'); b.replaceWith(doneBadge());}); container.appendChild(b);} else { container.appendChild(doneBadge()); } }
-      if (spouse) { const ex=knowledge.knownRelationships.some(r=>r.type==='marriage'&&((r.a===p.id&&r.b===spouse.id)||(r.a===spouse.id&&r.b===p.id))); if(!ex){const b=document.createElement('button'); b.className='inline-link'; b.textContent='👪 add'; b.title='Add familial connection'; b.addEventListener('click',()=>{addConnection(p.id,spouse.id,'familial'); b.replaceWith(doneBadge());}); container.appendChild(b);} else { container.appendChild(doneBadge()); } }
-      for (const c of children) { const ex=knowledge.knownRelationships.some(r=>r.type==='biological'&&((r.a===p.id&&r.b===c.id)||(r.a===c.id&&r.b===p.id))); if(!ex){const b=document.createElement('button'); b.className='inline-link'; b.textContent='👪 add'; b.title='Add familial connection'; b.addEventListener('click',()=>{addConnection(p.id,c.id,'familialParent'); b.replaceWith(doneBadge());}); container.appendChild(b);} else { container.appendChild(doneBadge()); } }
+      const text = document.createElement('span'); text.textContent = parts.join('\n') + ' ';
+      container.appendChild(text);
+      if (father) { const ex=knowledge.knownRelationships.some(r=>r.type==='biological'&&((r.a===p.id&&r.b===father.id)||(r.a===father.id&&r.b===p.id))); if(!ex){const b=document.createElement('button'); b.className='inline-link'; b.textContent='👪 add'; b.title='Add familial connection (father)'; b.addEventListener('click',()=>{addConnection(p.id,father.id,'familialParent'); b.replaceWith(doneBadge());}); container.appendChild(b);} }
+      if (mother) { const ex=knowledge.knownRelationships.some(r=>r.type==='biological'&&((r.a===p.id&&r.b===mother.id)||(r.a===mother.id&&r.b===p.id))); if(!ex){const b=document.createElement('button'); b.className='inline-link'; b.textContent='👪 add'; b.title='Add familial connection (mother)'; b.addEventListener('click',()=>{addConnection(p.id,mother.id,'familialParent'); b.replaceWith(doneBadge());}); container.appendChild(b);} }
+      if (spouse) { const ex=knowledge.knownRelationships.some(r=>r.type==='marriage'&&((r.a===p.id&&r.b===spouse.id)||(r.a===spouse.id&&r.b===p.id))); if(!ex){const b=document.createElement('button'); b.className='inline-link'; b.textContent='👪 add'; b.title='Add marriage connection'; b.addEventListener('click',()=>{addConnection(p.id,spouse.id,'familial'); b.replaceWith(doneBadge());}); container.appendChild(b);} }
+      for (const c of children) { const ex=knowledge.knownRelationships.some(r=>r.type==='biological'&&((r.a===p.id&&r.b===c.id)||(r.a===c.id&&r.b===p.id))); if(!ex){const b=document.createElement('button'); b.className='inline-link'; b.textContent='👪 add'; b.title='Add familial connection (child)'; b.addEventListener('click',()=>{addConnection(p.id,c.id,'familialParent'); b.replaceWith(doneBadge());}); container.appendChild(b);} }
       paper.appendChild(container);
     }
     if (paper.childNodes.length <= 1 && !global) { const none=document.createElement('div'); none.textContent='No items for that year.'; paper.appendChild(none); }
@@ -2719,6 +2841,27 @@ async function runSimulation() {
     const originBtn = document.createElement('button'); originBtn.className='menu-btn'; originBtn.textContent='Where do you come from?';
     originBtn.addEventListener('click', () => answerOriginQuestion(personId, personId));
     ul.appendChild(originBtn);
+
+    // Killer-only dialogue hook to disambiguate identical twins in cold cases
+    if (personId === result.killerId) {
+      const kBtn = document.createElement('button'); kBtn.className='menu-btn'; kBtn.textContent='Tell me about the night of the murder.';
+      kBtn.addEventListener('click', () => {
+        const murderEvt = result.events.find(e => e.type==='MURDER');
+        const mCity = murderEvt ? getCityName(murderEvt.details?.cityId) : 'the city';
+        const mYear = murderEvt ? murderEvt.year : 'that year';
+        const slips = [
+          `I wasn't anywhere near ${mCity} in ${mYear}. I was across town by the railyard.`,
+          `Everyone keeps asking about ${mYear}. Nothing happened that night by the river in ${mCity}.`,
+          `You think I don't remember ${mYear}? The sirens by the old theatre in ${mCity} kept me up.`,
+        ];
+        const line = slips[Math.floor(Math.random()*slips.length)];
+        result.conversations[personId].push({ from:'npc', text: line, ts: Date.now() });
+        result.conversationsState[personId] = result.conversationsState[personId] || {};
+        result.conversationsState[personId].murderSlip = true;
+        renderTranscript(personId);
+      });
+      ul.appendChild(kBtn);
+    }
 
     // Ask about a known person
     const aboutWrap = document.createElement('div'); aboutWrap.className='section';

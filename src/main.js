@@ -2763,9 +2763,9 @@ async function runSimulation() {
   function renderResidentMatches(query) {
     if (!residentListEl) return;
     const cityId = result.playerCityId;
-    const q = (query || '').trim().toUpperCase();
+    const q = (query || '').trim();
     const residents = result.people.filter(p => p.cityId === cityId && p.lastName);
-    const filtered = q ? residents.filter(p => p.lastName.toUpperCase().startsWith(q)) : [];
+    const filtered = q ? residents.filter(p => nameMatches(p, q)) : [];
     filtered.sort((a,b) => a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName));
     residentListEl.innerHTML = '';
     const top = filtered.slice(0, 30);
@@ -2881,24 +2881,25 @@ async function runSimulation() {
       ul.appendChild(kBtn);
     }
 
-    // Ask about a known person
-    const aboutWrap = document.createElement('div'); aboutWrap.className='section';
-    const aboutLabel = document.createElement('div'); aboutLabel.textContent = 'Tell me about a person:'; aboutWrap.appendChild(aboutLabel);
-    const input = document.createElement('input'); input.className='input'; input.placeholder='Start typing a known name…'; aboutWrap.appendChild(input);
-    const submit = document.createElement('button'); submit.className='start secondary'; submit.textContent='Ask'; aboutWrap.appendChild(submit);
-    const known = Array.from(knowledge.knownPeople).map(id => personByIdPre.get(id)).filter(Boolean);
-    input.addEventListener('input', () => {
-      const q = input.value.toLowerCase();
-      const hit = known.find(k => (`${k.firstName} ${k.lastName}`).toLowerCase().startsWith(q));
-      if (hit) input.dataset.personId = String(hit.id); else delete input.dataset.personId;
+    // Ask about someone (submenu)
+    const aboutBtn = document.createElement('button'); aboutBtn.className='menu-btn'; aboutBtn.textContent="I'd like to ask about someone…";
+    aboutBtn.addEventListener('click', () => {
+      intMenu.innerHTML = '';
+      const wrap = document.createElement('div'); wrap.className='list';
+      const prompt = document.createElement('div'); prompt.textContent = 'Type a name (first, last, or both):'; wrap.appendChild(prompt);
+      const input = document.createElement('input'); input.className='input'; input.placeholder='e.g., Alice or Smith or Alice Smith'; wrap.appendChild(input);
+      const submit = document.createElement('button'); submit.className='start secondary'; submit.textContent='Ask'; wrap.appendChild(submit);
+      const back = document.createElement('button'); back.className='start secondary'; back.textContent="I'd like to talk about something else"; back.addEventListener('click', ()=>renderInterviewMenu(personId)); wrap.appendChild(back);
+      const known = Array.from(knowledge.knownPeople).map(id => personByIdPre.get(id)).filter(Boolean);
+      submit.addEventListener('click', () => {
+        const q = (input.value || '').trim();
+        const hit = known.find(k => nameMatches(k, q));
+        if (!hit) { result.conversations[personId].push({ from:'npc', text: "I don't know them.", ts: Date.now() }); renderTranscript(personId); return; }
+        showFamilyQuestions(personId, hit.id);
+      });
+      intMenu.appendChild(wrap);
     });
-    submit.addEventListener('click', () => {
-      const pid = Number(input.dataset.personId || 0);
-      if (!pid) { result.conversations[personId].push({ from:'npc', text: "I don't know them.", ts: Date.now() }); renderTranscript(personId); return; }
-      // Horizon check: reuse family questions with target
-      showFamilyQuestions(personId, pid);
-    });
-    ul.appendChild(aboutWrap);
+    ul.appendChild(aboutBtn);
 
     // Navigation options
     const otherBtn = document.createElement('button'); otherBtn.className='menu-btn'; otherBtn.textContent="Let's talk about something else"; otherBtn.addEventListener('click', ()=>renderInterviewMenu(personId));
@@ -3014,6 +3015,16 @@ async function runSimulation() {
       intTranscript.appendChild(div);
     });
     intTranscript.scrollTop = intTranscript.scrollHeight;
+  }
+
+  // Flexible name matching: supports first, last, or both in any order (prefix tokens)
+  function nameMatches(person, query) {
+    if (!query) return false;
+    const tokens = String(query).trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (!tokens.length) return false;
+    const first = (person.firstName || '').toLowerCase();
+    const last = (person.lastName || '').toLowerCase();
+    return tokens.every(tok => first.startsWith(tok) || last.startsWith(tok) || (`${first} ${last}`).startsWith(tok) || (`${last} ${first}`).startsWith(tok));
   }
 
   residentSearchEl?.addEventListener('input', (e) => renderResidentMatches(e.target.value));

@@ -1216,10 +1216,10 @@ async function runSimulation() {
   };
   function consumerDNAProb(y) {
     if (y < 1990) return 0;
-    if (y < 2007) return 0.0003;
-    if (y < 2013) return 0.0014;
-    if (y < 2020) return 0.003;
-    return 0.005;
+    if (y < 2007) return 0.00005;   // very low early adoption
+    if (y < 2013) return 0.0002;
+    if (y < 2020) return 0.0006;
+    return 0.001;                   // max ~0.1% per adult-year
   }
 
   // Choose one murder year and assign once
@@ -1592,7 +1592,7 @@ async function runSimulation() {
             const evt = addEvent({ year: y, type: 'DNA_TEST_CONSUMER', people: [p.id], details: { cityId: p.cityId } });
             // Auto-promote consumer DNA into CODIS (avoid duplicates)
             if (!result.codis.profiles.some(pr => pr.personId === p.id)) {
-              result.codis.profiles.push({ personId: p.id, year: y, cityId: p.cityId || null });
+              result.codis.profiles.push({ personId: p.id, year: y, cityId: p.cityId || null, source: 'consumer' });
             }
             indexEventByYear(evt);
             if (random() < 0.02) pushFlash(`${personByIdPre.get(p.id)?.firstName || 'Someone'} took a consumer DNA test.`);
@@ -1606,7 +1606,7 @@ async function runSimulation() {
       const pLE = 0.0001;
       for (const p of adults) {
         if (random() < pLE) {
-          result.codis.profiles.push({ personId: p.id, year: y });
+          result.codis.profiles.push({ personId: p.id, year: y, cityId: p.cityId || null, source: 'LE' });
           const evt = addEvent({ year: y, type: 'DNA_TEST_CODIS', people: [p.id], details: { cityId: p.cityId } });
           indexEventByYear(evt);
         }
@@ -1678,7 +1678,7 @@ async function runSimulation() {
       const evt = addEvent({ year: Math.min(2015, END_YEAR), type: 'DNA_TEST_CONSUMER_FORCED', people: [pickRel.id], details: { cityId: pickRel.cityId } });
       // Ensure CODIS also receives this profile (avoid duplicates)
       if (!result.codis.profiles.some(pr => pr.personId === pickRel.id)) {
-        result.codis.profiles.push({ personId: pickRel.id, year: Math.min(2015, END_YEAR), cityId: pickRel.cityId || null });
+        result.codis.profiles.push({ personId: pickRel.id, year: Math.min(2015, END_YEAR), cityId: pickRel.cityId || null, source: 'consumer' });
       }
       indexEventByYear(evt);
       logLine(`Forced DNA test for a distant relative to ensure playability.`);
@@ -1722,7 +1722,7 @@ async function runSimulation() {
     // Pick one stable-ish candidate using seed
     const pick = candidates[Math.floor((result.seed + candidates.length) % candidates.length)];
     if (pick && !codisSet.has(pick.id)) {
-      result.codis.profiles.push({ personId: pick.id, year: Math.min(2015, END_YEAR), cityId: pick.cityId || null });
+      result.codis.profiles.push({ personId: pick.id, year: Math.min(2015, END_YEAR), cityId: pick.cityId || null, source: 'consumer' });
       const evt = addEvent({ year: Math.min(2015, END_YEAR), type: 'DNA_TEST_CODIS_FORCED', people: [pick.id], details: { cityId: pick.cityId } });
       indexEventByYear(evt);
       logLine('Seeded a distant blood relative into CODIS to ensure matchability.');
@@ -2439,11 +2439,22 @@ async function runSimulation() {
   function renderCODIS() {
     codisListEl.innerHTML = '';
     codisListEl.classList.add('codis-list');
+    // Controls: search + toggle for "added by us"
+    const searchWrap = document.createElement('div'); searchWrap.className='field-row';
+    const search = document.createElement('input'); search.className='input'; search.placeholder='Search CODIS… (first or last name, any order)';
+    const mineOnly = document.createElement('label'); mineOnly.style.display='flex'; mineOnly.style.alignItems='center'; mineOnly.style.gap='6px';
+    const mineChk = document.createElement('input'); mineChk.type='checkbox';
+    const mineTxt = document.createElement('span'); mineTxt.textContent='Show only DNA we added';
+    mineOnly.appendChild(mineChk); mineOnly.appendChild(mineTxt);
+    searchWrap.appendChild(mineOnly);
+    searchWrap.appendChild(search);
+    codisListEl.appendChild(searchWrap);
     const entries = result.codis.profiles.map((pr, idx) => {
       const p = personByIdPre.get(pr.personId || -1);
       const label = pr.moniker ? pr.moniker : (p ? `${p.firstName} ${p.lastName}` : `Profile #${idx+1}`);
       const sortKey = pr.moniker ? pr.moniker.toUpperCase() : (p ? `${p.lastName || ''} ${p.firstName || ''}`.toUpperCase() : label.toUpperCase());
       const cityName = pr.cityId ? getCityName(pr.cityId) : '';
+      const srcType = pr.moniker ? 'evidence' : (pr.source === 'LE' ? 'law enforcement' : 'consumer');
       // Determine sex for display: derive from linked person, or killer mapping for moniker
       let sex = p ? p.sex : '';
       if (!sex && pr.moniker && pr.dnaId && pr.dnaId.startsWith('killer-')) {
@@ -2451,18 +2462,45 @@ async function runSimulation() {
         const kp = personByIdPre.get(kid);
         if (kp) sex = kp.sex;
       }
-      return { pr, idx, label, sortKey, cityName, sex };
+      return { pr, idx, label, sortKey, cityName, sex, srcType };
     }).sort((a,b) => a.sortKey.localeCompare(b.sortKey));
-    entries.forEach(({ pr, idx, label, cityName, sex }) => {
-      const row = document.createElement('div');
-      row.className = 'row';
-      const victimTag = (pr.personId && pr.personId === result.murderVictimId) ? ' (Murder victim)' : '';
-      const sexPart = sex ? ` · ${sex}` : '';
-      row.textContent = `${label}${sexPart}${victimTag} – added ${pr.year || ''}${cityName ? ' — ' + cityName : ''}`;
-      if (pr.moniker) row.classList.add('killer');
-      row.addEventListener('click', () => showCodisDropdown(row, pr.personId));
-      codisListEl.appendChild(row);
-    });
+    function renderList(filterQ) {
+      // Clear existing rows (preserve search)
+      Array.from(codisListEl.querySelectorAll('.row')).forEach(n => n.remove());
+      entries
+        .filter(ent => {
+          if (!filterQ) return true;
+          const p = personByIdPre.get(ent.pr.personId||-1);
+          if (ent.pr.moniker) return nameMatches({ firstName: ent.pr.moniker, lastName: '' }, filterQ);
+          if (!p) return false;
+          return nameMatches(p, filterQ);
+        })
+        .filter(ent => {
+          if (!mineChk.checked) return true;
+          // Consider "added by us" = evidence adds or dna-person actions we triggered
+          if (ent.pr.moniker) return true; // killer moniker always from our evidence action
+          const pr = ent.pr;
+          // Profiles we explicitly create via evidence lack source; tag them now for display pipeline
+          // Heuristic: if pr.source is present, include only when not LE; otherwise include if created in END_YEAR
+          if (pr.source === 'LE') return false;
+          if (pr.source === 'consumer') return false; // auto-promoted consumer tests are not "us"
+          return (pr.year === END_YEAR); // most of our explicit adds happen at END_YEAR
+        })
+        .forEach(({ pr, idx, label, cityName, sex, srcType }) => {
+          const row = document.createElement('div');
+          row.className = 'row';
+          const victimTag = (pr.personId && pr.personId === result.murderVictimId) ? ' (Murder victim)' : '';
+          const sexPart = sex ? ` · ${sex}` : '';
+          const srcFrag = srcType ? ` · ${srcType}` : '';
+          row.textContent = `${label}${sexPart}${victimTag} – added ${pr.year || ''}${cityName ? ' — ' + cityName : ''}${srcFrag}`;
+          if (pr.moniker) row.classList.add('killer');
+          row.addEventListener('click', () => showCodisDropdown(row, pr.personId));
+          codisListEl.appendChild(row);
+        });
+    }
+    renderList('');
+    search.addEventListener('input', () => renderList(search.value || ''));
+    mineChk.addEventListener('change', () => renderList(search.value || ''));
   }
 
   function showCodisDropdown(container, personId) {
@@ -2618,7 +2656,10 @@ async function runSimulation() {
           const line = document.createElement('div');
           const txt = document.createElement('span');
           const sx2 = tw.sex ? ` · ${tw.sex}` : '';
-          txt.textContent = `${tw.firstName} ${tw.lastName}${sx2} – 100% – same person/identical twin`;
+          const city = tw.cityId ? ` — ${getCityName(tw.cityId)}` : '';
+          const prTw = result.codis.profiles.find(x => x.personId === tw.id) || {};
+          const srcFrag = prTw.source === 'LE' ? ' · law enforcement' : (prTw.moniker ? ' · evidence' : ' · consumer');
+          txt.textContent = `${tw.firstName} ${tw.lastName}${sx2} – 100% – same person/identical twin${city}${srcFrag}`;
           line.appendChild(txt);
           rows.push(line);
           excludeIds.add(tw.id);
@@ -2650,7 +2691,11 @@ async function runSimulation() {
       const line = document.createElement('div');
       const txt = document.createElement('span');
       const sx = p.sex ? ` · ${p.sex}` : '';
-      txt.textContent = `${p.firstName} ${p.lastName}${sx} – ${pct} – likely ${rel}`;
+      const city = p.cityId ? ` — ${getCityName(p.cityId)}` : '';
+      // Determine source from CODIS entry
+      const pr = result.codis.profiles.find(x => x.personId === pid) || {};
+      const srcFrag = pr.source === 'LE' ? ' · law enforcement' : (pr.moniker ? ' · evidence' : ' · consumer');
+      txt.textContent = `${p.firstName} ${p.lastName}${sx} – ${pct} – likely ${rel}${city}${srcFrag}`;
       line.appendChild(txt);
       // Inline: add person to knowledge graph (for distant matches especially)
       const known = knowledge.knownPeople.has(pid);

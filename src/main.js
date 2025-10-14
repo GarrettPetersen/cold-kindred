@@ -1590,6 +1590,10 @@ async function runSimulation() {
           if (!isBannedRelative(p)) {
             result.consumerDNA.push({ personId: p.id, year: y });
             const evt = addEvent({ year: y, type: 'DNA_TEST_CONSUMER', people: [p.id], details: { cityId: p.cityId } });
+            // Auto-promote consumer DNA into CODIS (avoid duplicates)
+            if (!result.codis.profiles.some(pr => pr.personId === p.id)) {
+              result.codis.profiles.push({ personId: p.id, year: y, cityId: p.cityId || null });
+            }
             indexEventByYear(evt);
             if (random() < 0.02) pushFlash(`${personByIdPre.get(p.id)?.firstName || 'Someone'} took a consumer DNA test.`);
           }
@@ -1672,10 +1676,58 @@ async function runSimulation() {
     if (pickRel) {
       result.consumerDNA.push({ personId: pickRel.id, year: Math.min(2015, END_YEAR) });
       const evt = addEvent({ year: Math.min(2015, END_YEAR), type: 'DNA_TEST_CONSUMER_FORCED', people: [pickRel.id], details: { cityId: pickRel.cityId } });
+      // Ensure CODIS also receives this profile (avoid duplicates)
+      if (!result.codis.profiles.some(pr => pr.personId === pickRel.id)) {
+        result.codis.profiles.push({ personId: pickRel.id, year: Math.min(2015, END_YEAR), cityId: pickRel.cityId || null });
+      }
       indexEventByYear(evt);
       logLine(`Forced DNA test for a distant relative to ensure playability.`);
     }
   }
+
+  // Ensure at least one blood relative of the killer is in CODIS for gameplay
+  // Build genetic adjacency (parent-child only) and compute distances from killer
+  (function ensureCodisRelative() {
+    if (!killerForCheck) return;
+    const codisSet = new Set(result.codis.profiles.map(pr => pr.personId).filter(Boolean));
+    // If there is already a CODIS relative besides the killer/victim, skip
+    const hasRelativeCodis = result.codis.profiles.some(pr => pr.personId && pr.personId !== killerIdFixed && personByIdPre.has(pr.personId));
+    if (hasRelativeCodis) return;
+    const adj = new Map();
+    function link(u, v) { const a = adj.get(u) || new Set(); a.add(v); adj.set(u, a); }
+    for (const p of result.people) {
+      if (p.fatherId) { link(p.id, p.fatherId); link(p.fatherId, p.id); }
+      if (p.motherId) { link(p.id, p.motherId); link(p.motherId, p.id); }
+    }
+    const dist = new Map([[killerIdFixed, 0]]);
+    const q = [killerIdFixed];
+    while (q.length) {
+      const u = q.shift();
+      const du = dist.get(u) || 0;
+      if (du > 8) continue; // cap search radius
+      const nbrs = adj.get(u) || new Set();
+      for (const v of nbrs) {
+        if (dist.has(v)) continue;
+        dist.set(v, du + 1);
+        q.push(v);
+      }
+    }
+    // Prefer distant blood relatives up to third cousins (graph distance 4..8)
+    const candidates = Array.from(dist.entries())
+      .filter(([pid, d]) => pid !== killerIdFixed && d >= 4 && d <= 8)
+      .map(([pid]) => personByIdPre.get(pid))
+      .filter(Boolean)
+      .filter(p => p.alive || true); // allow deceased historical CODIS if desired
+    if (!candidates.length) return;
+    // Pick one stable-ish candidate using seed
+    const pick = candidates[Math.floor((result.seed + candidates.length) % candidates.length)];
+    if (pick && !codisSet.has(pick.id)) {
+      result.codis.profiles.push({ personId: pick.id, year: Math.min(2015, END_YEAR), cityId: pick.cityId || null });
+      const evt = addEvent({ year: Math.min(2015, END_YEAR), type: 'DNA_TEST_CODIS_FORCED', people: [pick.id], details: { cityId: pick.cityId } });
+      indexEventByYear(evt);
+      logLine('Seeded a distant blood relative into CODIS to ensure matchability.');
+    }
+  })();
   result.killerId = killerIdFixed;
 
   // Knowledge guarantee: ensure at least one living person can know of the killer within their horizon

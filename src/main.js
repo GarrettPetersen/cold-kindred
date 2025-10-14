@@ -159,6 +159,7 @@ const geneSvg = document.getElementById('geneSvg');
 const mapSvg = document.getElementById('mapSvg');
 const locText = document.getElementById('locText');
 const skylineImg = document.getElementById('skylineImg');
+const skylineBox = document.getElementById('skylineBox');
 const playerCityNameEl = document.getElementById('playerCityName');
 const menuButtons = Array.from(document.querySelectorAll('.menu-btn'));
 const panelByName = (n) => document.getElementById(`panel-${n}`);
@@ -1861,12 +1862,69 @@ async function runSimulation() {
   function renderHomepage() {
     const cityId = result.playerCityId;
     if (playerCityNameEl) playerCityNameEl.textContent = getCityName(cityId);
-    if (!skylineImg) return;
+    if (!skylineBox) return;
     const name = getCityName(cityId) || '';
     const city = name.split(',')[0].trim().toLowerCase().replace(/\s+/g,'-');
     const src = `assets/skyline-${city}.svg`;
-    skylineImg.onerror = () => { skylineImg.src = 'assets/skyline-generic.svg'; };
-    skylineImg.src = src;
+    // Clear box and optimistically show inline SVG trimmed to content
+    skylineBox.innerHTML = '';
+    function loadSvg(url) {
+      fetch(url).then(r => {
+        if (!r.ok) throw new Error('fetch failed');
+        return r.text();
+      }).then(txt => {
+        const doc = new DOMParser().parseFromString(txt, 'image/svg+xml');
+        let svg = doc.documentElement;
+        // Ensure proper attributes for responsive fit
+        svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+        svg.setAttribute('width', '100%');
+        svg.setAttribute('height', '100%');
+        svg.style.width = '100%';
+        svg.style.height = '100%';
+        svg.style.display = 'block';
+        skylineBox.appendChild(svg);
+        // After it is in DOM, compute bbox and tighten viewBox
+        requestAnimationFrame(() => {
+          try {
+            const elems = svg.querySelectorAll('path,rect,circle,ellipse,line,polyline,polygon,text,g,use');
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            elems.forEach(el => {
+              if (typeof el.getBBox === 'function') {
+                const b = el.getBBox();
+                if (isFinite(b.x) && isFinite(b.y) && isFinite(b.width) && isFinite(b.height)) {
+                  minX = Math.min(minX, b.x);
+                  minY = Math.min(minY, b.y);
+                  maxX = Math.max(maxX, b.x + b.width);
+                  maxY = Math.max(maxY, b.y + b.height);
+                }
+              }
+            });
+            if (isFinite(minX) && isFinite(minY) && isFinite(maxX) && isFinite(maxY) && maxX > minX && maxY > minY) {
+              const pad = 2;
+              const x = minX - pad;
+              const y = minY - pad;
+              const w = (maxX - minX) + pad * 2;
+              const h = (maxY - minY) + pad * 2;
+              svg.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);
+              svg.style.objectFit = 'contain';
+              svg.style.objectPosition = 'bottom center';
+            }
+          } catch {}
+        });
+      }).catch(() => {
+        // Fallback to generic image if parsing/fetch fails
+        skylineBox.innerHTML = '';
+        const img = document.createElement('img');
+        img.alt = 'City skyline';
+        img.style.width = '100%';
+        img.style.height = '100%';
+        img.style.objectFit = 'contain';
+        img.style.objectPosition = 'bottom center';
+        img.src = 'assets/skyline-generic.svg';
+        skylineBox.appendChild(img);
+      });
+    }
+    loadSvg(src);
   }
   function projectLatLngToSvg(lat, lng, viewW, viewH) {
     // Tweak the bounding box to better match this specific SVG's coastline placement

@@ -2470,6 +2470,15 @@ async function runSimulation() {
       const txt = document.createElement('span');
       txt.textContent = `${p.firstName} ${p.lastName} – ${pct} – likely ${rel}`;
       line.appendChild(txt);
+      // Inline: add person to knowledge graph (for distant matches especially)
+      const known = knowledge.knownPeople.has(pid);
+      if (!known) {
+        const addP = document.createElement('button'); addP.className='inline-link'; addP.textContent='👤 add'; addP.title='Add person to Connections';
+        addP.addEventListener('click', () => { addPersonToKnowledge(pid); addP.replaceWith(doneBadge()); });
+        line.appendChild(addP);
+      } else {
+        line.appendChild(doneBadge());
+      }
       // First-degree genetic only: parent/child
       if (firstDegree) {
         const already = knowledge.knownRelationships.some(r => r.type==='biological' && ((r.a===personId&&r.b===pid)||(r.a===pid&&r.b===personId)));
@@ -2971,6 +2980,12 @@ async function runSimulation() {
       renderPersonResults(e.target.value || '');
     });
     renderPersonResults('');
+  }
+
+  function addPersonToKnowledge(personId) {
+    knowledge.knownPeople.add(personId);
+    saveKnowledge(knowledge);
+    renderGenealogy();
   }
 }
 

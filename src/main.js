@@ -2296,10 +2296,10 @@ async function runSimulation() {
             const alreadyV = result.codis.profiles.some(pr => pr.personId === victimId);
             // Add moniker as standalone profile sharing the killer's DNA id
             if (killerId && !alreadyKMoniker) {
-              result.codis.profiles.push({ personId: null, year: END_YEAR, cityId: result.playerCityId || null, moniker: result.killerMoniker || null, dnaId: `killer-${killerId}` });
+              result.codis.profiles.push({ personId: null, year: END_YEAR, cityId: result.playerCityId || null, moniker: result.killerMoniker || null, dnaId: `killer-${killerId}`, source: 'evidence' });
               added++;
             }
-            if (victimId && !alreadyV) { result.codis.profiles.push({ personId: victimId, year: END_YEAR, cityId: result.playerCityId || null, dnaId: `person-${victimId}` }); added++; }
+            if (victimId && !alreadyV) { result.codis.profiles.push({ personId: victimId, year: END_YEAR, cityId: result.playerCityId || null, dnaId: `person-${victimId}`, source: 'evidence' }); added++; }
             if (added) {
               a.textContent = 'Victim and Killer DNA profiles added to CODIS.';
               a.disabled = true;
@@ -2315,7 +2315,7 @@ async function runSimulation() {
             const pid = it.personId;
             const already = result.codis.profiles.some(pr => pr.personId === pid);
             if (!already) {
-              result.codis.profiles.push({ personId: pid, year: END_YEAR });
+              result.codis.profiles.push({ personId: pid, year: END_YEAR, cityId: result.playerCityId || null, source: 'evidence' });
               a.textContent = 'Profile added to CODIS.';
               a.disabled = true;
               evStatus.textContent = '';
@@ -2613,8 +2613,9 @@ async function runSimulation() {
       return false;
     }
 
-    // Limit matches to people who have profiles in CODIS
-    // Treat killer moniker as a full genetic person equivalent: include moniker DNA id mapping
+    // Limit matches to CODIS profiles. Map DNA identities:
+    // - Real people with CODIS profiles
+    // - Killer moniker maps to killer person id in both directions
     const codisIds = new Set(result.codis.profiles.map(pr => pr.personId).filter(Boolean));
     const moniker = result.codis.profiles.find(pr => pr.personId === null && pr.moniker && pr.dnaId && pr.dnaId.startsWith('killer-'));
     if (moniker) {
@@ -2631,7 +2632,8 @@ async function runSimulation() {
         const line = document.createElement('div');
         const txt = document.createElement('span');
         const sx2 = base.sex ? ` · ${base.sex}` : '';
-        txt.textContent = `${base.firstName} ${base.lastName}${sx2} – 100% – same person/identical twin`;
+        const city = base.cityId ? ` — ${getCityName(base.cityId)}` : '';
+        txt.textContent = `${base.firstName} ${base.lastName}${sx2} – 100% – same person/identical twin${city} · evidence`;
         line.appendChild(txt);
         rows.push(line);
       }
@@ -2642,7 +2644,8 @@ async function runSimulation() {
         const line = document.createElement('div');
         const txt = document.createElement('span');
         const sx2 = base.sex ? ` · ${base.sex}` : '';
-        txt.textContent = `${mon.moniker}${sx2} – 100% – same person/identical twin`;
+        const city = mon.cityId ? ` — ${getCityName(mon.cityId)}` : '';
+        txt.textContent = `${mon.moniker}${sx2} – 100% – same person/identical twin${city} · evidence`;
         line.appendChild(txt);
         rows.push(line);
       }

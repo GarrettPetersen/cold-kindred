@@ -2532,6 +2532,7 @@ async function runSimulation() {
       if (!Number.isNaN(kid)) codisIds.add(kid);
     }
     const rows = [];
+    const excludeIds = new Set();
     // If both profiles exist (moniker and real person), add an explicit 100% line
     // Case A: searching from moniker (personId == null) and real-person CODIS profile exists
     if (personId == null) {
@@ -2556,11 +2557,28 @@ async function runSimulation() {
         rows.push(line);
       }
     }
+
+    // Identical twin handling: show explicit 100% match and skip duplicate sibling line
+    if (base.twinGroupId && base.twinType === 'MZ') {
+      const twins = result.people.filter(p => p.id !== base.id && p.twinGroupId === base.twinGroupId && p.twinType === 'MZ');
+      twins.forEach(tw => {
+        if (codisIds.has(tw.id)) {
+          const line = document.createElement('div');
+          const txt = document.createElement('span');
+          const sx2 = tw.sex ? ` · ${tw.sex}` : '';
+          txt.textContent = `${tw.firstName} ${tw.lastName}${sx2} – 100% – same person/identical twin`;
+          line.appendChild(txt);
+          rows.push(line);
+          excludeIds.add(tw.id);
+        }
+      });
+    }
     for (const [pid, d] of dist.entries()) {
       if (pid === personId) continue;
       const p = personByIdPre.get(pid);
       if (!p) continue;
       if (!codisIds.has(pid)) continue;
+      if (excludeIds.has(pid)) continue; // already rendered as identical twin
       // Only show up to third cousins (distance <= 8)
       if ((dist.get(pid) || 99) > 8) continue;
       let rel = 'distant relative'; let pct = '~0.8%';

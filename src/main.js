@@ -111,7 +111,7 @@ app.innerHTML = `
         </div>
         <div id="panel-genealogy" class="panel tab-panel hidden">
           <h2>Connections</h2>
-          <svg id="geneSvg" class="gene-svg" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid meet"></svg>
+          <div class="gene-wrap"><svg id="geneSvg" class="gene-svg" preserveAspectRatio="xMidYMid meet"></svg></div>
         </div>
         <div id="panel-log" class="panel tab-panel hidden">
           <h2>Run Log</h2>
@@ -1908,6 +1908,12 @@ async function runSimulation() {
         pos.set(row[i].id, { x, y });
       }
     }
+    // Compute extents to size the SVG for scrolling
+    let maxX = 0, maxY = 0;
+    for (const { x, y } of pos.values()) { maxX = Math.max(maxX, x + w + marginX); maxY = Math.max(maxY, y + h + marginY); }
+    geneSvg.setAttribute('viewBox', `0 0 ${Math.max(1200, maxX)} ${Math.max(800, maxY)}`);
+    geneSvg.setAttribute('width', String(Math.max(1600, maxX)));
+    geneSvg.setAttribute('height', String(Math.max(1200, maxY)));
     // Draw edges first
     for (const e of edges) {
       const a = pos.get(e.a);

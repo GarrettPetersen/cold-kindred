@@ -2887,6 +2887,9 @@ async function runSimulation() {
     intHeader.textContent = `${emoji} ${p.firstName} ${p.lastName}`;
     renderTranscript(personId);
     renderInterviewMenu(personId);
+    // Hide redundant controls now that dialogue options exist
+    if (typeof intHello !== 'undefined' && intHello) intHello.style.display = 'none';
+    if (typeof intBack !== 'undefined' && intBack) intBack.style.display = 'none';
     if (result.conversations[personId].length === 0) {
       // FBI introduction + NPC response based on temperament
       result.conversations[personId].push({ from: 'you', text: "I'm with the FBI. I have a few questions.", ts: Date.now() });
@@ -2928,27 +2931,33 @@ async function runSimulation() {
   function renderInterviewMenu(personId) {
     const p = personByIdPre.get(personId);
     if (!p) return;
-    const state = result.conversationsState[personId] || {};
+    const state = result.conversationsState[personId] || (result.conversationsState[personId] = {});
+    state.asked = state.asked || new Set();
+    state.askedFamily = state.askedFamily || {};
     intMenu.innerHTML = '';
     if (state.ended) return; // hostile ended
     // Base options
     const ul = document.createElement('div');
     ul.className = 'list';
     // DNA sample request
-    const dnaBtn = document.createElement('button'); dnaBtn.className='menu-btn'; dnaBtn.textContent='Would you be willing to give a DNA sample?';
-    dnaBtn.addEventListener('click', () => {
-      const yes = Math.random() < 0.5;
-      if (yes) {
-        result.conversations[personId].push({ from:'npc', text: 'Sure. If it helps.', ts: Date.now() });
-        const cityId = result.playerCityId;
-        result.evidence[cityId] = result.evidence[cityId] || [];
-        result.evidence[cityId].push({ id:`swab-${personId}`, name: `${p.firstName} ${p.lastName}'s Cheek Swab`, type:'swab', actions:['dna-person'], personId });
-      } else {
-        result.conversations[personId].push({ from:'npc', text: "I'm not comfortable with that.", ts: Date.now() });
-      }
-      renderTranscript(personId);
-    });
-    ul.appendChild(dnaBtn);
+    if (!state.asked.has('dna')) {
+      const dnaBtn = document.createElement('button'); dnaBtn.className='menu-btn'; dnaBtn.textContent='Would you be willing to give a DNA sample?';
+      dnaBtn.addEventListener('click', () => {
+        const yes = Math.random() < 0.5;
+        if (yes) {
+          result.conversations[personId].push({ from:'npc', text: 'Sure. If it helps.', ts: Date.now() });
+          const cityId = result.playerCityId;
+          result.evidence[cityId] = result.evidence[cityId] || [];
+          result.evidence[cityId].push({ id:`swab-${personId}`, name: `${p.firstName} ${p.lastName}'s Cheek Swab`, type:'swab', actions:['dna-person'], personId });
+        } else {
+          result.conversations[personId].push({ from:'npc', text: "I'm not comfortable with that.", ts: Date.now() });
+        }
+        state.asked.add('dna');
+        renderTranscript(personId);
+        renderInterviewMenu(personId);
+      });
+      ul.appendChild(dnaBtn);
+    }
 
     // Family exploration
     const famBtn = document.createElement('button'); famBtn.className='menu-btn'; famBtn.textContent='Tell me about your family.';
@@ -2956,9 +2965,18 @@ async function runSimulation() {
     ul.appendChild(famBtn);
 
     // Origin (birthplace and moves)
-    const originBtn = document.createElement('button'); originBtn.className='menu-btn'; originBtn.textContent='Where do you come from?';
-    originBtn.addEventListener('click', () => answerOriginQuestion(personId, personId));
-    ul.appendChild(originBtn);
+    const askedSelfOrigin = (state.askedFamily[personId] && state.askedFamily[personId]['origin']);
+    if (!askedSelfOrigin) {
+      const originBtn = document.createElement('button'); originBtn.className='menu-btn'; originBtn.textContent='Where do you come from?';
+      originBtn.addEventListener('click', () => { 
+        // mark asked and answer
+        state.askedFamily[personId] = state.askedFamily[personId] || {};
+        state.askedFamily[personId]['origin'] = true;
+        answerOriginQuestion(personId, personId);
+        renderInterviewMenu(personId);
+      });
+      ul.appendChild(originBtn);
+    }
 
     // Killer-only dialogue hook to disambiguate identical twins in cold cases
     if (personId === result.killerId) {
@@ -3015,7 +3033,7 @@ async function runSimulation() {
 
     // Navigation options
     const otherBtn = document.createElement('button'); otherBtn.className='menu-btn'; otherBtn.textContent="Let's talk about something else"; otherBtn.addEventListener('click', ()=>renderInterviewMenu(personId));
-    const byeBtn = document.createElement('button'); byeBtn.className='menu-btn'; byeBtn.textContent='Goodbye for now'; byeBtn.addEventListener('click', ()=>{ result.conversations[personId].push({ from:'you', text:'Goodbye for now.', ts:Date.now() }); renderTranscript(personId); });
+    const byeBtn = document.createElement('button'); byeBtn.className='menu-btn'; byeBtn.textContent='Goodbye for now'; byeBtn.addEventListener('click', ()=>{ result.conversations[personId].push({ from:'you', text:'Goodbye for now.', ts:Date.now() }); renderTranscript(personId); setActivePanel('home'); });
     ul.appendChild(otherBtn); ul.appendChild(byeBtn);
     intMenu.appendChild(ul);
   }
@@ -3025,10 +3043,13 @@ async function runSimulation() {
     if (!who) return;
     const p = personByIdPre.get(speakerId);
     if (!p) return;
+    const state = result.conversationsState[speakerId] || (result.conversationsState[speakerId] = { asked:new Set(), askedFamily:{} });
+    state.askedFamily = state.askedFamily || {};
+    const askedForTarget = state.askedFamily[targetId] || {};
     intMenu.innerHTML = '';
     const ul = document.createElement('div'); ul.className='list';
     const label = (me,str)=> (targetId===speakerId? str : str.replaceAll('your', `${who.firstName}'s`));
-    const qs = [
+    const allQs = [
       { k:'parents', text:'Who are your parents?' },
       { k:'siblings', text:'Who are your siblings?' },
       { k:'children', text:'Who are your children?' },
@@ -3036,6 +3057,10 @@ async function runSimulation() {
       { k:'past', text:'Any past marriages?' },
       { k:'origin', text:'Where do you come from?' }
     ];
+    const qs = allQs.filter(q => !askedForTarget[q.k]);
+    if (qs.length === 0) {
+      const none = document.createElement('div'); none.textContent = `No more questions about ${who.firstName}.`; ul.appendChild(none);
+    }
     qs.forEach(q => {
       const b = document.createElement('button'); b.className='menu-btn'; b.textContent=label(targetId, q.text);
       b.addEventListener('click', ()=>answerFamilyQuestion(speakerId, targetId, q.k));
@@ -3054,6 +3079,9 @@ async function runSimulation() {
     const speaker = personByIdPre.get(speakerId);
     const target = personByIdPre.get(targetId);
     if (!speaker || !target) return;
+    const state = result.conversationsState[speakerId] || (result.conversationsState[speakerId] = { asked:new Set(), askedFamily:{} });
+    state.askedFamily[targetId] = state.askedFamily[targetId] || {};
+    state.askedFamily[targetId][kind] = true;
     const lines = [];
     const pushLine = (txt, inline)=>{ result.conversations[speakerId].push({ from:'npc', text: txt, ts: Date.now(), addInline: inline }); };
     // Parents
@@ -3159,17 +3187,7 @@ async function runSimulation() {
   }
 
   residentSearchEl?.addEventListener('input', (e) => renderResidentMatches(e.target.value));
-  intHello?.addEventListener('click', () => {
-    if (!interviewingPersonId) return;
-    const state = result.conversationsState[interviewingPersonId] || {};
-    if (state.ended) return; // conversation closed for hostile NPCs
-    result.conversations[interviewingPersonId].push({ from: 'you', text: 'hello', ts: Date.now() });
-    result.conversations[interviewingPersonId].push({ from: 'npc', text: 'Hello.', ts: Date.now() });
-    renderTranscript(interviewingPersonId);
-  });
-  intBack?.addEventListener('click', () => {
-    setActivePanel('evidence');
-  });
+  // Deprecated: hello/back controls; hidden in openInterview
 
   // Person inspector: build indexes and bind search
   function renderPersonResults(query) {

@@ -2986,17 +2986,29 @@ async function runSimulation() {
     aboutBtn.addEventListener('click', () => {
       intMenu.innerHTML = '';
       const wrap = document.createElement('div'); wrap.className='list';
-      const prompt = document.createElement('div'); prompt.textContent = 'Type a name (first, last, or both):'; wrap.appendChild(prompt);
-      const input = document.createElement('input'); input.className='input'; input.placeholder='e.g., Alice or Smith or Alice Smith'; wrap.appendChild(input);
-      const submit = document.createElement('button'); submit.className='start secondary'; submit.textContent='Ask'; wrap.appendChild(submit);
+      const prompt = document.createElement('div'); prompt.textContent = 'People we both know:'; wrap.appendChild(prompt);
+      const speaker = personByIdPre.get(personId);
+      const horizon = knownSubgraphFrom(personId);
+      const knownSet = new Set(knowledge.knownPeople);
+      const candidates = Array.from(horizon.nodes)
+        .filter(id => id !== personId && knownSet.has(id))
+        .map(id => personByIdPre.get(id))
+        .filter(Boolean)
+        .sort((a,b)=>{
+          const al = (a.lastName||'').localeCompare(b.lastName||'');
+          if (al !== 0) return al;
+          return (a.firstName||'').localeCompare(b.firstName||'');
+        });
+      if (candidates.length === 0) {
+        const none = document.createElement('div'); none.textContent = 'No one comes to mind.'; wrap.appendChild(none);
+      } else {
+        candidates.forEach(k => {
+          const btn = document.createElement('button'); btn.className='menu-btn'; btn.textContent = `${k.firstName} ${k.lastName}`;
+          btn.addEventListener('click', ()=> showFamilyQuestions(personId, k.id));
+          wrap.appendChild(btn);
+        });
+      }
       const back = document.createElement('button'); back.className='start secondary'; back.textContent="I'd like to talk about something else"; back.addEventListener('click', ()=>renderInterviewMenu(personId)); wrap.appendChild(back);
-      const known = Array.from(knowledge.knownPeople).map(id => personByIdPre.get(id)).filter(Boolean);
-      submit.addEventListener('click', () => {
-        const q = (input.value || '').trim();
-        const hit = known.find(k => nameMatches(k, q));
-        if (!hit) { result.conversations[personId].push({ from:'npc', text: "I don't know them.", ts: Date.now() }); renderTranscript(personId); return; }
-        showFamilyQuestions(personId, hit.id);
-      });
       intMenu.appendChild(wrap);
     });
     ul.appendChild(aboutBtn);

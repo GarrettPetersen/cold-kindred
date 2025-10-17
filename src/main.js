@@ -3043,46 +3043,46 @@ async function runSimulation() {
     const target = personByIdPre.get(targetId);
     if (!speaker || !target) return;
     const lines = [];
-    const pushLine = (txt)=>{ result.conversations[speakerId].push({ from:'npc', text: txt, ts: Date.now() }); };
+    const pushLine = (txt, inline)=>{ result.conversations[speakerId].push({ from:'npc', text: txt, ts: Date.now(), addInline: inline }); };
     // Parents
     if (kind==='parents') {
       if (target.motherId && withinHorizon(speaker, target.motherId)) {
-        const m = personByIdPre.get(target.motherId); if (m) pushLine(`Mother: ${m.firstName} ${m.lastName} 👪`);
+        const m = personByIdPre.get(target.motherId); if (m) pushLine(`Mother: ${m.firstName} ${m.lastName}`, { aId: target.id, bId: m.id, kind: 'familialParent' });
       }
       if (target.fatherId && withinHorizon(speaker, target.fatherId)) {
-        const f = personByIdPre.get(target.fatherId); if (f) pushLine(`Father: ${f.firstName} ${f.lastName} 👪`);
+        const f = personByIdPre.get(target.fatherId); if (f) pushLine(`Father: ${f.firstName} ${f.lastName}`, { aId: target.id, bId: f.id, kind: 'familialParent' });
       }
       // Bio father if affair knowledge
       if (speaker.knowsAffairs && target.bioFatherId && target.bioFatherId !== target.fatherId && withinHorizon(speaker, target.bioFatherId)) {
-        const bf = personByIdPre.get(target.bioFatherId); if (bf) pushLine(`Biological father: ${bf.firstName} ${bf.lastName} 🧬`);
+        const bf = personByIdPre.get(target.bioFatherId); if (bf) pushLine(`Biological father: ${bf.firstName} ${bf.lastName}`, { aId: target.id, bId: bf.id, kind: 'genetic' });
       }
     }
     if (kind==='siblings') {
       for (const s of result.people) {
         if (s.id===target.id) continue;
         const sib = (s.fatherId && s.fatherId===target.fatherId) || (s.motherId && s.motherId===target.motherId);
-        if (sib && withinHorizon(speaker, s.id)) pushLine(`Sibling: ${s.firstName} ${s.lastName} 👪`);
+        if (sib && withinHorizon(speaker, s.id)) pushLine(`Sibling: ${s.firstName} ${s.lastName}`);
       }
     }
     if (kind==='children') {
       for (const c of result.people) {
         if (c.fatherId===target.id || c.motherId===target.id) {
-          if (withinHorizon(speaker, c.id)) pushLine(`Child: ${c.firstName} ${c.lastName} 👪`);
+          if (withinHorizon(speaker, c.id)) pushLine(`Child: ${c.firstName} ${c.lastName}`, { aId: c.id, bId: target.id, kind: 'familialParent' });
           if (speaker.knowsAffairs && c.bioFatherId && c.bioFatherId!==target.id && withinHorizon(speaker, c.bioFatherId)) {
-            const bf = personByIdPre.get(c.bioFatherId); if (bf) pushLine(`Biological father of ${c.firstName}: ${bf.firstName} ${bf.lastName} 🧬`);
+            const bf = personByIdPre.get(c.bioFatherId); if (bf) pushLine(`Biological father of ${c.firstName}: ${bf.firstName} ${bf.lastName}`, { aId: c.id, bId: bf.id, kind: 'genetic' });
           }
         }
       }
     }
     if (kind==='spouse' || kind==='past') {
       if (target.spouseId && withinHorizon(speaker, target.spouseId)) {
-        const s = personByIdPre.get(target.spouseId); if (s) pushLine(`Spouse: ${s.firstName} ${s.lastName} 👪`);
+        const s = personByIdPre.get(target.spouseId); if (s) pushLine(`Spouse: ${s.firstName} ${s.lastName}`, { aId: target.id, bId: s.id, kind: 'familial' });
       }
       // Past marriages: use marriage index
       const past = (marriagesByPerson.get(target.id) || []).filter(id => id !== target.spouseId);
       for (const otherId of past) {
         if (withinHorizon(speaker, otherId)) {
-          const o = personByIdPre.get(otherId); if (o) pushLine(`Past marriage: ${o.firstName} ${o.lastName} 👪`);
+          const o = personByIdPre.get(otherId); if (o) pushLine(`Past marriage: ${o.firstName} ${o.lastName}`, { aId: target.id, bId: o.id, kind: 'familial' });
         }
       }
     }
@@ -3111,7 +3111,26 @@ async function runSimulation() {
     intTranscript.innerHTML = '';
     conv.forEach(line => {
       const div = document.createElement('div');
-      div.textContent = (line.from === 'you' ? 'You: ' : 'Them: ') + line.text;
+      const who = document.createElement('span'); who.textContent = (line.from === 'you' ? 'You: ' : 'Them: ');
+      div.appendChild(who);
+      const textSpan = document.createElement('span'); textSpan.textContent = line.text; div.appendChild(textSpan);
+      if (line.addInline && line.addInline.aId && line.addInline.bId && line.addInline.kind) {
+        const exists = knowledge.knownRelationships.some(r => {
+          const type = line.addInline.kind === 'genetic' ? 'biological' : (line.addInline.kind === 'familialParent' ? 'guardian' : 'marriage');
+          return r.type === type && ((r.a === line.addInline.aId && r.b === line.addInline.bId) || (r.a === line.addInline.bId && r.b === line.addInline.aId));
+        });
+        if (!exists) {
+          const btn = document.createElement('button');
+          btn.className = 'inline-link';
+          btn.textContent = line.addInline.kind === 'genetic' ? '🧬 add' : '👪 add';
+          btn.title = 'Add connection';
+          btn.addEventListener('click', () => { addConnection(line.addInline.aId, line.addInline.bId, line.addInline.kind); btn.replaceWith(doneBadge()); });
+          div.appendChild(document.createTextNode(' '));
+          div.appendChild(btn);
+        } else {
+          div.appendChild(doneBadge());
+        }
+      }
       intTranscript.appendChild(div);
     });
     intTranscript.scrollTop = intTranscript.scrollHeight;

@@ -44,7 +44,13 @@ const MALE_NAMES = [
   'Bobby', 'Russell', 'Louis', 'Philip', 'Johnny', 'Miguel', 'Caleb', 'Lucas', 'Alfred', 'Bradley',
   'Oliver', 'Liam', 'Mason', 'Ethan', 'Elias', 'Hudson', 'Hunter', 'Asher', 'Silas', 'Leo',
   'Finn', 'Arlo', 'Milo', 'Felix', 'Jasper', 'Oscar', 'Theo', 'Hugo', 'Arthur', 'Otto',
-  'Barnaby', 'Bartholomew', 'Benedict', 'Bram', 'Casper', 'Clement', 'Cyril', 'Dexter', 'Edmund', 'Ernest'
+  'Barnaby', 'Bartholomew', 'Benedict', 'Bram', 'Casper', 'Clement', 'Cyril', 'Dexter', 'Edmund', 'Ernest',
+  'Atticus', 'Augustus', 'Basil', 'Bear', 'Beau', 'Beckett', 'Bennett', 'Brooks', 'Caspian', 'Cato',
+  'Cedric', 'Chester', 'Conrad', 'Darwin', 'Dash', 'Dorian', 'Elio', 'Emmett', 'Enzo', 'Evander',
+  'Ezra', 'Flynn', 'Gideon', 'Gulliver', 'Hamish', 'Harvey', 'Ilo', 'Indigo', 'Jude', 'Julian',
+  'Kit', 'Knox', 'Lachlan', 'Leander', 'Linus', 'Lucian', 'Magnus', 'Malachi', 'Monty', 'Nico',
+  'Orion', 'Otis', 'Otto', 'Pascal', 'Phineas', 'Quill', 'Rafe', 'Remy', 'Rory', 'Rufus',
+  'Sacha', 'Sebastian', 'Stellan', 'Sylvan', 'Teddy', 'Tobias', 'Wilder', 'Xander', 'Zane', 'Ziggy'
 ];
 
 const FEMALE_NAMES = [
@@ -60,7 +66,13 @@ const FEMALE_NAMES = [
   'Theresa', 'Diana', 'Natalie', 'Brittany', 'Charlotte', 'Rose', 'Alexis', 'Kayla', 'Lori', 'Faith',
   'Luna', 'Willow', 'Hazel', 'Ivy', 'Violet', 'Aurora', 'Iris', 'Juniper', 'Flora', 'Clementine',
   'Beatrix', 'Clara', 'Eloise', 'Genevieve', 'Matilda', 'Penelope', 'Rosemary', 'Tabitha', 'Winifred', 'Zelda',
-  'Ada', 'Beatrice', 'Cora', 'Daphne', 'Edith', 'Florence', 'Greta', 'Hattie', 'Imogen', 'Lottie'
+  'Ada', 'Beatrice', 'Cora', 'Daphne', 'Edith', 'Florence', 'Greta', 'Hattie', 'Imogen', 'Lottie',
+  'Aisling', 'Alya', 'Amelie', 'Anouk', 'Ariadne', 'Aurelia', 'Calliope', 'Cecily', 'Cleo', 'Cosima',
+  'Delphine', 'Elowen', 'Elspeth', 'Esmé', 'Eulalie', 'Faye', 'Freya', 'Gaia', 'Ines', 'Ione',
+  'Isadora', 'Juno', 'Kaia', 'Lark', 'Lyra', 'Maeve', 'Maia', 'Margot', 'Marlowe', 'Mina',
+  'Mira', 'Nell', 'Niamh', 'Odette', 'Ophelia', 'Orla', 'Ottilie', 'Paloma', 'Pearl', 'Petra',
+  'Phoebe', 'Pixie', 'Poppy', 'Primrose', 'Ramona', 'Rhea', 'Romilly', 'Saffron', 'Saskia', 'Seraphina',
+  'Tallulah', 'Thea', 'Veda', 'Willa', 'Xanthe', 'Yara', 'Zinnia', 'Zora', 'Zosia', 'Zuzanna'
 ];
 
 // --- Simulation Logic ---
@@ -93,12 +105,19 @@ class RabbitRecord {
 }
 
 function runSimulation() {
+  // Use a shuffled pool of names to ensure uniqueness
+  const malePool = [...MALE_NAMES].sort(() => random() - 0.5);
+  const femalePool = [...FEMALE_NAMES].sort(() => random() - 0.5);
+
   // Generation 0: Founders
   const g0Count = 6; // Reduced to keep total population manageable
   const g0Rabbits = [];
   for (let i = 0; i < g0Count; i++) {
     const sex = i < g0Count / 2 ? 'M' : 'F';
-    const name = sex === 'M' ? pick(MALE_NAMES) : pick(FEMALE_NAMES);
+    const pool = sex === 'M' ? malePool : femalePool;
+    if (pool.length === 0) continue; // Skip if out of names
+    
+    const name = pool.pop();
     // Add variation to founding birth years (up to 15 years difference)
     const birthYear = (CURRENT_YEAR - 125) + Math.floor(random() * 15);
     const r = new RabbitRecord(name, sex, birthYear, 0);
@@ -136,7 +155,10 @@ function runSimulation() {
       const childrenCount = 1 + Math.floor(random() * 4); // 1-4 children
       for (let c = 0; c < childrenCount; c++) {
         const sex = random() < 0.5 ? 'M' : 'F';
-        const name = sex === 'M' ? pick(MALE_NAMES) : pick(FEMALE_NAMES);
+        const pool = sex === 'M' ? malePool : femalePool;
+        if (pool.length === 0) continue; // Out of names for this sex - stop being born
+
+        const name = pool.pop();
         // Wider age gap: Parents can have children between ages 18 and 45
         const ageAtBirth = 18 + Math.floor(random() * 28);
         let birthYear = mother.birthYear + ageAtBirth;
@@ -195,6 +217,7 @@ sprites.run.onload = onAssetLoad;
 const hares = [];
 const playerConnections = []; // Array of { parentId, childId }
 let selectedHare = null;
+const notifications = []; // Array of { text, x, y, timer }
 
 class Hare {
   constructor(rabbitRecord) {
@@ -511,16 +534,38 @@ function init() {
     const mouseY = e.clientY - rect.top + camera.y;
 
     // Check for X clicks on connection lines
-    for (let i = playerConnections.length - 1; i >= 0; i--) {
-      const conn = playerConnections[i];
-      const p1 = hares.find(h => h.rabbit.id === conn.parentId);
-      const p2 = hares.find(h => h.rabbit.id === conn.childId);
-      if (p1 && p2 && p1.targetX !== null && p2.targetX !== null) {
-        const midX = (p1.x + p2.x) / 2 + FRAME_SIZE;
-        const midY = (p1.y + p2.y) / 2 + FRAME_SIZE;
-        const dist = Math.sqrt((mouseX - midX) ** 2 + (mouseY - midY) ** 2);
+    // Group connections by child to match rendering logic for X positions
+    const connectionsByChild = new Map();
+    for (const conn of playerConnections) {
+      if (!connectionsByChild.has(conn.childId)) connectionsByChild.set(conn.childId, []);
+      connectionsByChild.get(conn.childId).push(conn);
+    }
+
+    for (const [childId, conns] of connectionsByChild) {
+      const child = hares.find(h => h.rabbit.id === childId);
+      if (!child) continue;
+
+      const childY = child.y + FRAME_SIZE;
+      const parents = conns.map(c => hares.find(h => h.rabbit.id === c.parentId)).filter(Boolean);
+      if (parents.length === 0) continue;
+
+      const avgParentY = parents.reduce((sum, p) => sum + (p.y + FRAME_SIZE), 0) / parents.length;
+      const midY = (avgParentY + childY) / 2;
+
+      for (let i = 0; i < conns.length; i++) {
+        const p = parents[i];
+        
+        // Only allow clicking X if the parent or child is selected
+        if (selectedHare !== p && selectedHare !== child) continue;
+
+        const pX = p.x + FRAME_SIZE;
+        const pY = p.y + FRAME_SIZE;
+        const xX = pX;
+        const xY = (pY + midY) / 2;
+
+        const dist = Math.sqrt((mouseX - xX) ** 2 + (mouseY - xY) ** 2);
         if (dist < 15) {
-          playerConnections.splice(i, 1);
+          playerConnections.splice(playerConnections.indexOf(conns[i]), 1);
           updateTreeDiagram();
           return;
         }
@@ -547,8 +592,22 @@ function init() {
         const parent = h1.rabbit.birthYear <= h2.rabbit.birthYear ? h1 : h2;
         const child = parent === h1 ? h2 : h1;
 
-        // Don't add duplicate connections
-        if (!playerConnections.some(c => c.parentId === parent.rabbit.id && c.childId === child.rabbit.id)) {
+        // Rule: One father ('M') and one mother ('F')
+        const parentSex = parent.rabbit.sex;
+        const alreadyHasParentOfSex = playerConnections.some(c => {
+          if (c.childId !== child.rabbit.id) return false;
+          const existingParent = hares.find(h => h.rabbit.id === c.parentId);
+          return existingParent && existingParent.rabbit.sex === parentSex;
+        });
+
+        if (alreadyHasParentOfSex) {
+          notifications.push({
+            text: `${child.rabbit.firstName} already has a ${parentSex === 'M' ? 'father' : 'mother'}!`,
+            x: e.clientX,
+            y: e.clientY,
+            timer: 120 // 2 seconds at 60fps
+          });
+        } else if (!playerConnections.some(c => c.parentId === parent.rabbit.id && c.childId === child.rabbit.id)) {
           playerConnections.push({ parentId: parent.rabbit.id, childId: child.rabbit.id });
           updateTreeDiagram();
         }
@@ -603,33 +662,108 @@ function loop() {
   // Draw player connections
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
   ctx.lineWidth = 2;
+  
+  // Group connections by child to handle dual parents
+  const connectionsByChild = new Map();
   for (const conn of playerConnections) {
-    const p1 = hares.find(h => h.rabbit.id === conn.parentId);
-    const p2 = hares.find(h => h.rabbit.id === conn.childId);
-    if (p1 && p2) {
-      const x1 = p1.x - camera.x + FRAME_SIZE;
-      const y1 = p1.y - camera.y + FRAME_SIZE;
-      const x2 = p2.x - camera.x + FRAME_SIZE;
-      const y2 = p2.y - camera.y + FRAME_SIZE;
-      
+    if (!connectionsByChild.has(conn.childId)) connectionsByChild.set(conn.childId, []);
+    connectionsByChild.get(conn.childId).push(conn);
+  }
+
+  for (const [childId, conns] of connectionsByChild) {
+    const child = hares.find(h => h.rabbit.id === childId);
+    if (!child) continue;
+
+    const childX = child.x - camera.x + FRAME_SIZE;
+    const childY = child.y - camera.y + FRAME_SIZE;
+    
+    // Determine horizontal line Y (midway between parents and child)
+    // For simplicity, we assume all parents are on the level above
+    const parents = conns.map(c => hares.find(h => h.rabbit.id === c.parentId)).filter(Boolean);
+    if (parents.length === 0) continue;
+
+    const avgParentY = parents.reduce((sum, p) => sum + (p.y - camera.y + FRAME_SIZE), 0) / parents.length;
+    const midY = (avgParentY + childY) / 2;
+
+    if (parents.length === 1) {
+      const p = parents[0];
+      const pX = p.x - camera.x + FRAME_SIZE;
+      const pY = p.y - camera.y + FRAME_SIZE;
+
+      // Vertical down from parent to midY
       ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
+      ctx.moveTo(pX, pY);
+      ctx.lineTo(pX, midY);
       ctx.stroke();
 
-      // Draw "X" for deletion
-      const midX = (x1 + x2) / 2;
-      const midY = (y1 + y2) / 2;
-      ctx.fillStyle = '#ff4444';
+      // Horizontal to childX
       ctx.beginPath();
-      ctx.arc(midX, midY, 10, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = 'white';
-      ctx.font = 'bold 12px Arial';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('X', midX, midY);
+      ctx.moveTo(pX, midY);
+      ctx.lineTo(childX, midY);
+      ctx.stroke();
+
+      // Vertical down to child
+      ctx.beginPath();
+      ctx.moveTo(childX, midY);
+      ctx.lineTo(childX, childY);
+      ctx.stroke();
+
+      if (selectedHare === p || selectedHare === child) {
+        drawX(pX, (pY + midY) / 2, conns[0]);
+      }
+    } else if (parents.length === 2) {
+      const p1 = parents[0];
+      const p2 = parents[1];
+      const p1X = p1.x - camera.x + FRAME_SIZE;
+      const p1Y = p1.y - camera.y + FRAME_SIZE;
+      const p2X = p2.x - camera.x + FRAME_SIZE;
+      const p2Y = p2.y - camera.y + FRAME_SIZE;
+
+      // Vertical down from both parents to midY
+      ctx.beginPath();
+      ctx.moveTo(p1X, p1Y);
+      ctx.lineTo(p1X, midY);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(p2X, p2Y);
+      ctx.lineTo(p2X, midY);
+      ctx.stroke();
+
+      // Horizontal join at midY
+      ctx.beginPath();
+      ctx.moveTo(p1X, midY);
+      ctx.lineTo(p2X, midY);
+      ctx.stroke();
+
+      // Vertical down from middle of join to childX at midY (or just straight to child)
+      const joinMidX = (p1X + p2X) / 2;
+      ctx.beginPath();
+      ctx.moveTo(joinMidX, midY);
+      ctx.lineTo(childX, midY); // Horizontal step if child isn't perfectly centered
+      ctx.lineTo(childX, childY);
+      ctx.stroke();
+
+      // Draw Xs on pre-joined segments only if parent or child is selected
+      if (selectedHare === p1 || selectedHare === child) {
+        drawX(p1X, (p1Y + midY) / 2, conns[0]);
+      }
+      if (selectedHare === p2 || selectedHare === child) {
+        drawX(p2X, (p2Y + midY) / 2, conns[1]);
+      }
     }
+  }
+
+  function drawX(x, y, connection) {
+    ctx.fillStyle = '#ff4444';
+    ctx.beginPath();
+    ctx.arc(x, y, 10, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'white';
+    ctx.font = 'bold 12px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('X', x, y);
   }
 
   hares.sort((a, b) => a.y - b.y);
@@ -637,6 +771,17 @@ function loop() {
   for (const hare of hares) {
     hare.update();
     hare.draw();
+  }
+
+  // Draw notifications
+  for (let i = notifications.length - 1; i >= 0; i--) {
+    const n = notifications[i];
+    ctx.font = 'bold 16px Arial';
+    ctx.fillStyle = `rgba(255, 68, 68, ${n.timer / 60})`;
+    ctx.textAlign = 'center';
+    ctx.fillText(n.text, n.x, n.y - (120 - n.timer) * 0.5);
+    n.timer--;
+    if (n.timer <= 0) notifications.splice(i, 1);
   }
 
   requestAnimationFrame(loop);

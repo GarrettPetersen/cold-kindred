@@ -1,3336 +1,666 @@
-// styles are linked in index.html
-import { getGlobalNewsStory } from './newsStories.js';
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
 
-const app = document.getElementById('app');
+const FIELD_WIDTH = 1200;
+const FIELD_HEIGHT = 1200;
+const HARE_COUNT = 100;
+const FRAME_SIZE = 32;
+const CURRENT_YEAR = 2025;
 
-app.innerHTML = `
-  <main>
-    <button id="menuToggle" class="hamburger" aria-label="Menu">☰</button>
-    <section class="hero" id="hero">
-      <h1>Cold Kindred</h1>
-      <p class="tagline">A procedurally generated genealogical murder mystery.</p>
-      <button id="start" class="start">Start Investigation</button>
-    </section>
-
-    <section id="sim" class="sim hidden" aria-live="polite">
-
-      <div class="panels">
-        <div class="sidebar">
-          <div class="city-banner">City: <span id="playerCityName">Unknown</span></div>
-          <button class="menu-btn active" data-panel="home">Homepage</button>
-          <button class="menu-btn" data-panel="evidence">Evidence locker</button>
-          <button class="menu-btn" data-panel="records">Public records office</button>
-          <button class="menu-btn" data-panel="graveyard">Graveyard</button>
-          <button class="menu-btn" data-panel="codis">CODIS</button>
-          <button class="menu-btn" data-panel="airport">Airport</button>
-          <button class="menu-btn" data-panel="genealogy">Connections</button>
-          <button class="menu-btn" data-panel="news">Newspaper archive</button>
-        </div>
-        <div id="panel-home" class="panel tab-panel">
-          <h2>City Homepage</h2>
-          <div class="city-search">
-            <input id="residentSearch" class="input" placeholder="Search residents… (last name)" autocomplete="off" />
-            <div id="residentList" class="typeahead"></div>
-          </div>
-          <div class="section">
-            <div id="skylineBox" style="border:1px solid #000; background:#fff; padding:0; height:320px; display:flex; align-items:flex-end; justify-content:center;">
-              <img id="skylineImg" alt="City skyline" style="width:100%; height:auto; max-height:100%; object-fit:contain; object-position:bottom center; display:block;" />
-            </div>
-          </div>
-        </div>
-        <div id="panel-evidence" class="panel tab-panel">
-          <h2>Evidence locker</h2>
-          <div id="evList" class="list"></div>
-          <div id="evActions" class="detail" style="margin-top:8px"></div>
-          <div id="evStatus" class="title-sub"></div>
-        </div>
-        <div id="panel-records" class="panel tab-panel hidden">
-          <h2>Public records</h2>
-          <div class="section field-row">
-            <label>Type
-              <select id="recType" class="input" style="width:160px">
-                <option value="birth">Births</option>
-                <option value="death">Deaths</option>
-                <option value="marriage">Marriages</option>
-              </select>
-            </label>
-            <label>Year
-              <input id="recYear" class="input" style="width:120px" placeholder="e.g. 1955" />
-            </label>
-            <label>Letter range
-              <select id="recRange" class="input" style="width:160px">
-                <option value="A-D">A–D</option>
-                <option value="E-H">E–H</option>
-                <option value="I-L">I–L</option>
-                <option value="M-P">M–P</option>
-                <option value="Q-T">Q–T</option>
-                <option value="U-Z">U–Z</option>
-              </select>
-            </label>
-            <button id="recSearch" class="start secondary">Search</button>
-          </div>
-          <div id="recResults" class="detail"></div>
-        </div>
-        <div id="panel-graveyard" class="panel tab-panel hidden">
-          <h2>Graveyard</h2>
-          <div class="section field-row">
-            <label>Plot # <input id="gyPlot" class="input" type="number" style="width:120px" /></label>
-            <button id="gyLookup" class="start secondary">Lookup</button>
-          </div>
-          <div id="gyResults" class="detail"></div>
-        </div>
-        <div id="panel-codis" class="panel tab-panel hidden">
-          <h2>CODIS</h2>
-          <div class="section">
-            <button id="codisRefresh" class="start secondary">Refresh</button>
-          </div>
-          <div id="codisList" class="detail"></div>
-        </div>
-        <div id="panel-interview" class="panel tab-panel hidden">
-          <h2>Interview</h2>
-          <div id="intHeader" class="title-sub"></div>
-          <div id="intTranscript" class="detail" style="height:200px; overflow:auto"></div>
-          <div class="section">
-            <button id="intHello" class="start secondary">Say "hello"</button>
-            <button id="intBack" class="start secondary">Back</button>
-          </div>
-          <div id="intMenu" class="section"></div>
-        </div>
-        <div id="panel-news" class="panel tab-panel hidden">
-          <h2>Newspaper archive</h2>
-          <div class="section field-row">
-            <label>Year <input id="newsYear" class="input" style="width:120px" placeholder="e.g. 1972" /></label>
-            <button id="newsSearch" class="start secondary">Search</button>
-          </div>
-          <div id="newsResults" class="detail"></div>
-        </div>
-        <div id="panel-airport" class="panel tab-panel hidden">
-          <h2>Airport</h2>
-          <div id="locText" class="location-text">Location: Unknown</div>
-          <svg id="mapSvg" class="map-svg" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMid meet"></svg>
-        </div>
-        <div id="panel-genealogy" class="panel tab-panel hidden">
-          <h2>Connections</h2>
-          <div class="gene-wrap"><svg id="geneSvg" class="gene-svg" preserveAspectRatio="xMidYMid meet"></svg></div>
-        </div>
-        <div id="panel-log" class="panel tab-panel hidden">
-          <h2>Run Log</h2>
-          <div id="log" class="log" aria-label="Simulation log"></div>
-          <div style="margin-top:8px">
-            <button id="toggleJson" class="text-btn">Toggle JSON</button>
-          </div>
-          <pre id="outputJson" class="json hidden"></pre>
-        </div>
-      </div>
-    </section>
-    <section id="overlaySim" class="overlay"><div class="overlay-card">
-      <div class="title-sub">Simulating 125 years of demographic changes. This may take a few minutes.</div>
-      <div id="flashYear" class="year-flash">1900</div>
-      <div id="flashMsg" class="title-sub"></div>
-      <div id="flashFeed" class="flash-feed"></div>
-    </div></section>
-    <section id="overlayTitle" class="overlay"><div class="overlay-card">
-      <div class="title-headline" id="titleHeadline">Case Brief</div>
-      <div class="title-sub" id="titleSub"></div>
-      <button id="titleContinue" class="title-btn">Begin Investigation</button>
-    </div></section>
-  </main>
-`;
-
-const heroEl = document.getElementById('hero');
-const simEl = document.getElementById('sim');
-const startBtn = document.getElementById('start');
-const runAgainBtn = document.getElementById('runAgain');
-const statusEl = { textContent: '' , classList: { remove(){}, add(){} } };
-const progressEl = { setAttribute(){} };
-const progressBarEl = { style: { width: '0%' } };
-const logEl = document.getElementById('log');
-const outputJsonEl = document.getElementById('outputJson');
-const toggleJsonBtn = document.getElementById('toggleJson');
-const menuToggleBtn = document.getElementById('menuToggle');
-const personSearchEl = document.getElementById('personSearch');
-const personResultsEl = document.getElementById('personResults');
-const personDetailEl = document.getElementById('personDetail');
-const geneSearchEl = document.getElementById('geneSearch');
-const geneAddBtn = document.getElementById('geneAdd');
-const geneRevealBtn = document.getElementById('geneReveal');
-const geneClearBtn = document.getElementById('geneClear');
-const geneSvg = document.getElementById('geneSvg');
-const mapSvg = document.getElementById('mapSvg');
-const locText = document.getElementById('locText');
-const skylineImg = document.getElementById('skylineImg');
-const skylineBox = document.getElementById('skylineBox');
-const playerCityNameEl = document.getElementById('playerCityName');
-const menuButtons = Array.from(document.querySelectorAll('.menu-btn'));
-const panelByName = (n) => document.getElementById(`panel-${n}`);
-const evSendDNA = document.getElementById('evSendDNA');
-const evStatus = document.getElementById('evStatus');
-const recTypeEl = document.getElementById('recType');
-const recYearEl = document.getElementById('recYear');
-const recRangeEl = document.getElementById('recRange');
-const recSearchBtn = document.getElementById('recSearch');
-const recResultsEl = document.getElementById('recResults');
-const gyPlotEl = document.getElementById('gyPlot');
-const gyLookupBtn = document.getElementById('gyLookup');
-const gyResultsEl = document.getElementById('gyResults');
-const codisRefreshBtn = document.getElementById('codisRefresh');
-const codisListEl = document.getElementById('codisList');
-const newsYearEl = document.getElementById('newsYear');
-const newsSearchBtn = document.getElementById('newsSearch');
-const newsResultsEl = document.getElementById('newsResults');
-// removed offset tool
-const overlaySim = document.getElementById('overlaySim');
-const overlayTitle = document.getElementById('overlayTitle');
-const flashYearEl = document.getElementById('flashYear');
-const flashMsgEl = document.getElementById('flashMsg');
-const titleHeadlineEl = document.getElementById('titleHeadline');
-const titleSubEl = document.getElementById('titleSub');
-const titleContinueBtn = document.getElementById('titleContinue');
-const flashFeedEl = document.getElementById('flashFeed');
-
-function pushFlash(text, style = 'normal') {
-  if (!flashFeedEl) return;
-  // bump existing lines' fade levels
-  const lines = Array.from(flashFeedEl.querySelectorAll('.flash-line'));
-  lines.forEach((ln) => {
-    for (let i = 5; i >= 0; i--) ln.classList.remove(`fade-${i}`);
-    const cur = Number(ln.dataset.fade || 0);
-    const next = Math.min(cur + 1, 5);
-    ln.dataset.fade = String(next);
-    ln.classList.add(`fade-${next}`);
-  });
-  // add new line at top
-  const div = document.createElement('div');
-  div.className = 'flash-line fade-0' + (style === 'murder' ? ' murder' : '');
-  div.dataset.fade = '0';
-  div.textContent = text;
-  flashFeedEl.prepend(div);
-  // cap to last ~10
-  const all = Array.from(flashFeedEl.querySelectorAll('.flash-line'));
-  all.slice(10).forEach(n => n.remove());
+// --- Seeded Random ---
+function getDailySeed() {
+  const now = new Date();
+  const dateStr = now.toISOString().split('T')[0]; // "YYYY-MM-DD"
+  let hash = 0;
+  for (let i = 0; i < dateStr.length; i++) {
+    hash = (hash << 5) - hash + dateStr.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
 }
 
-function setStatus(stateText, stateClass) {
-  statusEl.textContent = stateText;
-  statusEl.classList.remove('idle', 'running', 'done');
-  statusEl.classList.add(stateClass);
+const seed = getDailySeed();
+let rngState = seed;
+function random() {
+  rngState = (rngState * 1664525 + 1013904223) % 4294967296;
+  return rngState / 4294967296;
 }
 
-function setProgress(percent) {
-  const value = Math.max(0, Math.min(100, Math.round(percent)));
-  progressBarEl.style.width = `${value}%`;
-  progressEl.setAttribute('aria-valuenow', String(value));
+function pick(arr) {
+  return arr[Math.floor(random() * arr.length)];
 }
 
-function logLine(message) {
-  const time = new Date().toLocaleTimeString();
-  const line = document.createElement('div');
-  line.textContent = `[${time}] ${message}`;
-  logEl.appendChild(line);
-  logEl.scrollTop = logEl.scrollHeight;
-}
+// --- Names ---
+const MALE_NAMES = [
+  'James', 'John', 'Robert', 'Michael', 'William', 'David', 'Richard', 'Joseph', 'Thomas', 'Charles',
+  'Christopher', 'Daniel', 'Matthew', 'Anthony', 'Mark', 'Donald', 'Steven', 'Paul', 'Andrew', 'Joshua',
+  'Kenneth', 'Kevin', 'Brian', 'George', 'Timothy', 'Ronald', 'Edward', 'Jason', 'Jeffrey', 'Ryan',
+  'Jacob', 'Gary', 'Nicholas', 'Eric', 'Jonathan', 'Stephen', 'Larry', 'Justin', 'Scott', 'Brandon',
+  'Benjamin', 'Samuel', 'Gregory', 'Frank', 'Alexander', 'Raymond', 'Patrick', 'Jack', 'Dennis', 'Jerry',
+  'Tyler', 'Aaron', 'Jose', 'Adam', 'Nathan', 'Henry', 'Zachary', 'Douglas', 'Peter', 'Kyle',
+  'Noah', 'Ethan', 'Jeremy', 'Walter', 'Christian', 'Keith', 'Roger', 'Terry', 'Austin', 'Sean',
+  'Gerald', 'Carl', 'Harold', 'Dylan', 'Arthur', 'Lawrence', 'Jordan', 'Jesse', 'Bryan', 'Billy',
+  'Bruce', 'Gabriel', 'Logan', 'Alan', 'Juan', 'Roy', 'Ralph', 'Randy', 'Eugene', 'Vincent',
+  'Bobby', 'Russell', 'Louis', 'Philip', 'Johnny', 'Miguel', 'Caleb', 'Lucas', 'Alfred', 'Bradley',
+  'Oliver', 'Liam', 'Mason', 'Ethan', 'Elias', 'Hudson', 'Hunter', 'Asher', 'Silas', 'Leo',
+  'Finn', 'Arlo', 'Milo', 'Felix', 'Jasper', 'Oscar', 'Theo', 'Hugo', 'Arthur', 'Otto',
+  'Barnaby', 'Bartholomew', 'Benedict', 'Bram', 'Casper', 'Clement', 'Cyril', 'Dexter', 'Edmund', 'Ernest'
+];
 
-function delay(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+const FEMALE_NAMES = [
+  'Mary', 'Patricia', 'Jennifer', 'Linda', 'Elizabeth', 'Barbara', 'Susan', 'Jessica', 'Sarah', 'Karen',
+  'Nancy', 'Lisa', 'Margaret', 'Betty', 'Sandra', 'Ashley', 'Dorothy', 'Kimberly', 'Emily', 'Donna',
+  'Michelle', 'Carol', 'Amanda', 'Melissa', 'Deborah', 'Stephanie', 'Rebecca', 'Laura', 'Sharon', 'Cynthia',
+  'Kathleen', 'Amy', 'Shirley', 'Angela', 'Helen', 'Anna', 'Brenda', 'Pamela', 'Nicole', 'Emma',
+  'Samantha', 'Katherine', 'Christine', 'Debra', 'Rachel', 'Catherine', 'Carolyn', 'Janet', 'Ruth', 'Maria',
+  'Heather', 'Diane', 'Virginia', 'Julie', 'Joyce', 'Victoria', 'Olivia', 'Kelly', 'Christina', 'Lauren',
+  'Joan', 'Evelyn', 'Judith', 'Megan', 'Andrea', 'Cheryl', 'Hannah', 'Jacqueline', 'Martha', 'Gloria',
+  'Teresa', 'Ann', 'Sara', 'Madison', 'Frances', 'Kathryn', 'Jean', 'Abigail', 'Alice', 'Julia',
+  'Judy', 'Sophia', 'Grace', 'Denise', 'Amber', 'Doris', 'Marilyn', 'Danielle', 'Beverly', 'Isabella',
+  'Theresa', 'Diana', 'Natalie', 'Brittany', 'Charlotte', 'Rose', 'Alexis', 'Kayla', 'Lori', 'Faith',
+  'Luna', 'Willow', 'Hazel', 'Ivy', 'Violet', 'Aurora', 'Iris', 'Juniper', 'Flora', 'Clementine',
+  'Beatrix', 'Clara', 'Eloise', 'Genevieve', 'Matilda', 'Penelope', 'Rosemary', 'Tabitha', 'Winifred', 'Zelda',
+  'Ada', 'Beatrice', 'Cora', 'Daphne', 'Edith', 'Florence', 'Greta', 'Hattie', 'Imogen', 'Lottie'
+];
 
-async function runSimulation() {
-  // Enhanced simulation: track individuals, marriages, and lineage across generations
-  const seed = Date.now();
-  const random = (() => {
-    let x = seed % 2147483647;
-    return () => (x = (x * 48271) % 2147483647) / 2147483647; // simple LCG for demo
-  })();
+// --- Simulation Logic ---
+const rabbits = [];
+let nextRabbitId = 1;
 
-  const result = {
-    version: 1,
-    seed,
-    steps: [],
-    people: [],
-    marriages: [],
-    events: [],
-    graveyards: {}, // { [cityId]: { nextPlotId:number, plots: { [plotId]: number[] } } }
-    evidence: {}, // { [cityId]: Array<{ id:string, name:string, type:string, actions?:string[] }> }
-    conversations: {}, // { [personId]: Array<{ from:'you'|'npc', text:string, ts:number }> }
-    conversationsState: {} // { [personId]: { ended?:boolean, droppedCig?:boolean } }
-  };
-
-  setStatus('Running…', 'running');
-  setProgress(0);
-  logEl.innerHTML = '';
-  outputJsonEl.textContent = '';
-  logLine('Starting simulation');
-  // show overlay for flashing years
-  overlaySim.classList.add('visible');
-  if (flashYearEl) flashYearEl.textContent = '1900';
-  pushFlash('Preparing simulation…');
-
-  // ---------- Name lists (common US names, truncated for demo but sufficient for uniqueness) ----------
-  const COMMON_SURNAMES = [
-    // Top US surnames (extended set)
-    'Smith','Johnson','Williams','Brown','Jones','Garcia','Miller','Davis','Rodriguez','Martinez','Hernandez','Lopez','Gonzalez','Wilson','Anderson','Thomas','Taylor','Moore','Jackson','Martin','Lee','Perez','Thompson','White','Harris','Sanchez','Clark','Ramirez','Lewis','Robinson','Walker','Young','Allen','King','Wright','Scott','Torres','Nguyen','Hill','Flores','Green','Adams','Nelson','Baker','Hall','Rivera','Campbell','Mitchell','Carter','Roberts','Gomez','Phillips','Evans','Turner','Diaz','Parker','Cruz','Edwards','Collins','Reyes','Stewart','Morris','Morales','Murphy','Cook','Rogers','Gutierrez','Ortiz','Morgan','Cooper','Peterson','Bailey','Reed','Kelly','Howard','Ramos','Kim','Cox','Ward','Richardson','Watson','Brooks','Chavez','Wood','James','Bennett','Gray','Mendoza','Ruiz','Hughes','Price','Alvarez','Castillo','Sanders','Patel','Myers','Long','Ross','Foster','Jimenez','Powell','Jenkins','Perry','Russell','Sullivan','Bell','Coleman','Butler','Henderson','Barnes','Gonzales','Fisher','Vasquez','Simmons','Romero','Jordan','Patterson','Alexander','Hamilton','Graham','Reynolds','Griffin','Wallace','Moreno','West','Cole','Hayes','Bryant','Herrera','Gibson','Ellis','Tran','Medina','Aguilar','Stevens','Murray','Ford','Castro','Marshall','Owens','Harrison','Fernandez','Mcdonald','Woods','Washington','Kennedy','Wells','Vargas','Henry','Chen','Freeman','Shaw','Mendez','Weaver','Guzman','Nichols','Olson','Ramsey','Hunter','Hart','Guerrero','George','Porter','Chambers','Moss','Newton','Page','Schmidt','Hansen','Bishop','Burke','Boyd','Lowe','Dean','Haynes','Fleming','Park','Warren','Gibbs','Walters','Lyons','Barker','Paul','Mack','Poole','Frank','Logan','Owen','Bass','Marsh','Drake','Sutton','Jennings','Boone','Banks','Potter','Lindsey','Pope','Sherman','Weston','Conner','Baldwin','French','Farmer','Hines','Lawson','Casey','Little','Day','Fowler','Bowman','Davidson','May','Carroll','Fields','Figueroa','Carlson','Mccarthy','Harrington','Norton','Atkins','Luna','Miles','Greer','Roman','Morrow','Randall','Clarke','Parks','Lambert','Stephens','Snyder','Mason','Salazar','Cross','Curtis','Kent','Doyle','Brock','Cummings','Erickson','Holland','Keller','Klein','Pratt','Tyler','Sharp','Barber','Goodman','Brady',
-    // Additional US/Anglo/Euro-immigrant surnames to broaden variety
-    'Abbott','Acevedo','Acosta','Aguirre','Albert','Alston','Anthony','Archer','Armstrong','Arroyo','Ashby','Ashley','Atkinson','Austin','Avery','Ball','Barrett','Bartlett','Bates','Becker','Bellamy','Benton','Berg','Berry','Black','Blair','Blake','Bolton','Bond','Booker','Booth','Bowers','Boyle','Bradford','Bradley','Brady','Brandt','Brennan','Brewer','Bridges','Briggs','Brock','Browning','Bruce','Bryan','Buchanan','Buck','Burnett','Burns','Burton','Bush','Calderon','Calhoun','Callahan','Camacho','Cameron','Carey','Carlson','Carney','Carr','Carson','Case','Castro','Chan','Chandler','Chang','Chapman','Charles','Chase','Christensen','Christian','Chu','Clarke','Clayton','Cline','Cobb','Cohen','Contreras','Conway','Cooke','Cooley','Copeland','Cordova','Cortez','Costa','Craig','Crane','Crawford','Crosby','Curry','Daniel','Daniels','Daugherty','David','Davila','Dawson','Decker','Delgado','Dennis','Dickerson','Dickson','Dixon','Dodson','Dominguez','Dorsey','Douglas','Downs','Doyle','Duarte','Duffy','Duke','Dunlap','Dunn','Durham','Dyer','Eaton','Edmonds','Elliott','Emerson','England','Espinoza',' Estes','Ferguson','Finley','Fischer','Fitzgerald','Floyd','Flynn','Foreman','Fowler','Fox','Francis','Frederick','Friedman','Frost','Fry','Fuller','Gallegos','Gamble','Garner','Gay','George','Gentry','Glass','Golden','Good','Goodwin','Gordon','Gould','Grant','Graves','Greene','Grimes','Gross','Guerra','Guthrie','Hale','Haley','Hancock','Haney','Hardin','Harding','Harper','Harris','Harrington','Hatch','Hawkins','Hayden','Heath','Hebert','Hendrix','Hensley','Henson','Herman','Herring','Hess','Hester','Hewitt','Hickman','Hinton','Hobbs','Hodge','Hoffman','Holder','Holloway','Hoover','Hooper','Hopkins','Horne','House','Hubbard','Huber','Huerta','Huff','Humphrey','Hurst','Hutchinson','Ibarra','Ingram','Jack','Jacobson','Jensen','Johns','Johnston','Kane','Keith','Keller','Kelley','Kemp','Kendall','Kerr','Kidd','Kirk','Kirby','Kirkpatrick','Kline','Knapp','Knight','Knowles','Kramer','Lamb','Lamb','Lambert','Lancaster','Landry','Lane','Lang','Lara','Larsen','Larson','Lawrence','Le','Leach','Leal','Leblanc','Lee','Lehman','Lester','Levine','Li','Lindsey','Lloyd','Lucas','Lynn','Macdonald','Maddox','Maldonado','Mann','Manning','Marks','Marquez','Marsh','Marshall','Massey','Mathews','Mathis','Mayer','Maynard','McBride','McCall','McCann','McCarthy','McClain','McConnell','McCormick','McCoy','McCullough','McDaniel','McDowell','McGee','McGuire','McIntyre','McKay','McKee','McKenzie','McKinney','McKnight','McLaughlin','McLean','McNeil','McPherson','Meadows','Mejia','Melendez','Mendez','Meredith','Michael','Middleton','Miranda','Mitchell','Monroe','Monson','Montgomery','Montoya','Moon','Mooney','Moran','Moreno','Morris','Morrow','Mosley','Moss','Mueller','Munoz','Navarro','Neal','Nelson','Newman','Nielsen','Nixon','Noble','Noel','Norman','Norris','Nunez','Ochoa','Odom','Olsen','Ortega','Ortiz','Osborne','Owen','Pacheco','Padilla','Page','Palmer','Park','Parks','Parsons','Payne','Pearce','Pena','Pennington','Perkins','Phelps','Phillips','Pineda','Pittman','Pollard','Portillo','Potter','Powell','Preston','Price','Quinn','Ramsey','Randolph','Rasmussen','Ray','Raymond','Reese','Reeves','Reid','Reilly','Richard','Richards','Riggs','Riley','Rios','Rivas','Roach','Robbins','Rocha','Rojas','Rollins','Roman','Roosevelt','Rosales','Rosario','Roth','Rowe','Roy','Salas','Salgado','Salinas','Sampson','Sanchez','Sandoval','Santana','Santiago','Santos','Sargent','Saunders','Savage','Sawyer','Schmidt','Schneider','Schroeder','Schultz','Schwartz','Sears','Sexton','Shaffer','Shannon','Sharp','Shaw','Shea','Shepherd','Sheppard','Sherman','Shields','Short','Silva','Simmons','Simpson','Singleton','Skinner','Slater','Sloan','Small','Smart','Snow','Solomon','Sosa','Soto','Spears','Spencer','Stafford','Stanley','Stark','Steele','Stein','Stephenson','Stevenson','Stewart','Stokes','Stone','Stout','Strickland','Strong','Stuart','Suarez','Sullivan','Summers','Swanson','Sweeney','Sweet','Tanner','Tate','Terrell','Terry','Thomas','Thornton','Todd','Townsend','Tran','Trevino','Trujillo','Tucker','Turner','Tyler','Underwood','Valdez','Valencia','Valentine','Valenzuela','Vance','Vega','Velasquez','Velez','Villarreal','Vincent','Vinson','Wade','Wagner','Walker','Wall','Walsh','Walter','Ware','Warner','Warren','Washington','Waters','Watkins','Watson','Weaver','Webb','Weber','Webster','Weeks','Weiss','Welch','West','Wheeler','Whitaker','Whitehead','Whitfield','Whitley','Whitney','Wiggins','Wilcox','Wiley','Wilkerson','Wilkinson','William','Williamson','Willis','Wilson','Winters','Wise','Wolfe','Wong','Woodard','Woods','Workman','Wright','Wu','Wyatt','Yang','Yates','Young','Zamora','Zhang','Zuniga'
-  ];
-
-  const MALE_FIRST = [
-    'James','John','Robert','Michael','William','David','Richard','Joseph','Thomas','Charles','Christopher','Daniel','Matthew','Anthony','Mark','Donald','Steven','Paul','Andrew','Joshua','Kenneth','Kevin','Brian','George','Timothy','Ronald','Edward','Jason','Jeffrey','Ryan','Jacob','Gary','Nicholas','Eric','Jonathan','Stephen','Larry','Justin','Scott','Brandon','Benjamin','Samuel','Gregory','Frank','Alexander','Raymond','Patrick','Jack','Dennis','Jerry','Tyler','Aaron','Jose','Adam','Nathan','Henry','Zachary','Douglas','Peter','Kyle','Noah','Ethan','Jeremy','Walter','Christian','Keith','Roger','Terry','Austin','Sean','Gerald','Carl','Harold','Dylan','Arthur','Lawrence','Jordan','Jesse','Bryan','Billy','Bruce','Gabriel','Logan','Alan','Juan','Roy','Ralph','Randy','Eugene','Vincent','Bobby','Russell','Louis','Philip','Johnny','Miguel','Caleb','Lucas','Alfred','Bradley','Francis','Marcus','Seth','Edgar','Owen','Leo','Max','Elliot','Connor','Colin','Spencer','Harrison','Cameron','Cole','Adrian','Tristan','Xavier','Victor','Joel','Martin','Ivan','Troy','Derek','Oscar','Grant','Wesley','Trevor','Sergio','Andre','Emmanuel','Marco','Diego','Eduardo','Jorge','Roberto','Lorenzo','Matteo','Luca','Enzo','Pedro','Hugo','Theo','Nicolas','Pablo','Alejandro','Luis','Santiago','Mateo','Brayden','Wyatt','Hunter','Levi','Dominic','Parker','Cooper','Jason','Chad','Clifford','Dean','Glen','Howard','Marshall','Neil','Oliver','Quentin','Stanley','Theodore','Vernon','Wayne'
-  ];
-
-  const FEMALE_FIRST = [
-    'Mary','Patricia','Jennifer','Linda','Elizabeth','Barbara','Susan','Jessica','Sarah','Karen','Nancy','Lisa','Margaret','Betty','Sandra','Ashley','Dorothy','Kimberly','Emily','Donna','Michelle','Carol','Amanda','Melissa','Deborah','Stephanie','Rebecca','Laura','Sharon','Cynthia','Kathleen','Amy','Shirley','Angela','Helen','Anna','Brenda','Pamela','Nicole','Emma','Samantha','Katherine','Christine','Debra','Rachel','Catherine','Carolyn','Janet','Ruth','Maria','Heather','Diane','Virginia','Julie','Joyce','Victoria','Olivia','Kelly','Christina','Lauren','Joan','Evelyn','Judith','Megan','Andrea','Cheryl','Hannah','Jacqueline','Martha','Gloria','Teresa','Ann','Sara','Madison','Frances','Kathryn','Jean','Abigail','Alice','Julia','Judy','Sophia','Grace','Denise','Amber','Doris','Marilyn','Danielle','Beverly','Isabella','Theresa','Diana','Natalie','Brittany','Charlotte','Rose','Alexis','Kayla','Lori','Faith','Ava','Brooklyn','Ella','Mia','Zoe','Hailey','Avery','Leah','Audrey','Savannah','Claire','Skylar','Lucy','Peyton','Nevaeh','Lila','Eva','Stella','Violet','Ruby','Aria','Eleanor','Nora','Hazel','Addison','Alexa','Caroline','Sophie','Alice','Kylie','Serenity','Naomi','Elena','Allison','Luna','Mila','Aubrey','Paisley','Penelope','Aurora','Bella','Sadie','Ariana','Kennedy','Madeline','Piper','Brianna','Clara','Eliana','Quinn','Ivy','Delilah','Parker','Sydney','Jasmine','Valentina','Cora','Rylee','Eliza','Josephine','Iris','Adeline','Margot','Vivian','Juniper','Isla'
-  ];
-
-  // ---------- Helpers ----------
-  let nextId = 1;
-  let nextTwinGroupId = 1;
-  function createPerson(fields) {
-    const person = {
-      id: nextId++,
-      firstName: fields.firstName || 'Unknown',
-      lastName: fields.lastName || null,
-      maidenName: fields.maidenName || null,
-      sex: fields.sex, // 'M' | 'F'
-      birthDate: fields.birthDate,
-      birthYear: year(fields.birthDate),
-      generation: fields.generation,
-      fatherId: fields.fatherId || null,
-      motherId: fields.motherId || null,
-      spouseId: null,
-      partnerId: fields.partnerId || null,
-      bioFatherId: fields.bioFatherId || null,
-      bioMotherId: fields.bioMotherId || null,
-      twinGroupId: fields.twinGroupId || null, // shared id for twins
-      twinType: fields.twinType || null, // 'MZ' (identical) | 'DZ' (fraternal)
-      fingerprintHash: fields.fingerprintHash || (`fp-${Math.floor(random()*1e9).toString(36)}`),
-      hasPrintsOnFile: fields.hasPrintsOnFile != null ? !!fields.hasPrintsOnFile : (random() < 0.12),
-      cityId: fields.cityId || null,
-      city: fields.cityId ? getCityName(fields.cityId) : (fields.city || null),
-      skinTone: fields.skinTone || null, // 1..5 Fitzpatrick
-      hairColor: fields.hairColor || null, // 'black'|'brown'|'blonde'|'red'|'gray'|'bald'
-      friendly: (fields.friendly != null) ? !!fields.friendly : null, // social temperament (true=friendly, false=hostile)
-      lastAffairYear: null,
-      knowledgeRadius: fields.knowledgeRadius || null,
-      knowsAffairs: fields.knowsAffairs ?? null,
-      disposition: fields.disposition || null, // 'buried' | 'cremated'
-      retired: false,
-      alive: true
+class RabbitRecord {
+  constructor(firstName, sex, birthYear, gen, fatherId = null, motherId = null) {
+    this.id = nextRabbitId++;
+    this.firstName = firstName;
+    this.sex = sex;
+    this.birthYear = birthYear;
+    this.generation = gen;
+    this.fatherId = fatherId;
+    this.motherId = motherId;
+    this.spouseId = null;
+    this.alive = true;
+    
+    // Visual traits
+    this.tint = {
+      hue: random() * 360,
+      saturate: 70 + random() * 60,
+      brightness: 80 + random() * 40
     };
-    // Ensure last name present; prefer mother's surname, then father's, then 'Unknown'
-    if (!person.lastName) {
-      const mom = fields.motherId ? result.people.find(p => p.id === fields.motherId) : null;
-      const dad = fields.fatherId ? result.people.find(p => p.id === fields.fatherId) : null;
-      const fallback = mom?.lastName || dad?.lastName;
-      person.lastName = fallback && fallback !== 'Unknown' ? fallback : pick(COMMON_SURNAMES);
+  }
+
+  get fullName() {
+    return this.firstName;
+  }
+}
+
+function runSimulation() {
+  // Generation 0: Founders
+  const g0Count = 6; // Reduced to keep total population manageable
+  const g0Rabbits = [];
+  for (let i = 0; i < g0Count; i++) {
+    const sex = i < g0Count / 2 ? 'M' : 'F';
+    const name = sex === 'M' ? pick(MALE_NAMES) : pick(FEMALE_NAMES);
+    // Add variation to founding birth years (up to 15 years difference)
+    const birthYear = (CURRENT_YEAR - 125) + Math.floor(random() * 15);
+    const r = new RabbitRecord(name, sex, birthYear, 0);
+    g0Rabbits.push(r);
+    rabbits.push(r);
+  }
+
+  let prevGen = g0Rabbits;
+
+  for (let gen = 1; gen <= 4; gen++) { // 0 to 4 is 5 generations
+    const nextGen = [];
+    const males = prevGen.filter(r => r.sex === 'M');
+    const females = prevGen.filter(r => r.sex === 'F');
+    
+    // Pair them up
+    const pairs = [];
+    const mCount = males.length;
+    const fCount = females.length;
+    const pairCount = Math.min(mCount, fCount);
+    
+    // Shuffle lists for random pairing
+    const shuffledMales = [...males].sort(() => random() - 0.5);
+    const shuffledFemales = [...females].sort(() => random() - 0.5);
+
+    for (let i = 0; i < pairCount; i++) {
+      const m = shuffledMales[i];
+      const f = shuffledFemales[i];
+      m.spouseId = f.id;
+      f.spouseId = m.id;
+      pairs.push([m, f]);
     }
 
-    // Assign friendly/hostile temperament with simple heritability
-    if (person.friendly == null) {
-      const dad = person.fatherId ? result.people.find(p => p.id === person.fatherId) : null;
-      const mom = person.motherId ? result.people.find(p => p.id === person.motherId) : null;
-      if (dad || mom) {
-        const d = (dad && typeof dad.friendly === 'boolean') ? (dad.friendly ? 1 : 0) : 0.5;
-        const m = (mom && typeof mom.friendly === 'boolean') ? (mom.friendly ? 1 : 0) : 0.5;
-        const avg = (d + m) / 2;
-        const base = avg < 0.34 ? 0.35 : avg > 0.66 ? 0.65 : 0.5;
-        person.friendly = random() < base;
+    // Children
+    for (const [father, mother] of pairs) {
+      const childrenCount = 1 + Math.floor(random() * 4); // 1-4 children
+      for (let c = 0; c < childrenCount; c++) {
+        const sex = random() < 0.5 ? 'M' : 'F';
+        const name = sex === 'M' ? pick(MALE_NAMES) : pick(FEMALE_NAMES);
+        // Wider age gap: Parents can have children between ages 18 and 45
+        const ageAtBirth = 18 + Math.floor(random() * 28);
+        let birthYear = mother.birthYear + ageAtBirth;
+        
+        // Ensure no future rabbits
+        if (birthYear > CURRENT_YEAR) birthYear = CURRENT_YEAR;
+        
+        const child = new RabbitRecord(name, sex, birthYear, gen, father.id, mother.id);
+        nextGen.push(child);
+        rabbits.push(child);
+      }
+    }
+    prevGen = nextGen;
+  }
+}
+
+// --- Rendering & Game Engine ---
+// Camera state
+const camera = {
+  x: FIELD_WIDTH / 2 - window.innerWidth / 2,
+  y: FIELD_HEIGHT / 2 - window.innerHeight / 2,
+};
+
+// Input state
+const input = {
+  isDragging: false,
+  lastMouseX: 0,
+  lastMouseY: 0,
+};
+
+// Asset loading
+const sprites = {
+  idle: new Image(),
+  walk: new Image(),
+  run: new Image(),
+};
+
+let assetsLoaded = 0;
+const TOTAL_ASSETS = 3;
+
+function onAssetLoad() {
+  assetsLoaded++;
+  if (assetsLoaded === TOTAL_ASSETS) {
+    init();
+  }
+}
+
+sprites.idle.src = '/assets/Hare/Hare_Idle_with_shadow.png';
+sprites.walk.src = '/assets/Hare/Hare_Walk_with_shadow.png';
+sprites.run.src = '/assets/Hare/Hare_Run_with_shadow.png';
+
+sprites.idle.onload = onAssetLoad;
+sprites.walk.onload = onAssetLoad;
+sprites.run.onload = onAssetLoad;
+
+const hares = [];
+const playerConnections = []; // Array of { parentId, childId }
+let selectedHare = null;
+
+class Hare {
+  constructor(rabbitRecord) {
+    this.rabbit = rabbitRecord;
+    this.x = Math.random() * FIELD_WIDTH;
+    this.y = Math.random() * FIELD_HEIGHT;
+    this.targetX = null;
+    this.targetY = null;
+    this.state = 'idle'; // 'idle', 'walk', 'run'
+    this.direction = Math.floor(Math.random() * 4); // 0: Down, 1: Up, 2: Left, 3: Right
+    this.frame = 0;
+    this.frameTimer = 0;
+    this.frameSpeed = 0.1; // Animation speed
+    
+    this.moveTimer = 0;
+    this.vx = 0;
+    this.vy = 0;
+    
+    this.setRandomBehavior();
+  }
+
+  setRandomBehavior() {
+    const r = Math.random();
+    if (r < 0.6) { // 60% idle
+      this.state = 'idle';
+      this.vx = 0;
+      this.vy = 0;
+      this.frameSpeed = 0.1;
+    } else if (r < 0.95) { // 35% walk
+      this.state = 'walk';
+      this.frameSpeed = 0.15;
+      this.setRandomDirection(1); // speed 1
+    } else { // 5% run
+      this.state = 'run';
+      this.frameSpeed = 0.25;
+      this.setRandomDirection(2.5); // speed 2.5
+    }
+    this.moveTimer = 60 + Math.random() * 180; // Change behavior every 1-4 seconds
+  }
+
+  setRandomDirection(speed) {
+    // 8 possible directions (including diagonals)
+    const angle = Math.floor(Math.random() * 8) * (Math.PI / 4);
+    this.vx = Math.cos(angle) * speed;
+    this.vy = Math.sin(angle) * speed;
+    
+    this.updateDirectionFromVelocity();
+  }
+
+  updateDirectionFromVelocity() {
+    if (this.vx === 0 && this.vy === 0) return;
+    
+    const angle = Math.atan2(this.vy, this.vx);
+    // Map angle back to direction index (0: Down, 1: Up, 2: Left, 3: Right)
+    const deg = (angle * 180 / Math.PI + 360) % 360;
+    
+    if (deg >= 45 && deg < 135) this.direction = 0; // Down
+    else if (deg >= 225 && deg < 315) this.direction = 1; // Up
+    else if (deg >= 135 && deg < 225) this.direction = 2; // Left
+    else this.direction = 3; // Right
+  }
+
+  update() {
+    if (this.targetX !== null && this.targetY !== null) {
+      // Move towards target
+      const dx = this.targetX - this.x;
+      const dy = this.targetY - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      
+      if (dist > 5) {
+        this.state = 'run';
+        this.frameSpeed = 0.25;
+        this.vx = (dx / dist) * 2.5;
+        this.vy = (dy / dist) * 2.5;
+        this.updateDirectionFromVelocity();
       } else {
-        person.friendly = random() < 0.55;
+        this.state = 'idle';
+        this.vx = 0;
+        this.vy = 0;
+        this.x = this.targetX;
+        this.y = this.targetY;
       }
-    }
-    result.people.push(person);
-    personByIdSim.set(person.id, person);
-    return person;
-  }
-
-  function pick(arr) {
-    return arr[Math.floor(random() * arr.length)];
-  }
-
-  function sampleWithoutReplacement(arr, count) {
-    const copy = arr.slice();
-    const out = [];
-    const max = Math.min(count, copy.length);
-    for (let i = 0; i < max; i++) {
-      const idx = Math.floor(random() * copy.length);
-      out.push(copy[idx]);
-      copy.splice(idx, 1);
-    }
-    return out;
-  }
-
-  function year(dateStr) {
-    return new Date(dateStr).getUTCFullYear();
-  }
-
-  function isoFromYMD(y, m, d) {
-    const dt = new Date(Date.UTC(y, m - 1, d));
-    return dt.toISOString().slice(0, 10);
-  }
-
-  function uniqueBirthdates(count, startYear, endYear) {
-    const dates = new Set();
-    const min = Date.UTC(startYear, 0, 1);
-    const max = Date.UTC(endYear, 11, 31);
-    while (dates.size < count) {
-      const t = min + Math.floor(random() * (max - min));
-      const d = new Date(t);
-      const as = d.toISOString().slice(0, 10);
-      dates.add(as);
-    }
-    return Array.from(dates);
-  }
-
-  // Events registry and helpers
-  const eventsByPerson = new Map();
-  // Parent -> children index and id -> person map during sim
-  const childrenByParent = new Map(); // parentId -> number[] of childIds
-  const personByIdSim = new Map(); // id -> person (available during simulation)
-  function addEvent(evt) {
-    // evt: { year, type, people:[ids], details?:{} }
-    evt.id = result.events.length + 1;
-    result.events.push(evt);
-    for (const pid of evt.people) {
-      const arr = eventsByPerson.get(pid) || [];
-      arr.push(evt.id);
-      eventsByPerson.set(pid, arr);
-    }
-    return evt;
-  }
-
-  // Yearly events index (must exist before any code calls indexEventByYear)
-  const eventsByYear = new Map();
-  function indexEventByYear(evt) {
-    const list = eventsByYear.get(evt.year) || [];
-    list.push(evt);
-    eventsByYear.set(evt.year, list);
-  }
-
-  // Major US cities with approximate population weights (expanded for coverage)
-  const CITIES = [
-    { id: 1, name: 'New York, NY', weight: 8336817 },
-    { id: 2, name: 'Los Angeles, CA', weight: 3979576, offsetX: -22, offsetY: 0 },
-    { id: 3, name: 'Chicago, IL', weight: 2693976, offsetX: 6, offsetY: 38 },
-    { id: 4, name: 'Houston, TX', weight: 2320268, offsetX: 0, offsetY: 46 },
-    { id: 5, name: 'Phoenix, AZ', weight: 1680992, offsetX: 6, offsetY: 14 },
-    { id: 6, name: 'Philadelphia, PA', weight: 1584064 },
-    { id: 8, name: 'San Diego, CA', weight: 1423851, offsetX: -32, offsetY: -6 },
-    { id: 11, name: 'San Francisco, CA', weight: 883305, offsetX: -8, offsetY: -18 },
-    { id: 12, name: 'Seattle, WA', weight: 744955, offsetX: 56, offsetY: -14 },
-    { id: 13, name: 'Portland, OR', weight: 653115, offsetX: 48, offsetY: -8 },
-    { id: 14, name: 'Miami, FL', weight: 470914, offsetX: 18, offsetY: -28 },
-    { id: 15, name: 'Atlanta, GA', weight: 498715, offsetX: 46, offsetY: 34 },
-    { id: 16, name: 'New Orleans, LA', weight: 391006, offsetX: 26, offsetY: 26 },
-    { id: 17, name: 'Denver, CO', weight: 715522 },
-    { id: 18, name: 'Salt Lake City, UT', weight: 200133 },
-    { id: 20, name: 'Oklahoma City, OK', weight: 681054 },
-    { id: 21, name: 'St. Louis, MO', weight: 301578, offsetX: 0, offsetY: 20 },
-    { id: 22, name: 'Minneapolis, MN', weight: 429954, offsetX: 0, offsetY: 28 }
-  ];
-  const TOTAL_CITY_WEIGHT = CITIES.reduce((s, c) => s + c.weight, 0);
-  function pickWeightedCityId() {
-    const r = random() * TOTAL_CITY_WEIGHT;
-    let acc = 0;
-    for (const c of CITIES) {
-      acc += c.weight;
-      if (r <= acc) return c.id;
-    }
-    return CITIES[CITIES.length - 1].id;
-  }
-  function getCityName(cityId) {
-    const c = CITIES.find(c => c.id === cityId);
-    return c ? c.name : 'Unknown';
-  }
-  function getCityLatLng(cityId) {
-    switch (cityId) {
-      case 1: return [40.7128, -74.0060]; // New York
-      case 2: return [34.0522, -118.2437]; // Los Angeles
-      case 3: return [41.8781, -87.6298]; // Chicago
-      case 4: return [29.7604, -95.3698]; // Houston
-      case 5: return [33.4484, -112.0740]; // Phoenix
-      case 6: return [39.9526, -75.1652]; // Philadelphia
-      // removed San Antonio
-      case 8: return [32.7157, -117.1611]; // San Diego
-      // removed Dallas
-      // removed San Jose
-      case 11: return [37.7749, -122.4194]; // San Francisco
-      case 12: return [47.6062, -122.3321]; // Seattle
-      case 13: return [45.5152, -122.6784]; // Portland
-      case 14: return [25.7617, -80.1918]; // Miami
-      case 15: return [33.7490, -84.3880]; // Atlanta
-      case 16: return [29.9511, -90.0715]; // New Orleans
-      case 17: return [39.7392, -104.9903]; // Denver
-      case 18: return [40.7608, -111.8910]; // Salt Lake City
-      // removed Kansas City
-      case 20: return [35.4676, -97.5164]; // Oklahoma City
-      case 21: return [38.6270, -90.1994]; // St. Louis
-      case 22: return [44.9778, -93.2650]; // Minneapolis
-      default: return [39.8283, -98.5795];
-    }
-  }
-
-  // ----- Demographics and trait assignment -----
-  function getCityRegion(cityId) {
-    switch (cityId) {
-      case 1: // New York
-      case 6: // Philadelphia
-        return 'NE';
-      case 3: // Chicago
-        return 'MW';
-      case 2: // Los Angeles
-      case 5: // Phoenix
-      case 8: // San Diego
-      case 10: // San Jose
-        return 'W';
-      case 4: // Houston
-      case 7: // San Antonio
-      case 9: // Dallas
-        return 'S';
-      default:
-        return 'NE';
-    }
-  }
-  function pickWeighted(pairs) {
-    const total = pairs.reduce((s, [, w]) => s + w, 0);
-    let r = random() * total;
-    for (const [val, w] of pairs) {
-      if ((r -= w) <= 0) return val;
-    }
-    return pairs[pairs.length - 1][0];
-  }
-  function assignFounderTraits(person) {
-    const region = getCityRegion(person.cityId);
-    let toneWeights;
-    if (region === 'S') toneWeights = [[1, 50],[2,20],[3,12],[4,10],[5,8]];
-    else if (region === 'W') toneWeights = [[1,55],[2,22],[3,12],[4,7],[5,4]];
-    else if (region === 'MW') toneWeights = [[1,58],[2,22],[3,10],[4,6],[5,4]];
-    else toneWeights = [[1,60],[2,20],[3,10],[4,7],[5,3]];
-    person.skinTone = pickWeighted(toneWeights);
-    const hairWeights = [["black",30],["brown",40],["blonde",20],["red",5],["bald",2],["gray",3]];
-    person.hairColor = pickWeighted(hairWeights);
-    // Assign knowledge traits (2..5) and affair-knowledge
-    const r = random();
-    person.knowledgeRadius = r < 0.2 ? 2 : r < 0.7 ? 3 : r < 0.95 ? 4 : 5;
-    // Older generations slightly less likely to know affairs
-    const knows = random() < 0.35; // base
-    person.knowsAffairs = knows;
-  }
-  function inheritSkinTone(father, mother) {
-    const tones = [1,2,3,4,5];
-    const fav = father?.skinTone || 3;
-    const mav = mother?.skinTone || 3;
-    const base = Math.round((fav + mav) / 2);
-    const candidates = tones.map(t => [t, 1 / (1 + Math.abs(t - base))]);
-    // small mutation
-    candidates.forEach(c => c[1] *= 0.9);
-    const mutTone = Math.max(1, Math.min(5, base + (random() < 0.5 ? -1 : 1)));
-    candidates.push([mutTone, 0.5]);
-    return pickWeighted(candidates);
-  }
-  function inheritHairColor(father, mother) {
-    const colors = ["black","brown","blonde","red","bald","gray"];
-    const f = father?.hairColor || "brown";
-    const m = mother?.hairColor || "brown";
-    if (f === m) return f;
-    if (random() < 0.45) return f;
-    if (random() < 0.5) return m;
-    return colors[Math.floor(random() * colors.length)];
-  }
-
-  function validateBabyAttributes(baby, father, mother) {
-    const issues = [];
-    if (!baby.firstName) issues.push('firstName');
-    if (!baby.lastName || baby.lastName === 'Unknown') issues.push('lastName');
-    if (!baby.birthDate) issues.push('birthDate');
-    else if (Number.isNaN(year(baby.birthDate))) issues.push('birthYear');
-    if (baby.skinTone == null) issues.push('skinTone');
-    if (!baby.cityId) issues.push('cityId');
-    if (!father || !mother) issues.push('parents');
-    if (issues.length) {
-      // Print a compact object helpful for debugging lineage
-      console.error('[BABY_VALIDATION]', {
-        issues,
-        baby: {
-          id: baby.id,
-          firstName: baby.firstName,
-          lastName: baby.lastName,
-          birthDate: baby.birthDate,
-          generation: baby.generation,
-          skinTone: baby.skinTone,
-          cityId: baby.cityId
-        },
-        father: father ? { id: father.id, name: father.firstName + ' ' + father.lastName, cityId: father.cityId } : null,
-        mother: mother ? { id: mother.id, name: mother.firstName + ' ' + mother.lastName, cityId: mother.cityId } : null
-      });
-    }
-  }
-
-  // ----- Kinship helpers to prevent close-kin pairing -----
-  function getById(id) {
-    return result.people.find(p => p.id === id) || null;
-  }
-  function bioParentsOf(p) {
-    const s = new Set();
-    if (p.bioFatherId) s.add(p.bioFatherId);
-    else if (p.fatherId) s.add(p.fatherId);
-    if (p.bioMotherId) s.add(p.bioMotherId);
-    else if (p.motherId) s.add(p.motherId);
-    return s;
-  }
-  function bioGrandparentsOf(p) {
-    const gp = new Set();
-    for (const pid of bioParentsOf(p)) {
-      const parent = getById(pid);
-      if (!parent) continue;
-      for (const gpid of bioParentsOf(parent)) gp.add(gpid);
-    }
-    return gp;
-  }
-  function isParentChild(a, b) {
-    return a.id === b.fatherId || a.id === b.motherId || a.id === b.bioFatherId || a.id === b.bioMotherId ||
-           b.id === a.fatherId || b.id === a.motherId || b.id === a.bioFatherId || b.id === a.bioMotherId;
-  }
-  function isSibling(a, b) {
-    if (a.id === b.id) return true;
-    const pa = bioParentsOf(a);
-    const pb = bioParentsOf(b);
-    for (const id of pa) if (pb.has(id)) return true; // share a bio parent (half/step included)
-    return false;
-  }
-  function isCousin(a, b) {
-    const gpa = bioGrandparentsOf(a);
-    const gpb = bioGrandparentsOf(b);
-    for (const id of gpa) if (gpb.has(id)) return true;
-    return false;
-  }
-  function isCloseKin(a, b) {
-    if (!a || !b) return false;
-    if (a.id === b.id) return true;
-    if (isParentChild(a, b)) return true;
-    if (isSibling(a, b)) return true;
-    if (isCousin(a, b)) return true;
-    return false;
-  }
-
-  // Period-appropriate job pools and selector
-  const JOBS_EARLY = [
-    'Farmer','Laborer','Factory Worker','Railroad Worker','Miner','Machinist','Blacksmith','Seamstress','Domestic Worker','Clerk','Secretary','Teacher','Nurse','Salesman','Carpenter','Mechanic','Electrician','Plumber','Construction Worker','Police Officer','Truck Driver','Doctor','Lawyer','Pharmacist'
-  ];
-  const JOBS_MID = [
-    'Factory Worker','Mechanic','Secretary','Teacher','Nurse','Accountant','Sales Manager','Engineer','Electrician','Plumber','Truck Driver','Police Officer','Construction Worker','Doctor','Lawyer','Pharmacist','Librarian','Civil Engineer','Social Worker','Warehouse Worker','Retail Associate','Journalist'
-  ];
-  const JOBS_LATE = [
-    'Teacher','Nurse','Accountant','Sales Manager','Engineer','Electrician','Plumber','Truck Driver','Police Officer','Construction Worker','Doctor','Lawyer','Pharmacist','Librarian','Civil Engineer','Social Worker','Retail Associate','Journalist','Marketing Manager','Financial Analyst','Computer Programmer'
-  ];
-  const JOBS_MODERN = [
-    'Teacher','Nurse','Accountant','Sales Manager','Engineer','Electrician','Plumber','Truck Driver','Police Officer','Construction Worker','Doctor','Lawyer','Pharmacist','Librarian','Civil Engineer','Social Worker','Retail Associate','Journalist','Marketing Manager','Financial Analyst','Computer Programmer','Software Engineer','Data Analyst','Product Manager','HR Specialist','Graphic Designer','Chef','Barista','Pilot','Flight Attendant','Paramedic','Firefighter','Veterinarian','Dentist'
-  ];
-  function pickJobForYear(y) {
-    if (y < 1945) return pick(JOBS_EARLY);
-    if (y < 1980) return pick(JOBS_MID);
-    if (y < 2000) return pick(JOBS_LATE);
-    return pick(JOBS_MODERN);
-  }
-
-  // Emoji utilities
-  const SKIN_TONE_MODIFIERS = ['', '\u{1F3FB}', '\u{1F3FC}', '\u{1F3FD}', '\u{1F3FE}', '\u{1F3FF}'];
-  function toneMod(tone) { return SKIN_TONE_MODIFIERS[Math.max(0, Math.min(5, tone || 0))]; }
-  function ageCategory(p, currentYear) {
-    const age = currentYear - year(p.birthDate);
-    if (age < 3) return 'baby';
-    if (age < 13) return 'child';
-    if (age < 20) return 'youth';
-    if (p.retired || age >= 65) return 'elder';
-    return 'adult';
-  }
-  // Profession emoji mapping (subset that are widely supported)
-  const PROF_EMOJI = new Map([
-    ['Teacher','\u{1F9D1}\u{200D}\u{1F3EB}'],      // person + school
-    ['Nurse','\u{1F9D1}\u{200D}\u{2695}\u{FE0F}'], // person + medical symbol
-    ['Doctor','\u{1F9D1}\u{200D}\u{2695}\u{FE0F}'],
-    ['Police Officer','\u{1F46E}'],
-    ['Construction Worker','\u{1F477}'],
-    ['Mechanic','\u{1F9D1}\u{200D}\u{1F527}'],
-    ['Chef','\u{1F9D1}\u{200D}\u{1F373}'],
-    ['Artist','\u{1F9D1}\u{200D}\u{1F3A8}'],
-    ['Firefighter','\u{1F9D1}\u{200D}\u{1F692}'],
-    ['Farmer','\u{1F9D1}\u{200D}\u{1F33E}'],
-    ['Scientist','\u{1F9D1}\u{200D}\u{1F52C}'],
-    ['Factory Worker','\u{1F3ED}'],
-    ['Pilot','\u{1F9D1}\u{200D}\u{2708}\u{FE0F}'],
-    ['Student','\u{1F393}'],
-    ['Judge','\u{1F9D1}\u{200D}\u{2696}\u{FE0F}'],
-    ['Engineer','\u{1F9D1}\u{200D}\u{1F527}'],
-    ['Journalist','\u{1F4F0}'],
-    ['Writer','\u{270D}\u{FE0F}'],
-    ['Artist','\u{1F9D1}\u{200D}\u{1F3A8}'],
-    ['Retail Associate','\u{1F6D2}'],
-    ['Truck Driver','\u{1F69A}']
-  ]);
-
-  function professionEmojiFor(p, currentYear) {
-    const age = currentYear - year(p.birthDate);
-    if (age < 16) return null; // handled by age icons
-    if (p.retired || age >= 65) return null;
-    // Look up last job change event for this person to get current job
-    let job = null;
-    const evtIds = eventsByPerson.get(p.id) || [];
-    for (let i = evtIds.length - 1; i >= 0; i--) {
-      const e = result.events[evtIds[i] - 1];
-      if (e && e.type === 'JOB_CHANGE') { job = e.details?.jobTitle || null; break; }
-    }
-    if (!job) return null;
-    const base = PROF_EMOJI.get(job);
-    if (!base) return null;
-    // Insert skin tone to base person where applicable by appending modifier
-    // Many ZWJ professions start with person U+1F9D1; append tone after first codepoint
-    try {
-      const t = toneMod(p.skinTone);
-      if (!t) return base;
-      const first = base.codePointAt(0);
-      if (!first) return base;
-      const rest = base.slice([...base][0].length);
-      return String.fromCodePoint(first) + t + rest;
-    } catch { return base; }
-  }
-
-  function personEmojiFor(p) {
-    // Base people: person U+1F9D1, man U+1F468, woman U+1F469, baby U+1F476, boy U+1F466, girl U+1F467,
-    // older man U+1F474, older woman U+1F475
-    const t = toneMod(p.skinTone);
-    const y = new Date().getUTCFullYear();
-    const cat = ageCategory(p, y);
-    if (cat === 'baby') return `\u{1F476}${t}`;
-    if (cat === 'child') return p.sex === 'F' ? `\u{1F467}${t}` : `\u{1F466}${t}`;
-    if (cat === 'youth') return p.sex === 'F' ? `\u{1F467}${t}` : `\u{1F466}${t}`;
-    if (cat === 'elder') return p.sex === 'F' ? `\u{1F475}${t}` : `\u{1F474}${t}`;
-    // For adults, prefer profession emoji if available
-    const prof = professionEmojiFor(p, y);
-    if (prof) return prof;
-    return p.sex === 'F' ? `\u{1F469}${t}` : `\u{1F468}${t}`;
-  }
-
-  function marry(husband, wife, yearOfMarriage) {
-    wife.maidenName = wife.lastName;
-    wife.lastName = husband.lastName;
-    husband.spouseId = wife.id;
-    wife.spouseId = husband.id;
-    const rec = {
-      id: result.marriages.length + 1,
-      husbandId: husband.id,
-      wifeId: wife.id,
-      year: yearOfMarriage
-    };
-    result.marriages.push(rec);
-    // marriage date: pick a plausible month/day
-    const m = 1 + Math.floor(Math.random() * 12);
-    const dim = new Date(Date.UTC(yearOfMarriage, m, 0)).getUTCDate();
-    const d = 1 + Math.floor(Math.random() * dim);
-    addEvent({ year: yearOfMarriage, type: 'MARRIAGE', people: [husband.id, wife.id], details: { marriageId: rec.id, cityId: husband.cityId, date: isoFromYMD(yearOfMarriage, m, d), month: m } });
-    return rec;
-  }
-
-  function randomChildBirthDate(motherBirthYear) {
-    const y = motherBirthYear + 20 + Math.floor(random() * 16); // 20..35 years after mother's birth
-    const m = 1 + Math.floor(random() * 12);
-    const d = 1 + Math.floor(random() * 28);
-    return isoFromYMD(y, m, d);
-  }
-
-  // Yearly mortality hazard (very rough US-like curve)
-  function mortalityHazard(age) {
-    if (age < 1) return 0.005;            // infant mortality ~0.5%
-    if (age < 5) return 0.0005;           // very low
-    if (age < 15) return 0.0002;          // children
-    if (age < 30) return 0.0007;          // teens/young adults (accidents)
-    if (age < 45) return 0.0010;          // adults
-    if (age < 55) return 0.0020;
-    if (age < 65) return 0.0050;
-    if (age < 75) return 0.0100;          // 1%
-    if (age < 85) return 0.0300;          // 3%
-    if (age < 95) return 0.0800;          // 8%
-    return 0.1600;                        // 16%
-  }
-
-  // Yearly retirement probability by age
-  function retirementProb(age) {
-    if (age < 58) return 0;
-    if (age < 60) return 0.02;   // 2%
-    if (age < 62) return 0.05;   // 5%
-    if (age < 65) return 0.10;   // 10%
-    if (age < 67) return 0.20;   // 20%
-    if (age < 70) return 0.25;   // 25%
-    if (age < 75) return 0.30;   // 30%
-    return 0.50;                 // 50% per year 75+
-  }
-
-  // War windows (US involvement)
-  const WAR_PERIODS = [
-    { from: 1917, to: 1918, label: 'combat in World War I' },
-    { from: 1941, to: 1945, label: 'combat in World War II' },
-    { from: 1950, to: 1953, label: 'combat in the Korean War' },
-    { from: 1965, to: 1973, label: 'combat in the Vietnam War' },
-    { from: 1990, to: 1991, label: 'combat in the Gulf War' },
-    { from: 2001, to: 2014, label: 'combat in Afghanistan' },
-    { from: 2003, to: 2011, label: 'combat in the Iraq War' }
-  ];
-  function warAt(year) { return WAR_PERIODS.find(w => year >= w.from && year <= w.to) || null; }
-
-  // Cause-of-death selection (simple, age/year/sex aware)
-  function deathCauseFor(age, year, sex) {
-    // Only combat-age men die from combat causes
-    if (sex === 'M' && age >= 18 && age <= 35) {
-      const inWar = warAt(year);
-      if (inWar && Math.random() < 0.15) return inWar.label;
-    }
-    if (year === 1918 && age >= 1 && age <= 50) {
-      if (Math.random() < 0.15) return 'influenza pandemic';
-    }
-    if (age < 1) return Math.random() < 0.5 ? 'complications at birth' : 'infant illness';
-    if (age < 13) return Math.random() < 0.6 ? 'illness' : 'accident';
-    if (age < 26) return Math.random() < 0.6 ? 'accident' : (year > 1990 && Math.random() < 0.4 ? 'overdose' : 'illness');
-    if (age < 45) return Math.random() < 0.5 ? 'accident' : (Math.random() < 0.5 ? 'cancer' : 'heart condition');
-    if (age < 65) return Math.random() < 0.55 ? 'cancer' : (Math.random() < 0.5 ? 'heart disease' : 'stroke');
-    if (age < 85) return Math.random() < 0.6 ? 'heart disease' : (Math.random() < 0.5 ? 'cancer' : 'stroke');
-    return Math.random() < 0.6 ? 'natural causes' : 'heart failure';
-  }
-  function burialDispositionFor(year) {
-    // Rough cremation rates: ~5% (1960s), ~25% (1990s), ~50% (2010s+). Interpolate.
-    if (year < 1970) return Math.random() < 0.05 ? 'cremated' : 'buried';
-    if (year < 1990) return Math.random() < 0.12 ? 'cremated' : 'buried';
-    if (year < 2005) return Math.random() < 0.25 ? 'cremated' : 'buried';
-    if (year < 2015) return Math.random() < 0.4 ? 'cremated' : 'buried';
-    return Math.random() < 0.55 ? 'cremated' : 'buried';
-  }
-
-  // Graveyard helpers
-  function getGraveyard(cityId) {
-    const gy = result.graveyards[cityId];
-    if (gy) return gy;
-    const created = { nextPlotId: 1, plots: {} };
-    result.graveyards[cityId] = created;
-    return created;
-  }
-  function buriedPlotOf(personId) {
-    // Scan all graveyards to find the plot (rarely needed for small scale); optimize later with an index if required
-    const p = personByIdPre.get(personId);
-    if (!p || !p.disposition || p.disposition !== 'buried') return null;
-    const cityId = p.cityId;
-    const gy = result.graveyards[cityId];
-    if (!gy) return null;
-    const plots = gy.plots;
-    for (const pid in plots) {
-      if (plots[pid].includes(personId)) return Number(pid);
-    }
-    return null;
-  }
-  function assignBurialPlot(person) {
-    const cityId = person.cityId;
-    const gy = getGraveyard(cityId);
-    // Prefer existing plot of spouse or direct family (parents/children) in same city
-    const relatives = new Set();
-    if (person.spouseId) relatives.add(person.spouseId);
-    if (person.fatherId) relatives.add(person.fatherId);
-    if (person.motherId) relatives.add(person.motherId);
-    // children
-    for (const c of result.people) {
-      if (c.fatherId === person.id || c.motherId === person.id) relatives.add(c.id);
-    }
-    // choose first relative with buried plot in same city
-    for (const rid of relatives) {
-      const r = personByIdPre.get(rid);
-      if (!r || !r.cityId || r.cityId !== cityId) continue;
-      if (r.disposition === 'buried') {
-        const plot = buriedPlotOf(r.id);
-        if (plot != null) {
-          gy.plots[plot] = gy.plots[plot] || [];
-          gy.plots[plot].push(person.id);
-          return plot;
+    } else {
+      // Normal random movement logic
+      // Separation logic: move away from nearby hares
+      const separationRadius = 40;
+      const separationStrength = 0.2;
+      
+      for (const other of hares) {
+        if (other === this || (other.targetX !== null)) continue; // Don't push or get pushed by tree rabbits
+        const dx = this.x - other.x;
+        const dy = this.y - other.y;
+        const distSq = dx * dx + dy * dy;
+        
+        if (distSq < separationRadius * separationRadius && distSq > 0) {
+          const dist = Math.sqrt(distSq);
+          this.vx += (dx / dist) * separationStrength;
+          this.vy += (dy / dist) * separationStrength;
         }
       }
-    }
-    // Otherwise place in first empty plot or create new
-    let chosen = null;
-    for (let pid = 1; pid < gy.nextPlotId; pid++) {
-      const occ = gy.plots[pid] || [];
-      if (occ.length === 0) { chosen = pid; break; }
-    }
-    if (chosen == null) {
-      chosen = gy.nextPlotId++;
-    }
-    gy.plots[chosen] = gy.plots[chosen] || [];
-    gy.plots[chosen].push(person.id);
-    return chosen;
-  }
 
-  // ---------- Step 1: Founders (G0) with unique last names, first names, birthdates ----------
-  await delay(150);
-  const foundersMaleCount = 382;
-  const foundersFemaleCount = 383;
-
-  const requestedSurnames = foundersMaleCount + foundersFemaleCount;
-  if (requestedSurnames > COMMON_SURNAMES.length) {
-    console.error('[SURNAME_POOL]', {
-      message: 'Founding population exceeds surname list size; duplicates may occur.',
-      requested: requestedSurnames,
-      available: COMMON_SURNAMES.length
-    });
-  }
-  const uniqueSurnames = sampleWithoutReplacement(COMMON_SURNAMES, requestedSurnames);
-  const surnameAt = (i) => uniqueSurnames.length ? uniqueSurnames[i % uniqueSurnames.length] : pick(COMMON_SURNAMES);
-  const uniqueMaleFirst = sampleWithoutReplacement(MALE_FIRST.filter(n => FEMALE_FIRST.indexOf(n) === -1), foundersMaleCount);
-  const uniqueFemaleFirst = sampleWithoutReplacement(FEMALE_FIRST.filter(n => MALE_FIRST.indexOf(n) === -1), foundersFemaleCount);
-  // Backdate founders into the late 19th century so early-1900 births occur
-  const uniqueFounderBirthdates = uniqueBirthdates(foundersMaleCount + foundersFemaleCount, 1865, 1895);
-
-  const males = [];
-  const females = [];
-  let idx = 0;
-  for (let i = 0; i < foundersMaleCount; i++, idx++) {
-    const cityId = pickWeightedCityId();
-    const p = createPerson({
-      firstName: uniqueMaleFirst[i % uniqueMaleFirst.length],
-      lastName: surnameAt(idx),
-      sex: 'M',
-      birthDate: uniqueFounderBirthdates[idx],
-      generation: 0,
-      cityId
-    });
-    assignFounderTraits(p);
-    males.push(p);
-  }
-  for (let i = 0; i < foundersFemaleCount; i++, idx++) {
-    const cityId = pickWeightedCityId();
-    const p = createPerson({
-      firstName: uniqueFemaleFirst[i % uniqueFemaleFirst.length],
-      lastName: surnameAt(idx),
-      sex: 'F',
-      birthDate: uniqueFounderBirthdates[idx],
-      generation: 0,
-      cityId
-    });
-    assignFounderTraits(p);
-    females.push(p);
-  }
-
-  result.steps.push({ name: 'Founders', males: males.length, females: females.length });
-  logLine(`Generated founders: ${males.length + females.length} with unique surnames, first names, and birthdates`);
-  setProgress(15);
-
-  // ---------- Step 2: Pair founders and record marriages ----------
-  await delay(150);
-  function pairAndMarry(malesArr, femalesArr, marriageRate, partnershipRate) {
-    // city-constrained marriage + non-married partnerships
-    const byCityM = new Map();
-    const byCityF = new Map();
-    for (const m of malesArr) {
-      const arr = byCityM.get(m.cityId) || [];
-      arr.push(m);
-      byCityM.set(m.cityId, arr);
-    }
-    for (const f of femalesArr) {
-      const arr = byCityF.get(f.cityId) || [];
-      arr.push(f);
-      byCityF.set(f.cityId, arr);
-    }
-    const couples = [];
-    const partners = [];
-    for (const [cityId, mList] of byCityM.entries()) {
-      const fListAll = (byCityF.get(cityId) || []).slice();
-      const msAll = mList.slice();
-      msAll.sort(() => random() - 0.5);
-      fListAll.sort(() => random() - 0.5);
-      const pairCount = Math.floor(Math.min(msAll.length, fListAll.length) * (typeof marriageRate === 'number' ? marriageRate : 0.8));
-      for (let i = 0; i < pairCount; i++) {
-        const h = msAll[i];
-        const w = fListAll[i];
-        if (isCloseKin(h, w)) continue; // skip close-kin marriage
-        const marriageYear = Math.max(year(h.birthDate), year(w.birthDate)) + 20 + Math.floor(random() * 10);
-        marry(h, w, marriageYear);
-        couples.push([h, w]);
+      // Limit speed to original magnitude if walking/running
+      if (this.state !== 'idle') {
+        const speed = this.state === 'walk' ? 1 : 2.5;
+        const currentSpeed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+        if (currentSpeed > speed) {
+          this.vx = (this.vx / currentSpeed) * speed;
+          this.vy = (this.vy / currentSpeed) * speed;
+        }
       }
-      // Remaining singles in this city form partnerships (~60% of remainder)
-      const remainingM = msAll.slice(pairCount);
-      const remainingF = fListAll.slice(pairCount);
-      const partnerCount = Math.floor(Math.min(remainingM.length, remainingF.length) * (typeof partnershipRate === 'number' ? partnershipRate : 0.6));
-      for (let i = 0; i < partnerCount; i++) {
-        const h = remainingM[i];
-        const w = remainingF[i];
-        if (isCloseKin(h, w)) continue; // skip close-kin partnership
-        h.partnerId = w.id;
-        w.partnerId = h.id;
-        const yearFormed = Math.max(year(h.birthDate), year(w.birthDate)) + 20 + Math.floor(random() * 10);
-        const evt = addEvent({ year: yearFormed, type: 'PARTNERSHIP', people: [h.id, w.id], details: { cityId } });
-        indexEventByYear(evt);
-        partners.push([h, w]);
-      }
-    }
-    return { couples, partners };
-  }
-  const g0 = pairAndMarry(males, females, 0.9, 0.6);
-  result.steps.push({ name: 'G0 marriages', count: g0.couples.length });
-  result.steps.push({ name: 'G0 partnerships', count: g0.partners.length });
-  logLine(`G0 marriages: ${g0.couples.length}; partnerships: ${g0.partners.length}`);
-  setProgress(30);
 
-  // ---------- Steps 3-6: Generate G1..G4 children of couples and then marry within each new generation ----------
-  const generations = [];
-  generations[0] = { males, females, couples: g0.couples, partners: g0.partners };
-
-  for (let gen = 0; gen < 4; gen++) {
-    await delay(150);
-    const couples = generations[gen].couples;
-    const partners = generations[gen].partners || [];
-    const children = [];
-    let births = 0;
-    const birthPairs = couples.concat(partners);
-    for (const [father, mother] of birthPairs) {
-      // Era-based total fertility number (TFN) sampling per couple/partnership
-      const motherBirthYear = year(mother.birthDate);
-      let expected = 0;
-      if (motherBirthYear < 1910) expected = 5.0 + random() * 2.0;        // 5–7
-      else if (motherBirthYear < 1945) expected = 4.0 + random() * 2.0;   // 4–6
-      else if (motherBirthYear < 1965) expected = 3.75 + random() * 1.5;  // Boom 3.75–5.25
-      else if (motherBirthYear < 1985) expected = 2.4 + random() * 0.8;   // Gen X 2.4–3.2
-      else expected = 1.7 + random() * 0.8;                               // 1.7–2.5
-
-      // Married couples more fertile; partnerships slightly less (higher early)
-      const isMarriedPair = couples.some(([fh, mw]) => fh.id === father.id && mw.id === mother.id);
-      const early = motherBirthYear < 1950;
-      const partnerFactor = early ? 0.85 : 0.75;
-      const baseKids = expected * (isMarriedPair ? 1.0 : partnerFactor);
-      // Sample integer around expectation (Poisson-ish approximation)
-      let numKids = Math.max(0, Math.round(baseKids + (random() - 0.5)));
-      numKids = Math.min(numKids, 8);
-      // Pregnancy-level generation; may yield twins at real-life rates
-      let k = 0;
-      while (k < numKids) {
-        // Choose family surname: if out of wedlock (partner pair), take mother's surname; if affair in marriage, keep family (husband's) surname; otherwise father's
-        let lastName = father.lastName;
-        const isPartnerPair = !isMarriedPair;
-        if (isPartnerPair) {
-          lastName = mother.lastName || lastName;
-        }
-        const birthDate = randomChildBirthDate(year(mother.birthDate));
-        const by = year(birthDate);
-        const ageAtBirth = by - year(mother.birthDate);
-        // Determine biological father (affair-born children possible only heterosexual)
-        let bioFatherId = father.id;
-        const fromAffair = isMarriedPair ? (random() < 0.08) : (random() < 0.12);
-        if (fromAffair) {
-          const city = mother.cityId || father.cityId;
-          const yb = year(birthDate);
-          const maleAdultsSameCity = result.people.filter(p => p.sex === 'M' && p.id !== father.id && (yb - p.birthYear) >= 18 && p.cityId === city);
-          if (maleAdultsSameCity.length) bioFatherId = maleAdultsSameCity[Math.floor(random() * maleAdultsSameCity.length)].id;
-        }
-        // Twin probabilities
-        function fraternalTwinProb(age, birthYear) {
-          let base = 0.0;
-          if (age < 20) base = 0.006;
-          else if (age < 25) base = 0.008;
-          else if (age < 30) base = 0.012;
-          else if (age < 35) base = 0.016;
-          else if (age < 40) base = 0.022;
-          else if (age < 45) base = 0.018;
-          else base = 0.010;
-          const era = birthYear >= 2000 ? 1.2 : (birthYear >= 1980 ? 1.0 : 0.7);
-          return Math.min(0.04, base * era);
-        }
-        const pMZ = 0.0035; // identical ~0.35%
-        const pDZ = fraternalTwinProb(ageAtBirth, by);
-        const twinRoll = random();
-        const isTwin = twinRoll < (pMZ + pDZ);
-        const twinType = isTwin ? (twinRoll < pMZ ? 'MZ' : 'DZ') : null;
-        const groupId = isTwin ? nextTwinGroupId++ : null;
-        // First baby
-        const sexA = random() < 0.5 ? 'M' : 'F';
-        const firstNameA = sexA === 'M' ? pick(MALE_FIRST) : pick(FEMALE_FIRST);
-        const childA = createPerson({
-          firstName: firstNameA,
-          lastName,
-          sex: sexA,
-          birthDate,
-          generation: gen + 1,
-          fatherId: father.id,
-          motherId: mother.id,
-          bioFatherId,
-          bioMotherId: mother.id,
-          cityId: (random() < 0.5 ? father.cityId : mother.cityId) || pickWeightedCityId(),
-          twinGroupId: groupId,
-          twinType
-        });
-        childA.skinTone = inheritSkinTone(father, mother);
-        childA.hairColor = inheritHairColor(father, mother);
-        const baseKR = Math.round(((father.knowledgeRadius || 3) + (mother.knowledgeRadius || 3)) / 2);
-        childA.knowledgeRadius = Math.max(2, Math.min(5, baseKR + (random() < 0.2 ? (random() < 0.5 ? -1 : 1) : 0)));
-        childA.knowsAffairs = random() < 0.35 || (father.knowsAffairs || mother.knowsAffairs);
-        validateBabyAttributes(childA, father, mother);
-        children.push(childA);
-        births++;
-        const bmA = new Date(birthDate).getUTCMonth() + 1; const bdA = new Date(birthDate).getUTCDate();
-        addEvent({ year: by, type: 'BIRTH', people: [childA.id], details: { cityId: childA.cityId, outOfWedlock: isPartnerPair, fromAffair: fromAffair && bioFatherId !== father.id, date: isoFromYMD(by, bmA, bdA), month: bmA } });
-
-        // Optional second twin baby
-        if (isTwin) {
-          const sexB = twinType === 'MZ' ? sexA : (random() < 0.5 ? 'M' : 'F');
-          const firstNameB = sexB === 'M' ? pick(MALE_FIRST) : pick(FEMALE_FIRST);
-          const childB = createPerson({
-            firstName: firstNameB,
-            lastName,
-            sex: sexB,
-            birthDate,
-            generation: gen + 1,
-            fatherId: father.id,
-            motherId: mother.id,
-            bioFatherId,
-            bioMotherId: mother.id,
-            cityId: (random() < 0.5 ? father.cityId : mother.cityId) || pickWeightedCityId(),
-            twinGroupId: groupId,
-            twinType
-          });
-          childB.skinTone = inheritSkinTone(father, mother);
-          childB.hairColor = inheritHairColor(father, mother);
-          const baseKRB = Math.round(((father.knowledgeRadius || 3) + (mother.knowledgeRadius || 3)) / 2);
-          childB.knowledgeRadius = Math.max(2, Math.min(5, baseKRB + (random() < 0.2 ? (random() < 0.5 ? -1 : 1) : 0)));
-          childB.knowsAffairs = random() < 0.35 || (father.knowsAffairs || mother.knowsAffairs);
-          validateBabyAttributes(childB, father, mother);
-          children.push(childB);
-          births++;
-          const bmB = bmA; const bdB = bdA;
-          addEvent({ year: by, type: 'BIRTH', people: [childB.id], details: { cityId: childB.cityId, outOfWedlock: isPartnerPair, fromAffair: fromAffair && bioFatherId !== father.id, date: isoFromYMD(by, bmB, bdB), month: bmB } });
-          k += 2; // count as two children against expectation
-        } else {
-          k += 1;
-        }
+      // Behavior timer
+      this.moveTimer--;
+      if (this.moveTimer <= 0) {
+        this.setRandomBehavior();
       }
     }
 
-    const genMales = children.filter(p => p.sex === 'M');
-    const genFemales = children.filter(p => p.sex === 'F');
-    result.steps.push({ name: `G${gen + 1} births`, births });
-    logLine(`G${gen + 1}: births=${births}`);
+    // Update movement
+    this.x += this.vx;
+    this.y += this.vy;
 
-    // Marry within generation for next-gen parents
-    // Marriage/partnership rates slightly lower for later generations
-    const marriageRate = gen <= 1 ? 0.95 : Math.max(0.6, 0.9 - gen * 0.07);      // Early gens very high
-    const partnershipRate = Math.min(0.7, 0.6 + gen * 0.05);    // G1: ~0.65, G4: ~0.7
-    const next = pairAndMarry(genMales, genFemales, marriageRate, partnershipRate);
-    generations[gen + 1] = { males: genMales, females: genFemales, couples: next.couples, partners: next.partners };
-    result.steps.push({ name: `G${gen + 1} marriages`, count: next.couples.length });
-    result.steps.push({ name: `G${gen + 1} partnerships`, count: next.partners.length });
-    logLine(`G${gen + 1} marriages: ${next.couples.length}; partnerships: ${next.partners.length}`);
-    setProgress(30 + ((gen + 1) * 10));
-  }
-
-  // ---------- Year-by-year playback (1900..2025) ----------
-  const START_YEAR = 1900;
-  const END_YEAR = 2025;
-  const totalYears = END_YEAR - START_YEAR + 1;
-
-  // Prepare maps and choose a fixed killer before the yearly loop so we can ban their close relatives from DNA tests
-  const personByIdPre = new Map(result.people.map(p => [p.id, p]));
-  function ancestorsUpTo(person, maxDepth) {
-    const out = new Map();
-    const queue = [{ id: person.id, depth: 0 }];
-    while (queue.length) {
-      const { id, depth } = queue.shift();
-      if (depth >= maxDepth) continue;
-      const p = personByIdPre.get(id);
-      if (!p) continue;
-      const nextDepth = depth + 1;
-      if (p.fatherId) { out.set(p.fatherId, Math.min(out.get(p.fatherId) || Infinity, nextDepth)); queue.push({ id: p.fatherId, depth: nextDepth }); }
-      if (p.motherId) { out.set(p.motherId, Math.min(out.get(p.motherId) || Infinity, nextDepth)); queue.push({ id: p.motherId, depth: nextDepth }); }
-    }
-    return out; // Map<ancestorId, depth>
-  }
-  function shareAncestorWithin(a, b, maxDepth) {
-    const A = ancestorsUpTo(a, maxDepth);
-    const B = ancestorsUpTo(b, maxDepth);
-    for (const id of A.keys()) if (B.has(id)) return true;
-    return false;
-  }
-  // Interview resolver: BFS over family graph up to a person's knowledgeRadius; toggle bio edges by knowsAffairs
-  function buildNeighbors(includeBio) {
-    const adj = new Map();
-    function link(u, v) {
-      const a = adj.get(u) || new Set(); a.add(v); adj.set(u, a);
-    }
-    for (const p of result.people) {
-      if (p.fatherId) { link(p.id, p.fatherId); link(p.fatherId, p.id); }
-      if (p.motherId) { link(p.id, p.motherId); link(p.motherId, p.id); }
-      if (p.spouseId) { link(p.id, p.spouseId); link(p.spouseId, p.id); }
-      if (p.partnerId) { link(p.id, p.partnerId); link(p.partnerId, p.id); }
-      if (includeBio && p.bioFatherId && p.bioFatherId !== p.fatherId) { link(p.id, p.bioFatherId); link(p.bioFatherId, p.id); }
-      if (includeBio && p.bioMotherId && p.bioMotherId !== p.motherId) { link(p.id, p.bioMotherId); link(p.bioMotherId, p.id); }
-    }
-    return adj;
-  }
-  function knownSubgraphFrom(personId) {
-    const person = personByIdPre.get(personId);
-    const radius = Math.max(2, Math.min(5, person?.knowledgeRadius || 3));
-    const adj = buildNeighbors(!!person?.knowsAffairs);
-    const visited = new Set([personId]);
-    const dist = new Map([[personId, 0]]);
-    const q = [personId];
-    while (q.length) {
-      const u = q.shift();
-      const du = dist.get(u) || 0;
-      if (du >= radius) continue;
-      const nbrs = adj.get(u) || new Set();
-      for (const v of nbrs) {
-        if (visited.has(v)) continue;
-        visited.add(v);
-        dist.set(v, du + 1);
-        q.push(v);
-      }
-    }
-    return { nodes: visited, dist };
-  }
-  // Choose killer candidate: adults by 1970
-  const adultsBy1970 = result.people.filter(p => (1970 - year(p.birthDate)) >= 18);
-  const killerFixed = adultsBy1970.length ? adultsBy1970[Math.floor(random() * adultsBy1970.length)] : result.people[Math.floor(random() * result.people.length)];
-  let killerIdFixed = killerFixed.id;
-
-  // index events by year
-  const birthsByYear = new Map();
-  for (const p of result.people) {
-    const y = year(p.birthDate);
-    birthsByYear.set(y, (birthsByYear.get(y) || 0) + 1);
-  }
-  const marriagesByYear = new Map();
-  for (const m of result.marriages) {
-    marriagesByYear.set(m.year, (marriagesByYear.get(m.year) || 0) + 1);
-  }
-
-  // Index pre-existing events
-  for (const e of result.events) indexEventByYear(e);
-
-  logLine(`Planned events across ${START_YEAR}–${END_YEAR}: births=${result.people.length}, marriages=${result.marriages.length}`);
-
-  // Yearly stochastic event probabilities (tunable)
-  const PROB = {
-    move: 0.01,          // 1% chance per adult per year
-    jobChange: 0.03,     // 3% per adult per year
-    divorce: 0.005,      // 0.5% per married couple per year
-    affair: 0.01         // 1% per married adult per year
-  };
-  function consumerDNAProb(y) {
-    if (y < 1990) return 0;
-    if (y < 2007) return 0.00005;   // very low early adoption
-    if (y < 2013) return 0.0002;
-    if (y < 2020) return 0.0006;
-    return 0.001;                   // max ~0.1% per adult-year
-  }
-
-  // Choose one murder year and assign once
-  const murderYear = 1970 + Math.floor(random() * 31); // 1970..2000
-  let murderCommitted = false;
-
-  // DNA stores
-  result.codis = { profiles: [] };
-  result.consumerDNA = [];
-  function isBannedRelative(candidate) {
-    if (!candidate) return true;
-    if (candidate.id === killerIdFixed) return true; // killer banned
-    const killer = personByIdPre.get(killerIdFixed);
-    if (!killer) return true;
-    // direct ancestor/descendant within 2 generations
-    const candAnc2 = ancestorsUpTo(candidate, 3);
-    if (candAnc2.has(killerIdFixed)) return true; // candidate is child/grandchild
-    const killerAnc2 = ancestorsUpTo(killer, 3);
-    if (killerAnc2.has(candidate.id)) return true; // candidate is parent/grandparent
-    // siblings/half-siblings share at least one parent
-    if ((candidate.fatherId && candidate.fatherId === killer.fatherId) || (candidate.motherId && candidate.motherId === killer.motherId)) return true;
-    // share ancestor within 2 generations on both sides => first cousins or closer
-    if (shareAncestorWithin(candidate, killer, 3)) return true;
-    return false;
-  }
-  function isSecondCousinOrFurther(candidate) {
-    const killer = personByIdPre.get(killerIdFixed);
-    if (!killer) return false;
-    const A = ancestorsUpTo(candidate, 5);
-    const B = ancestorsUpTo(killer, 5);
-    let ok = false;
-    for (const id of A.keys()) {
-      const da = A.get(id) || 99;
-      const db = B.get(id) || 99;
-      if (da >= 3 && db >= 3) { ok = true; break; }
-    }
-    return ok;
-  }
-
-  let yearIndex = 0;
-  for (let y = START_YEAR; y <= END_YEAR; y++, yearIndex++) {
-    // announce year transition, then small delay to visualize progression
-    logLine(`— Year ${y} —`);
-    if (flashYearEl) flashYearEl.textContent = String(y);
-    await delay(10);
-    // Flavor timeline
-    if (y === 1900) pushFlash('Preparing simulation…');
-    if (y === 1914) pushFlash('World War I begins');
-    if (y === 1917) pushFlash('World War I');
-    if (y === 1918) pushFlash('Spanish Flu Pandemic');
-    if (y === 1920) pushFlash('The Roaring Twenties');
-    if (y === 1929) pushFlash('The Great Depression');
-    if (y === 1933) pushFlash('The New Deal');
-    if (y === 1941) pushFlash('World War II');
-    if (y === 1942) pushFlash('The Manhattan Project');
-    if (y === 1946) pushFlash('Baby Boom');
-    if (y === 1947) pushFlash('The Cold War begins');
-    if (y === 1950) pushFlash('Korean War');
-    if (y === 1950) pushFlash('Red Scare');
-    if (y === 1954) pushFlash('Brown v. Board of Education');
-    if (y === 1957) pushFlash('Sputnik launches — Space Age');
-    if (y === 1960) pushFlash('Camelot Era');
-    if (y === 1963) pushFlash('JFK Assassination');
-    if (y === 1964) pushFlash('Civil Rights Era');
-    if (y === 1968) pushFlash('Vietnam War');
-    if (y === 1967) pushFlash('Summer of Love');
-    if (y === 1969) pushFlash('Flower Power');
-    if (y === 1969) pushFlash('Moon Landing');
-    if (y === 1970) pushFlash('EPA & environmental movement');
-    if (y === 1972) pushFlash('Title IX');
-    if (y === 1973) pushFlash('Oil Crisis');
-    if (y === 1976) pushFlash('Bicentennial');
-    if (y === 1977) pushFlash('Dawn of Personal Computing');
-    if (y === 1977) pushFlash('Disco Fever');
-    if (y === 1981) pushFlash('AIDS crisis begins');
-    if (y === 1984) pushFlash('LA Olympics');
-    if (y === 1986) pushFlash('Challenger disaster');
-    if (y === 1989) pushFlash('End of Cold War');
-    if (y === 1991) pushFlash('World Wide Web');
-    if (y === 1993) pushFlash('NAFTA');
-    if (y === 1995) pushFlash('Oklahoma City bombing');
-    if (y === 1999) pushFlash('Dot-com boom');
-    if (y === 2003) pushFlash('Iraq War');
-    if (y === 2007) pushFlash('Smartphone era');
-    if (y === 2010) pushFlash('Social media boom');
-    if (y === 2012) pushFlash('Mars rover Curiosity');
-    if (y === 2000) pushFlash('Y2K');
-    if (y === 2001) pushFlash('9/11');
-    if (y === 2008) pushFlash('Great Recession');
-    if (y === 2016) pushFlash('Contentious election year');
-    if (y === 2020) pushFlash('Global pandemic');
-    if (y === 2021) pushFlash('Vaccine rollout');
-    // Elections – winners as regular events
-    const ELECTIONS = {
-      1900: { name: 'William McKinley', party: 'Republican' },
-      1904: { name: 'Theodore Roosevelt', party: 'Republican' },
-      1908: { name: 'William Howard Taft', party: 'Republican' },
-      1912: { name: 'Woodrow Wilson', party: 'Democratic' },
-      1916: { name: 'Woodrow Wilson', party: 'Democratic' },
-      1920: { name: 'Warren G. Harding', party: 'Republican' },
-      1924: { name: 'Calvin Coolidge', party: 'Republican' },
-      1928: { name: 'Herbert Hoover', party: 'Republican' },
-      1932: { name: 'Franklin D. Roosevelt', party: 'Democratic' },
-      1936: { name: 'Franklin D. Roosevelt', party: 'Democratic' },
-      1940: { name: 'Franklin D. Roosevelt', party: 'Democratic' },
-      1944: { name: 'Franklin D. Roosevelt', party: 'Democratic' },
-      1948: { name: 'Harry S. Truman', party: 'Democratic' },
-      1952: { name: 'Dwight D. Eisenhower', party: 'Republican' },
-      1956: { name: 'Dwight D. Eisenhower', party: 'Republican' },
-      1960: { name: 'John F. Kennedy', party: 'Democratic' },
-      1964: { name: 'Lyndon B. Johnson', party: 'Democratic' },
-      1968: { name: 'Richard Nixon', party: 'Republican' },
-      1972: { name: 'Richard Nixon', party: 'Republican' },
-      1976: { name: 'Jimmy Carter', party: 'Democratic' },
-      1980: { name: 'Ronald Reagan', party: 'Republican' },
-      1984: { name: 'Ronald Reagan', party: 'Republican' },
-      1988: { name: 'George H. W. Bush', party: 'Republican' },
-      1992: { name: 'Bill Clinton', party: 'Democratic' },
-      1996: { name: 'Bill Clinton', party: 'Democratic' },
-      2000: { name: 'George W. Bush', party: 'Republican' },
-      2004: { name: 'George W. Bush', party: 'Republican' },
-      2008: { name: 'Barack Obama', party: 'Democratic' },
-      2012: { name: 'Barack Obama', party: 'Democratic' },
-      2016: { name: 'Donald Trump', party: 'Republican' },
-      2020: { name: 'Joe Biden', party: 'Democratic' }
-    };
-    if (ELECTIONS[y]) {
-      const w = ELECTIONS[y];
-      pushFlash(`${w.name} elected president.`);
-      const evt = addEvent({ year: y, type: 'ELECTION', people: [], details: { winner: w.name, party: w.party } });
-      indexEventByYear(evt);
-    }
-    const b = birthsByYear.get(y) || 0;
-    const m = marriagesByYear.get(y) || 0;
-    // Sample at least one demographic highlight per year
-    if (b > 0 || m > 0) {
-      if (random() < 0.6 && b > 0) {
-        const yearEvts = eventsByYear.get(y) || [];
-        const birthEvts = yearEvts.filter(e => e.type === 'BIRTH');
-        const pickE = birthEvts[Math.floor(random() * birthEvts.length)];
-        if (pickE) {
-          const pid = pickE.people[0];
-          const pp = personByIdPre.get(pid);
-          const where = getCityName(pickE.details?.cityId || pp?.cityId);
-          let note = '';
-          if (pickE.details?.outOfWedlock) note = ' (out of wedlock)';
-          else if (pickE.details?.fromAffair) note = ' (born from an affair)';
-          if (pp) pushFlash(`${pp.firstName} ${pp.lastName} born in ${where}${note}.`);
-        }
-      } else if (m > 0) {
-        const marriedThisYear = result.marriages.filter(mm => mm.year === y);
-        const pickM = marriedThisYear[Math.floor(random() * marriedThisYear.length)];
-        if (pickM) {
-          const ha = personByIdPre.get(pickM.husbandId); const wa = personByIdPre.get(pickM.wifeId);
-          const wifeMaiden = wa?.maidenName || wa?.lastName || '';
-          pushFlash(`${wa?.firstName || 'Someone'} ${wifeMaiden} married ${ha?.firstName || 'someone'} ${ha?.lastName || ''}.`);
-        }
-      }
-    } else if (random() < 0.2) {
-      // fallback: occasional job change sample
-      const sampled = result.events.findLast ? result.events.findLast(e => e.type === 'JOB_CHANGE' && e.year === y) :
-        [...result.events].reverse().find(e => e.type === 'JOB_CHANGE' && e.year === y);
-      if (sampled) {
-        const p = personByIdPre.get(sampled.people[0]);
-        if (p) pushFlash(`${p.firstName} ${p.lastName} started as ${sampled.details?.jobTitle || 'a new job'}.`);
-      }
+    // Constrain to field with "bounce"
+    if (this.x < 0) {
+      this.x = 0;
+      this.vx *= -1;
+      this.updateDirectionFromVelocity();
+    } else if (this.x > FIELD_WIDTH) {
+      this.x = FIELD_WIDTH;
+      this.vx *= -1;
+      this.updateDirectionFromVelocity();
     }
     
-    // Adults for stochastic events
-    const adults = result.people.filter(p => p.alive && (y - p.birthYear) >= 18);
-    // Index adults by city and sex for fast candidate lookups
-    const adultsByCity = new Map(); // cityId -> { M:number[], F:number[] }
-    for (const a of adults) {
-      const entry = adultsByCity.get(a.cityId) || { M: [], F: [] };
-      (a.sex === 'M' ? entry.M : entry.F).push(a.id);
-      adultsByCity.set(a.cityId, entry);
+    if (this.y < 0) {
+      this.y = 0;
+      this.vy *= -1;
+      this.updateDirectionFromVelocity();
+    } else if (this.y > FIELD_HEIGHT) {
+      this.y = FIELD_HEIGHT;
+      this.vy *= -1;
+      this.updateDirectionFromVelocity();
     }
 
-    // One-time: extremely high marriage rate in 1900 to model pre-1900 marriages
-    if (y === 1900) {
-      const byCityM = new Map();
-      const byCityF = new Map();
-      for (const p of adults) {
-        if (!p.spouseId) {
-          if (p.sex === 'M') {
-            const arr = byCityM.get(p.cityId) || [];
-            arr.push(p);
-            byCityM.set(p.cityId, arr);
-          } else if (p.sex === 'F') {
-            const arr = byCityF.get(p.cityId) || [];
-            arr.push(p);
-            byCityF.set(p.cityId, arr);
-          }
-        }
-      }
-      let marriedNow = 0;
-      const HIGH_RATE = 0.98; // ~98% marriage rate for eligible pairs
-      for (const [cityId, malesArr] of byCityM.entries()) {
-        const femalesArr = (byCityF.get(cityId) || []).slice();
-        const ms = malesArr.slice();
-        ms.sort(() => random() - 0.5);
-        femalesArr.sort(() => random() - 0.5);
-        const canPair = Math.min(ms.length, femalesArr.length);
-        const pairCount = Math.floor(canPair * HIGH_RATE);
-        for (let i = 0; i < pairCount; i++) {
-          const h = ms[i];
-          const w = femalesArr[i];
-          // Set marriage in 1900 for visibility
-          marry(h, w, 1900);
-          marriedNow++;
-        }
-      }
-      if (marriedNow > 0) {
-        logLine(`Year 1900: backfilled marriages=${marriedNow}`);
-      }
+    // Behavior timer
+    this.moveTimer--;
+    if (this.moveTimer <= 0) {
+      this.setRandomBehavior();
     }
 
-    // Retirements (before processing jobs): only for non-retired adults
-    for (const p of adults) {
-      if (!p.retired) {
-        const age = y - p.birthYear;
-        const pr = retirementProb(age);
-        if (pr > 0 && random() < pr) {
-          p.retired = true;
-          const evt = addEvent({ year: y, type: 'RETIREMENT', people: [p.id], details: { cityId: p.cityId, age } });
-          indexEventByYear(evt);
-        }
-      }
+    // Animation
+    this.frameTimer += this.frameSpeed;
+    const maxFrames = this.getMaxFrames();
+    if (this.frameTimer >= maxFrames) {
+      this.frameTimer = 0;
+    }
+    this.frame = Math.floor(this.frameTimer);
+  }
+
+  getMaxFrames() {
+    if (this.state === 'idle') return 4;
+    if (this.state === 'walk') return 5;
+    if (this.state === 'run') return 6;
+    return 1;
+  }
+
+  draw() {
+    const screenX = this.x - camera.x;
+    const screenY = this.y - camera.y;
+
+    // Only draw if on screen
+    if (screenX < -FRAME_SIZE || screenX > canvas.width || 
+        screenY < -FRAME_SIZE || screenY > canvas.height) {
+      return;
     }
 
-    // Moves (family units move together: spouse/partner + minor children)
-    const movedIds = new Set();
-    for (const p of adults) {
-      if (movedIds.has(p.id)) continue;
-      if (random() < PROB.move) {
-        const fromId = p.cityId || pickWeightedCityId();
-        let toId = fromId;
-        for (let tries = 0; tries < 5 && toId === fromId; tries++) toId = pickWeightedCityId();
-        const unit = [p];
-        if (p.spouseId) {
-          const spouse = personByIdSim.get(p.spouseId);
-          if (spouse && spouse.alive && (y - spouse.birthYear) >= 18 && spouse.cityId === fromId)
-            unit.push(spouse);
-        }
-        if (p.partnerId) {
-          const partner = personByIdSim.get(p.partnerId);
-          if (partner && partner.alive && (y - partner.birthYear) >= 18 && partner.cityId === fromId)
-            unit.push(partner);
-        }
-        const kids = (childrenByParent.get(p.id) || []).map(cid => personByIdSim.get(cid)).filter(Boolean);
-        for (const c of kids) {
-          if (!c.alive) continue;
-          const age = y - c.birthYear;
-          if (age < 18 && c.cityId === fromId) unit.push(c);
-        }
-        for (const mbr of unit) {
-          mbr.cityId = toId;
-          mbr.city = getCityName(toId);
-          movedIds.add(mbr.id);
-          const evt = addEvent({ year: y, type: 'MOVE', people: [mbr.id], details: { fromCityId: fromId, toCityId: toId } });
-          indexEventByYear(evt);
-        }
-      }
+    const sprite = sprites[this.state];
+    
+    // Apply "shader" via filters
+    ctx.save();
+    ctx.filter = `hue-rotate(${this.rabbit.tint.hue}deg) saturate(${this.rabbit.tint.saturate}%) brightness(${this.rabbit.tint.brightness}%)`;
+    
+    ctx.drawImage(
+      sprite,
+      this.frame * FRAME_SIZE,
+      this.direction * FRAME_SIZE,
+      FRAME_SIZE,
+      FRAME_SIZE,
+      Math.floor(screenX),
+      Math.floor(screenY),
+      FRAME_SIZE * 2, // Scale up for visibility
+      FRAME_SIZE * 2
+    );
+    
+    ctx.restore();
+
+    // Draw selection highlight
+    if (selectedHare === this) {
+      ctx.beginPath();
+      ctx.ellipse(Math.floor(screenX) + FRAME_SIZE, Math.floor(screenY) + FRAME_SIZE * 1.8, FRAME_SIZE * 0.8, FRAME_SIZE * 0.4, 0, 0, Math.PI * 2);
+      ctx.strokeStyle = 'white';
+      ctx.lineWidth = 2;
+      ctx.stroke();
     }
 
-    // Job changes (skip if retired)
-    for (const p of adults) {
-      if (!p.retired && random() < PROB.jobChange) {
-        const newJob = pickJobForYear(y);
-        const evt = addEvent({ year: y, type: 'JOB_CHANGE', people: [p.id], details: { jobTitle: newJob, cityId: p.cityId || null } });
-        indexEventByYear(evt);
-      }
-    }
+    // Draw name and age
+    ctx.font = '12px monospace';
+    ctx.fillStyle = 'white';
+    ctx.textAlign = 'center';
+    ctx.shadowBlur = 2;
+    ctx.shadowColor = 'black';
+    const age = CURRENT_YEAR - this.rabbit.birthYear;
+    ctx.fillText(`${this.rabbit.firstName} (${age})`, Math.floor(screenX) + FRAME_SIZE, Math.floor(screenY) + FRAME_SIZE * 2 + 10);
+    ctx.shadowBlur = 0;
+  }
+}
 
-  // Divorces (less likely without affairs; more likely after affairs)
-  const marriedAdults = adults.filter(p => p.spouseId);
-  const visited = new Set();
-  for (const p of marriedAdults) {
-    if (visited.has(p.id)) continue;
-    const spouse = personByIdSim.get(p.spouseId);
-    if (!spouse) continue;
-    visited.add(p.id);
-    visited.add(spouse.id);
-    const hadAffair = (p.lastAffairYear != null && y - p.lastAffairYear <= 10) || (spouse.lastAffairYear != null && y - spouse.lastAffairYear <= 10);
-    let divorceProb = PROB.divorce || 0.01;
-    if (hadAffair) divorceProb = Math.min(0.5, divorceProb * 5);
-    else divorceProb = Math.max(divorceProb * 0.5, 0.002);
-    if (random() < divorceProb) {
-      const evt = addEvent({ year: y, type: 'DIVORCE', people: [p.id, spouse.id], details: { cityId: p.cityId } });
-      indexEventByYear(evt);
-      p.spouseId = null;
-      spouse.spouseId = null;
+function updateTreeDiagram() {
+  const treeSpacingX = 150;
+  const treeSpacingY = 150;
+  const treeStartX = 200;
+  const treeStartY = 200;
+
+  // Group hares into distinct trees
+  const hareToTree = new Map();
+  const trees = [];
+
+  for (const conn of playerConnections) {
+    let treeA = hareToTree.get(conn.parentId);
+    let treeB = hareToTree.get(conn.childId);
+
+    if (treeA && treeB && treeA !== treeB) {
+      // Merge trees
+      treeA.push(...treeB);
+      for (const hareId of treeB) hareToTree.set(hareId, treeA);
+      trees.splice(trees.indexOf(treeB), 1);
+    } else if (treeA) {
+      if (!treeA.includes(conn.childId)) {
+        treeA.push(conn.childId);
+        hareToTree.set(conn.childId, treeA);
+      }
+    } else if (treeB) {
+      if (!treeB.includes(conn.parentId)) {
+        treeB.push(conn.parentId);
+        hareToTree.set(conn.parentId, treeB);
+      }
+    } else {
+      const newTree = [conn.parentId, conn.childId];
+      trees.push(newTree);
+      hareToTree.set(conn.parentId, newTree);
+      hareToTree.set(conn.childId, newTree);
     }
   }
 
-    // Affairs (informational)
-    const marriedPool = adults.filter(p => p.spouseId);
-    for (const p of marriedPool) {
-      if (random() < PROB.affair) {
-        // majority heterosexual: pick candidates of opposite sex most of the time
-        const preferOpposite = random() < 0.95; // 95% heterosexual
-        const buckets = adultsByCity.get(p.cityId) || { M:[], F:[] };
-        const pool = preferOpposite ? (p.sex === 'M' ? buckets.F : buckets.M) : (p.sex === 'M' ? buckets.M : buckets.F);
-        // Try a small number of random picks; stop at first eligible
-        const MAX_TRIES = 12;
-        let chosen = null;
-        for (let t = 0; t < MAX_TRIES && pool && pool.length; t++) {
-          const id = pool[Math.floor(random() * pool.length)];
-          const cand = personByIdSim.get(id);
-          if (!cand) continue;
-          if (cand.id === p.id) continue;
-          if (cand.id === p.spouseId) continue;
-          if (isCloseKin(p, cand)) continue;
-          chosen = cand; break;
-        }
-        if (chosen) {
-          const evt = addEvent({ year: y, type: 'AFFAIR', people: [p.id, chosen.id], details: { cityId: p.cityId } });
-          indexEventByYear(evt);
-          // Mark both participants so each of their marriages reflects an affair recently
-          p.lastAffairYear = y;
-          chosen.lastAffairYear = y;
-        }
-      }
-    }
-
-    // Single murder event in chosen year
-    if (!murderCommitted && y === murderYear) {
-      const adultPool = adults.slice();
-      if (adultPool.length >= 2) {
-        // Choose killer: prefer preselected, but ensure adult & alive at this year.
-        // Bias to 90% male if possible.
-        const pre = personByIdPre.get(killerIdFixed);
-        let killer = pre && (y - pre.birthYear) >= 18 && pre.alive ? pre : null;
-        if (!killer) {
-          const males = adultPool.filter(p => p.sex === 'M');
-          const females = adultPool.filter(p => p.sex === 'F');
-          if (males.length && females.length) {
-            const pickMale = random() < 0.9; // 90% male killers
-            const pool = pickMale ? males : females;
-            killer = pool[Math.floor(random() * pool.length)];
-          } else {
-            const pool = males.length ? males : adultPool;
-            killer = pool[Math.floor(random() * pool.length)];
-          }
-          killerIdFixed = killer.id;
-        }
-        // Murderer temperament: always unfriendly
-        killer.friendly = false;
-        // Choose victim: not killer and not a banned close relative of killer
-        let victimCandidates = adultPool.filter(p => p.id !== killer.id && !isBannedRelative(p));
-        if (victimCandidates.length === 0) victimCandidates = adultPool.filter(p => p.id !== killer.id);
-        let victim = victimCandidates[Math.floor(random() * victimCandidates.length)];
-        victim.alive = false;
-        const cityId = victim.cityId || killer.cityId || pickWeightedCityId();
-        const evt = addEvent({ year: y, type: 'MURDER', people: [killer.id, victim.id], details: { cityId } });
-        indexEventByYear(evt);
-        murderCommitted = true;
-        logLine(`Year ${y}: A murder occurred.`);
-        pushFlash(`A murder shocks ${getCityName(cityId)}.`, 'murder');
-      }
-    }
-
-    // DNA tests (consumer) after 1990; probability grows later
-    if (y >= 1990) {
-      const pTest = consumerDNAProb(y);
-      for (const p of adults) {
-        if (random() < pTest) {
-          if (!isBannedRelative(p)) {
-            result.consumerDNA.push({ personId: p.id, year: y });
-            const evt = addEvent({ year: y, type: 'DNA_TEST_CONSUMER', people: [p.id], details: { cityId: p.cityId } });
-            // Auto-promote consumer DNA into CODIS (avoid duplicates)
-            if (!result.codis.profiles.some(pr => pr.personId === p.id)) {
-              result.codis.profiles.push({ personId: p.id, year: y, cityId: p.cityId || null, source: 'consumer' });
-            }
-            indexEventByYear(evt);
-            if (random() < 0.02) pushFlash(`${personByIdPre.get(p.id)?.firstName || 'Someone'} took a consumer DNA test.`);
-          }
-        }
-      }
-    }
-
-    // Occasional CODIS (law-enforcement) DNA profile creation, very rare
-    if (y >= 1990) {
-      const pLE = 0.0001;
-      for (const p of adults) {
-        if (random() < pLE) {
-          result.codis.profiles.push({ personId: p.id, year: y, cityId: p.cityId || null, source: 'LE' });
-          const evt = addEvent({ year: y, type: 'DNA_TEST_CODIS', people: [p.id], details: { cityId: p.cityId } });
-          indexEventByYear(evt);
-        }
-      }
-    }
-
-    // Mortality: check all alive persons (adults and minors)
-    for (const p of result.people) {
-      if (!p.alive) continue;
-      const age = y - p.birthYear;
-      if (age < 0) continue;
-      let hazard = mortalityHazard(age);
-      // Increase hazard for combat-age men during war periods
-      const war = warAt(y);
-      if (p.sex === 'M' && age >= 18 && age <= 35 && war) {
-        hazard = Math.min(1, hazard * 1.5 + 0.01);
-      }
-      if (hazard > 0 && random() < hazard) {
-        p.alive = false;
-        const cause = deathCauseFor(age, y, p.sex);
-        p.disposition = burialDispositionFor(y);
-        let plotId = null;
-        if (p.disposition === 'buried') {
-          plotId = assignBurialPlot(p);
-        }
-        // Generate an exact death date within the year; obits may appear next month if within last 5 days
-        const month = 1 + Math.floor(random() * 12);
-        const daysInMonth = new Date(Date.UTC(y, month, 0)).getUTCDate();
-        const day = 1 + Math.floor(random() * daysInMonth);
-        const date = isoFromYMD(y, month, day);
-        const evt = addEvent({ year: y, type: 'DEATH', people: [p.id], details: { cityId: p.cityId, age, cause, disposition: p.disposition, plotId, date, month } });
-        indexEventByYear(evt);
-        if (Math.random() < 0.02) pushFlash(`${p.firstName} ${p.lastName} died in ${getCityName(p.cityId)} (${cause}).`);
-      }
-    }
-
-    const yearEvents = eventsByYear.get(y) || [];
-    if (b || m || yearEvents.length) {
-      const parts = [];
-      if (b) parts.push(`births=${b}`);
-      if (m) parts.push(`marriages=${m}`);
-      if (yearEvents.length) parts.push(`events=${yearEvents.length}`);
-      logLine(`Year ${y}: ${parts.join(', ')}`);
-    }
-    // Progress from ~70% to ~98% during timeline playback
-    const pct = 70 + Math.floor((yearIndex / totalYears) * 28);
-    setProgress(pct);
-  }
-
-  // ---------- Finalize ----------
-  await delay(50);
-  // Ensure at least one distant relative (>= second cousin) has a consumer DNA test for gameplay
-  const killerForCheck = personByIdPre.get(killerIdFixed);
-  let hasHit = false;
-  for (const prof of result.consumerDNA) {
-    const cand = personByIdPre.get(prof.personId);
-    if (cand && isSecondCousinOrFurther(cand)) { hasHit = true; break; }
-  }
-  if (!hasHit) {
-    // find a third-cousin-or-further; try depth >=4 first
-    const candidates = result.people.filter(p => p.alive && p.id !== killerIdFixed && !isBannedRelative(p));
-    let pickRel = candidates.find(p => {
-      const A = ancestorsUpTo(p, 6); const B = ancestorsUpTo(killerForCheck, 6);
-      for (const id of A.keys()) { const da = A.get(id)||99; const db = B.get(id)||99; if (da >= 4 && db >= 4) return true; }
-      return false;
-    }) || candidates.find(isSecondCousinOrFurther);
-    if (pickRel) {
-      result.consumerDNA.push({ personId: pickRel.id, year: Math.min(2015, END_YEAR) });
-      const evt = addEvent({ year: Math.min(2015, END_YEAR), type: 'DNA_TEST_CONSUMER_FORCED', people: [pickRel.id], details: { cityId: pickRel.cityId } });
-      // Ensure CODIS also receives this profile (avoid duplicates)
-      if (!result.codis.profiles.some(pr => pr.personId === pickRel.id)) {
-        result.codis.profiles.push({ personId: pickRel.id, year: Math.min(2015, END_YEAR), cityId: pickRel.cityId || null, source: 'consumer' });
-      }
-      indexEventByYear(evt);
-      logLine(`Forced DNA test for a distant relative to ensure playability.`);
+  // Clear targets for hares not in any tree
+  for (const hare of hares) {
+    if (!hareToTree.has(hare.rabbit.id)) {
+      hare.targetX = null;
+      hare.targetY = null;
     }
   }
 
-  // Ensure at least one blood relative of the killer is in CODIS for gameplay
-  // Build genetic adjacency (parent-child only) and compute distances from killer
-  (function ensureCodisRelative() {
-    if (!killerForCheck) return;
-    const codisSet = new Set(result.codis.profiles.map(pr => pr.personId).filter(Boolean));
-    // If there is already a CODIS relative besides the killer/victim, skip
-    const hasRelativeCodis = result.codis.profiles.some(pr => pr.personId && pr.personId !== killerIdFixed && personByIdPre.has(pr.personId));
-    if (hasRelativeCodis) return;
-    const adj = new Map();
-    function link(u, v) { const a = adj.get(u) || new Set(); a.add(v); adj.set(u, a); }
-    for (const p of result.people) {
-      if (p.fatherId) { link(p.id, p.fatherId); link(p.fatherId, p.id); }
-      if (p.motherId) { link(p.id, p.motherId); link(p.motherId, p.id); }
-    }
-    const dist = new Map([[killerIdFixed, 0]]);
-    const q = [killerIdFixed];
-    while (q.length) {
-      const u = q.shift();
-      const du = dist.get(u) || 0;
-      if (du > 8) continue; // cap search radius
-      const nbrs = adj.get(u) || new Set();
-      for (const v of nbrs) {
-        if (dist.has(v)) continue;
-        dist.set(v, du + 1);
-        q.push(v);
-      }
-    }
-    // Prefer distant blood relatives up to third cousins (graph distance 4..8)
-    const candidates = Array.from(dist.entries())
-      .filter(([pid, d]) => pid !== killerIdFixed && d >= 4 && d <= 8)
-      .map(([pid]) => personByIdPre.get(pid))
-      .filter(Boolean)
-      .filter(p => p.alive || true); // allow deceased historical CODIS if desired
-    if (!candidates.length) return;
-    // Pick one stable-ish candidate using seed
-    const pick = candidates[Math.floor((result.seed + candidates.length) % candidates.length)];
-    if (pick && !codisSet.has(pick.id)) {
-      result.codis.profiles.push({ personId: pick.id, year: Math.min(2015, END_YEAR), cityId: pick.cityId || null, source: 'consumer' });
-      const evt = addEvent({ year: Math.min(2015, END_YEAR), type: 'DNA_TEST_CODIS_FORCED', people: [pick.id], details: { cityId: pick.cityId } });
-      indexEventByYear(evt);
-      logLine('Seeded a distant blood relative into CODIS to ensure matchability.');
-    }
-  })();
-  result.killerId = killerIdFixed;
-
-  // Knowledge guarantee: ensure at least one living person can know of the killer within their horizon
-  const living = result.people.filter(p => p.alive);
-  function personKnowsKiller(p) {
-    const { nodes, dist } = knownSubgraphFrom(p.id);
-    return nodes.has(killerIdFixed) && (dist.get(killerIdFixed) || 99) <= Math.max(2, Math.min(5, p.knowledgeRadius || 3));
-  }
-  let anyoneKnows = living.some(personKnowsKiller);
-  if (!anyoneKnows) {
-    // boost a plausible relative's horizon
-    const candidates = living.filter(p => !isBannedRelative(p) && isSecondCousinOrFurther(p));
-    const pick = candidates[0] || living[0];
-    if (pick) {
-      pick.knowledgeRadius = Math.max(4, pick.knowledgeRadius || 4);
-      pick.knowsAffairs = true;
-    }
-  }
-  result.summary = {
-    population: result.people.length,
-    marriages: result.marriages.length,
-    startYear: START_YEAR,
-    endYear: END_YEAR,
-    events: result.events.length,
-    murderYear: murderCommitted ? murderYear : null
-  };
-  result.generatedAt = new Date().toISOString();
-  logLine(`Finalize: population=${result.people.length}, marriages=${result.marriages.length}`);
-  setProgress(100);
-
-  outputJsonEl.textContent = JSON.stringify(result, null, 2);
-
-  setStatus('Done', 'done');
-  // no-op: startBtn/runAgainBtn removed from UX
-
-  // Build killer moniker and show title card
-  const murderEvt = result.events.find(e => e.type === 'MURDER');
-  const murderCityName = murderEvt ? getCityName(murderEvt.details?.cityId) : 'an American city';
-  function killerMoniker(cityId, seedVal) {
-    const region = getCityRegion(cityId);
-    const cityName = getCityName(cityId) || '';
-    const cityShort = cityName.split(',')[0] || cityName;
-    const GEO = {
-      NE: ['Harbor','River','Bay','Granite','Pine','Liberty','Colonial','Maritime'],
-      MW: ['Great Lakes','Prairie','Rail','Steel','River','Grain','Twin Cities','Lake'],
-      S:  ['Delta','Gulf','Bayou','Cotton','Lone Star','Magnolia','Peach','River'],
-      W:  ['Golden Coast','Desert','Sierra','Pacific','Canyon','Mile High','Bay']
+  // Calculate positions for each tree
+  let currentTreeX = treeStartX;
+  for (const treeIds of trees) {
+    const treeHares = treeIds.map(id => hares.find(h => h.rabbit.id === id));
+    
+    // Simple layered positioning based on generation within the tree
+    // Find roots (rabbits with no parents in playerConnections)
+    const roots = treeIds.filter(id => !playerConnections.some(c => c.childId === id));
+    
+    const levels = new Map();
+    const processLevel = (id, level) => {
+      levels.set(id, Math.max(levels.get(id) || 0, level));
+      const children = playerConnections.filter(c => c.parentId === id).map(c => c.childId);
+      for (const childId of children) processLevel(childId, level + 1);
     };
-    const NOUNS = ['Specter','Phantom','Prowler','Stalker','Butcher','Ripper','Hunter','Ghost','Shade','Marauder','Cipher'];
-    const MODS = ['Shadow','Midnight','Cross','Trail','Whisper','Ridge','Raven','Copper','Fog','Dust'];
-    const FORBIDDEN = [
-      'Golden State Killer','Night Stalker','Boston Strangler','Zodiac Killer','Green River Killer',
-      'BTK Killer','Hillside Strangler','Grim Sleeper','Son of Sam','Axeman'
-    ];
-    const geo = (GEO[region] || GEO.NE);
-    const r1 = Math.abs((seedVal * 9301 + 49297) % 233280);
-    const r2 = Math.abs((seedVal * 23333 + 12345) % 233280);
-    const r3 = Math.abs((seedVal * 61169 + 7) % 233280);
-    const r4 = Math.abs((seedVal * 727 + 19) % 233280);
-    const g = geo[r1 % geo.length];
-    const m = MODS[r2 % MODS.length];
-    let n = NOUNS[r3 % NOUNS.length];
-    // Build base name (sometimes insert modifier)
-    let name = (r1 % 3 === 0) ? `${g} ${m} ${n}` : `${g} ${n}`;
-    // Occasionally add a city suffix to further diversify
-    if (r4 % 2 === 0 && cityShort) name = `${name} of ${cityShort}`;
-    // Avoid known real-world monikers (case-insensitive)
-    const lower = name.toLowerCase();
-    const hitsForbidden = FORBIDDEN.some(f => lower.includes(f.toLowerCase()));
-    if (hitsForbidden || /\bKiller\b/i.test(name)) {
-      // Swap noun away from Killer-like terms and add extra modifier
-      n = NOUNS[(r3 + 7) % NOUNS.length];
-      name = `${g} ${m} ${n}` + (cityShort ? ` of ${cityShort}` : '');
-    }
-    return name;
-  }
-  const moniker = killerMoniker(murderEvt?.details?.cityId, seed);
-  if (murderEvt) {
-    result.killerMoniker = moniker;
-    result.murderVictimId = murderEvt.people[1];
-    result.playerCityId = murderEvt.details?.cityId || null;
-    // Seed evidence in the crime city
-    const cid = result.playerCityId;
-    result.evidence[cid] = result.evidence[cid] || [];
-    result.evidence[cid].push({ id: 'victim-clothes', name: "Victim's clothes", type: 'clothing', actions: ['dna'] });
-  }
-  overlaySim.classList.remove('visible');
-  titleHeadlineEl.textContent = 'Case Brief';
-  titleSubEl.textContent = `In ${murderEvt?.year || 'an unknown year'}, a dead body was found in ${murderCityName}. The police never had any strong leads, and the trail went cold. Can you solve the case of the ${moniker}?`;
-  overlayTitle.classList.add('visible');
-  titleContinueBtn.onclick = () => {
-    overlayTitle.classList.remove('visible');
-    if (typeof setActivePanel === 'function') setActivePanel('home');
-    if (playerCityNameEl && result.playerCityId) playerCityNameEl.textContent = getCityName(result.playerCityId);
-  };
+    for (const root of roots) processLevel(root, 0);
 
-  // Build quick lookup before any genealogy rendering
-  const personById = new Map(result.people.map(p => [p.id, p]));
-  // Build marriages-by-person index for fast dialogue lookups
-  const marriagesByPerson = new Map(); // id -> number[] spouse ids
-  for (const m of result.marriages) {
-    const a = marriagesByPerson.get(m.husbandId) || [];
-    a.push(m.wifeId);
-    marriagesByPerson.set(m.husbandId, a);
-    const b = marriagesByPerson.get(m.wifeId) || [];
-    b.push(m.husbandId);
-    marriagesByPerson.set(m.wifeId, b);
-  }
+    const levelGroups = [];
+    levels.forEach((level, id) => {
+      if (!levelGroups[level]) levelGroups[level] = [];
+      levelGroups[level].push(id);
+    });
 
-  // ----- Player Knowledge Model -----
-  const STORAGE_KEY = 'ck:v1:knowledge';
-  const emptyKnowledge = () => ({
-    knownPeople: new Set(),
-    // knownRelationships: explicit, user-known relationships only.
-    // Each: { type: 'marriage'|'biological'|'guardian'|'siblings', a: id, b: id }
-    knownRelationships: [],
-    simSeed: result.seed
-  });
-  function loadKnowledge() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return emptyKnowledge();
-      const parsed = JSON.parse(raw);
-      // If this save is from a different simulation seed, discard it
-      if (parsed.simSeed !== result.seed) return emptyKnowledge();
-      const k = emptyKnowledge();
-      k.knownPeople = new Set(parsed.knownPeople || []);
-      // migrate prior version 'edges' => 'knownRelationships'
-      const rels = parsed.knownRelationships || parsed.edges || [];
-      k.knownRelationships = Array.isArray(rels) ? rels : [];
-      k.simSeed = parsed.simSeed || result.seed;
-      return k;
-    } catch {
-      return emptyKnowledge();
-    }
-  }
-  function saveKnowledge(k) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      knownPeople: Array.from(k.knownPeople),
-      knownRelationships: k.knownRelationships,
-      simSeed: result.seed
-    }));
-  }
-  const knowledge = loadKnowledge();
-
-  // Do not auto-seed knowledge; player reveals connections during play
-
-  // ----- Genealogy Rendering (simple layered layout) -----
-  function renderGenealogy() {
-    // Build nodes from knownPeople
-    const nodes = [];
-    const edges = knowledge.knownRelationships.filter(e => knowledge.knownPeople.has(e.a) && knowledge.knownPeople.has(e.b));
-    for (const id of knowledge.knownPeople) {
-      const p = personById.get(id);
-      if (!p) continue;
-      nodes.push(p);
-    }
-    // Simple layering by generation; horizontal spacing by index
-    const layers = new Map();
-    for (const n of nodes) {
-      const g = n.generation || 0;
-      const arr = layers.get(g) || [];
-      arr.push(n);
-      layers.set(g, arr);
-    }
-    // Clear SVG
-    while (geneSvg.firstChild) geneSvg.removeChild(geneSvg.firstChild);
-    const marginX = 40, marginY = 60, w = 80, h = 80, gapX = 32, gapY = 120;
-    const pos = new Map();
-    const gens = Array.from(layers.keys()).sort((a, b) => a - b);
-    for (let gi = 0; gi < gens.length; gi++) {
-      const g = gens[gi];
-      const row = layers.get(g);
-      row.sort((a, b) => a.id - b.id);
-      for (let i = 0; i < row.length; i++) {
-        const x = marginX + i * (w + gapX);
-        const y = marginY + gi * (h + gapY);
-        pos.set(row[i].id, { x, y });
-      }
-    }
-    // Compute extents to size the SVG for scrolling
-    let maxX = 0, maxY = 0;
-    for (const { x, y } of pos.values()) { maxX = Math.max(maxX, x + w + marginX); maxY = Math.max(maxY, y + h + marginY); }
-    geneSvg.setAttribute('viewBox', `0 0 ${Math.max(1200, maxX)} ${Math.max(800, maxY)}`);
-    geneSvg.setAttribute('width', String(Math.max(1600, maxX)));
-    geneSvg.setAttribute('height', String(Math.max(1200, maxY)));
-    // Draw edges first
-    for (const e of edges) {
-      const a = pos.get(e.a);
-      const b = pos.get(e.b);
-      if (!a || !b) continue;
-      const path = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-      path.setAttribute('x1', String(a.x + w / 2));
-      path.setAttribute('y1', String(a.y + h / 2));
-      path.setAttribute('x2', String(b.x + w / 2));
-      path.setAttribute('y2', String(b.y + h / 2));
-      path.setAttribute('class', `gene-edge ${e.type}`);
-      geneSvg.appendChild(path);
-    }
-    // Draw nodes (bathroom-sign style icon + name above)
-    for (const n of nodes) {
-      const p = pos.get(n.id);
-      if (!p) continue;
-      const gEl = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-
-      // Name above icon
-      const name = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      name.setAttribute('x', String(p.x + w / 2));
-      name.setAttribute('y', String(p.y - 8));
-      name.setAttribute('text-anchor', 'middle');
-      name.setAttribute('class', `gene-name${n.alive ? (n.retired ? ' retired' : '') : ' deceased'}`);
-      name.textContent = `${n.firstName} ${n.lastName}`;
-      gEl.appendChild(name);
-
-      const cx = p.x + w / 2;
-      const iw = 28; // emoji size looks better slightly smaller
-      const ih = 28;
-      const ix = cx - iw / 2;
-      const iy = p.y; // top of icon area
-      // Render as text emoji with skin tone and role
-      const emojiText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      emojiText.setAttribute('x', String(cx));
-      emojiText.setAttribute('y', String(iy + ih));
-      emojiText.setAttribute('text-anchor', 'middle');
-      emojiText.setAttribute('class', `gene-emoji${n.alive ? (n.retired ? ' retired' : '') : ' deceased'}`);
-      emojiText.textContent = personEmojiFor(n);
-      gEl.appendChild(emojiText);
-      geneSvg.appendChild(gEl);
-    }
-  }
-
-  // Add connection to knowledge graph
-  function addConnection(aId, bId, kind) {
-    knowledge.knownPeople.add(aId);
-    knowledge.knownPeople.add(bId);
-    let type;
-    if (kind === 'genetic') type = 'biological';
-    else if (kind === 'familialParent') type = 'guardian';
-    else type = 'marriage';
-    // Avoid duplicates
-    if (!knowledge.knownRelationships.some(r => r.type === type && ((r.a === aId && r.b === bId) || (r.a === bId && r.b === aId)))) {
-      // For genetic, ensure parent-child if applicable; otherwise generic biological
-      const a = personById.get(aId);
-      const b = personById.get(bId);
-      let rel = type;
-      if (type === 'biological' && a && b) {
-        if (a.fatherId === b.id || a.motherId === b.id) rel = 'biological';
-        else if (b.fatherId === a.id || b.motherId === a.id) rel = 'biological';
-      }
-      knowledge.knownRelationships.push({ type: rel, a: aId, b: bId });
-    }
-    saveKnowledge(knowledge);
-    renderGenealogy();
-  }
-
-  function doneBadge() {
-    const s = document.createElement('span'); s.className='inline-done'; s.textContent='✓ added'; return s;
-  }
-
-  // ----- Map Rendering -----
-  function renderHomepage() {
-    const cityId = result.playerCityId;
-    if (playerCityNameEl) playerCityNameEl.textContent = getCityName(cityId);
-    if (!skylineBox) return;
-    const name = getCityName(cityId) || '';
-    const city = name.split(',')[0].trim().toLowerCase().replace(/\s+/g,'-');
-    const src = `assets/skyline-${city}.svg`;
-    // Clear box and optimistically show inline SVG trimmed to content
-    skylineBox.innerHTML = '';
-    function loadSvg(url) {
-      fetch(url).then(r => {
-        if (!r.ok) throw new Error('fetch failed');
-        return r.text();
-      }).then(txt => {
-        const doc = new DOMParser().parseFromString(txt, 'image/svg+xml');
-        let svg = doc.documentElement;
-        // Ensure proper attributes for responsive fit
-        svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-        svg.setAttribute('width', '100%');
-        svg.style.width = '100%';
-        svg.style.height = 'auto';
-        svg.style.maxHeight = '100%';
-        svg.style.display = 'block';
-        skylineBox.appendChild(svg);
-        // After it is in DOM, compute bbox and tighten viewBox
-        requestAnimationFrame(() => {
-          try {
-            const elems = svg.querySelectorAll('path,rect,circle,ellipse,line,polyline,polygon,text,g,use');
-            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-            elems.forEach(el => {
-              if (typeof el.getBBox === 'function') {
-                const b = el.getBBox();
-                if (isFinite(b.x) && isFinite(b.y) && isFinite(b.width) && isFinite(b.height)) {
-                  minX = Math.min(minX, b.x);
-                  minY = Math.min(minY, b.y);
-                  maxX = Math.max(maxX, b.x + b.width);
-                  maxY = Math.max(maxY, b.y + b.height);
-                }
-              }
-            });
-            if (isFinite(minX) && isFinite(minY) && isFinite(maxX) && isFinite(maxY) && maxX > minX && maxY > minY) {
-              const pad = 2;
-              const x = minX - pad;
-              const y = minY - pad;
-              const w = (maxX - minX) + pad * 2;
-              const h = (maxY - minY) + pad * 2;
-              svg.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);
-              svg.style.objectFit = 'contain';
-              svg.style.objectPosition = 'bottom center';
-            }
-          } catch {}
-        });
-      }).catch(() => {
-        // Fallback to generic image if parsing/fetch fails
-        skylineBox.innerHTML = '';
-        const img = document.createElement('img');
-        img.alt = 'City skyline';
-        img.style.width = '100%';
-        img.style.height = '100%';
-        img.style.objectFit = 'contain';
-        img.style.objectPosition = 'bottom center';
-        img.src = 'assets/skyline-generic.svg';
-        skylineBox.appendChild(img);
+    let maxLevelWidth = 0;
+    levelGroups.forEach((ids, level) => {
+      ids.forEach((id, i) => {
+        const hare = hares.find(h => h.rabbit.id === id);
+        hare.targetX = currentTreeX + i * treeSpacingX;
+        hare.targetY = treeStartY + level * treeSpacingY;
       });
-    }
-    loadSvg(src);
-  }
-  function projectLatLngToSvg(lat, lng, viewW, viewH) {
-    // Tweak the bounding box to better match this specific SVG's coastline placement
-    const minLat = 24, maxLat = 50;   // slightly expanded
-    const minLng = -126, maxLng = -66; // slightly expanded west
-    let x = ((lng - minLng) / (maxLng - minLng)) * viewW;
-    let y = ((maxLat - lat) / (maxLat - minLat)) * viewH;
-    // Gentle non-linear vertical compression for high latitudes (PNW looked too high)
-    const t = (lat - minLat) / (maxLat - minLat);
-    y = y * (0.9 + 0.1 * (1 - t));
-    return [x, y];
-  }
-  function renderMap() {
-    if (!mapSvg) return;
-    while (mapSvg.firstChild) mapSvg.removeChild(mapSvg.firstChild);
-    // Base map SVG
-    fetch('/assets/united-states-map-usa-america-svgrepo-com.svg')
-      .then(r => r.text())
-      .then(svgStr => {
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(svgStr, 'image/svg+xml');
-        const imported = document.importNode(doc.documentElement, true);
-        imported.setAttribute('width', '1000');
-        imported.setAttribute('height', '600');
-        imported.setAttribute('x', '0');
-        imported.setAttribute('y', '0');
-        mapSvg.appendChild(imported);
-
-        // City markers
-        if (locText && result.playerCityId) {
-          locText.textContent = `Location: ${getCityName(result.playerCityId)}`;
-        }
-        for (const c of CITIES) {
-          const [lat, lng] = getCityLatLng(c.id);
-          const [mx, my] = projectLatLngToSvg(lat, lng, 1000, 600);
-          const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-          g.setAttribute('class', 'map-marker');
-          const dy = c.offsetY || 0;
-          const dx = c.offsetX || 0;
-          g.setAttribute('transform', `translate(${mx + dx}, ${my + dy})`);
-
-          const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-          t.setAttribute('class', 'map-emoji');
-          t.setAttribute('text-anchor', 'middle');
-          t.textContent = '📍';
-          g.appendChild(t);
-
-          const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-          label.setAttribute('class', 'map-label');
-          label.setAttribute('text-anchor', 'middle');
-          label.setAttribute('y', '18');
-          label.textContent = c.name;
-          g.appendChild(label);
-
-          g.addEventListener('click', () => {
-            const originId = result.playerCityId || c.id;
-            const origin = getCityName(originId);
-            const dest = c.name;
-            if (originId === c.id) return; // already here
-            const ok = window.confirm(`Fly from ${origin} to ${dest}?`);
-            if (!ok) return;
-            // Animate plane
-            const [olat, olng] = getCityLatLng(originId);
-            const [ox, oy] = projectLatLngToSvg(olat, olng, 1000, 600);
-            const plane = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            plane.setAttribute('text-anchor', 'middle');
-            plane.setAttribute('class', 'map-emoji');
-            plane.textContent = '✈️';
-            mapSvg.appendChild(plane);
-            const [dxp, dyp] = [mx + dx, my + dy];
-            const start = performance.now();
-            const duration = 1200;
-            function tick(now) {
-              const t = Math.min(1, (now - start) / duration);
-              // ease
-              const e = t < 0.5 ? 2*t*t : -1 + (4 - 2*t)*t;
-              const x = ox + (dxp - ox) * e;
-              const y = oy + (dyp - oy) * e;
-              plane.setAttribute('x', String(x));
-              plane.setAttribute('y', String(y));
-              if (t < 1) requestAnimationFrame(tick);
-              else {
-                plane.remove();
-                // Arrive
-                result.playerCityId = c.id;
-                if (playerCityNameEl) playerCityNameEl.textContent = c.name;
-                if (locText) locText.textContent = `Location: ${c.name}`;
-                // Go to main panel
-                if (typeof setActivePanel === 'function') {
-                  setActivePanel('home');
-                }
-              }
-            }
-            requestAnimationFrame(tick);
-          });
-
-          mapSvg.appendChild(g);
-        }
-
-        // click marker -> update Location text
-      })
-      .catch(() => {
-        // Fallback: draw just city points if SVG fails
-        for (const c of CITIES) {
-          const [lat, lng] = getCityLatLng(c.id);
-          const [mx, my] = projectLatLngToSvg(lat, lng, 1000, 600);
-          const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-          g.setAttribute('class', 'map-marker');
-          const dy = c.offsetY || 0;
-          const dx = c.offsetX || 0;
-          g.setAttribute('transform', `translate(${mx + dx}, ${my + dy})`);
-          const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-          t.setAttribute('class', 'map-emoji');
-          t.setAttribute('text-anchor', 'middle');
-          t.textContent = '📍';
-          g.appendChild(t);
-          const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-          label.setAttribute('class', 'map-label');
-          label.setAttribute('text-anchor', 'middle');
-          label.setAttribute('y', '18');
-          label.textContent = c.name;
-          g.appendChild(label);
-          g.addEventListener('click', () => {
-            locText.textContent = `Location: ${c.name}`;
-          });
-          mapSvg.appendChild(g);
-        }
-      });
-  }
-
-  function addKnownByQuery(query) {
-    const q = (query || '').trim().toLowerCase();
-    if (!q) return; 
-    const byId = q.match(/^\d+$/) ? Number(q) : null;
-    let candidates = [];
-    if (byId) {
-      const p = personById.get(byId);
-      if (p) candidates = [p];
-    } else {
-      candidates = result.people.filter(p => (`${p.firstName} ${p.lastName}`).toLowerCase().includes(q)).slice(0, 1);
-    }
-    if (candidates.length) {
-      knowledge.knownPeople.add(candidates[0].id);
-      // Auto-connect visible family edges for context (if in knowledge)
-      const p = candidates[0];
-      if (p.spouseId && knowledge.knownPeople.has(p.spouseId)) {
-        knowledge.knownRelationships.push({ type: 'marriage', a: p.id, b: p.spouseId });
-      }
-      if (p.fatherId && knowledge.knownPeople.has(p.fatherId)) {
-        knowledge.knownRelationships.push({ type: 'biological', a: p.fatherId, b: p.id });
-      }
-      if (p.motherId && knowledge.knownPeople.has(p.motherId)) {
-        knowledge.knownRelationships.push({ type: 'biological', a: p.motherId, b: p.id });
-      }
-      saveKnowledge(knowledge);
-      renderGenealogy();
-    }
-  }
-
-  function revealRelative() {
-    // If exactly one node selected, reveal a random close relative
-    const ids = Array.from(knowledge.knownPeople);
-    if (!ids.length) return;
-    const base = personById.get(ids[Math.floor(Math.random() * ids.length)]);
-    const relatives = [];
-    if (base.spouseId) relatives.push({ type: 'marriage', id: base.spouseId, a: base.id, b: base.spouseId });
-    if (base.partnerId) relatives.push({ type: 'guardian', id: base.partnerId, a: base.id, b: base.partnerId });
-    if (base.fatherId) relatives.push({ type: 'biological', id: base.fatherId, a: base.fatherId, b: base.id });
-    if (base.motherId) relatives.push({ type: 'biological', id: base.motherId, a: base.motherId, b: base.id });
-    // children
-    for (const p of result.people) {
-      if (p.fatherId === base.id || p.motherId === base.id) {
-        relatives.push({ type: 'biological', id: p.id, a: base.id, b: p.id });
-      }
-    }
-    if (!relatives.length) return;
-    const pickRel = relatives[Math.floor(Math.random() * relatives.length)];
-    knowledge.knownPeople.add(pickRel.id);
-    knowledge.knownRelationships.push({ type: pickRel.type, a: pickRel.a, b: pickRel.b });
-    saveKnowledge(knowledge);
-    renderGenealogy();
-  }
-
-  // Removed manual add/reveal/clear controls; Connections reflects discovered knowledge only
-
-  renderGenealogy();
-  renderMap();
-
-  // Tabs
-  const tabButtons = [];
-  function setActiveTab(name) {
-    // legacy no-op; kept for compatibility
-    const panels = ['map','genealogy','people','records','log'];
-    panels.forEach(p => {
-      const el = document.getElementById(`tab-${p}`);
-      if (el) el.classList.toggle('hidden', p !== name);
+      maxLevelWidth = Math.max(maxLevelWidth, ids.length * treeSpacingX);
     });
-  }
 
-  // Sidebar menu navigation
-  function setActivePanel(name) {
-    menuButtons.forEach(b => b.classList.toggle('active', b.dataset.panel === name));
-    const names = ['home','evidence','records','graveyard','codis','airport','genealogy','log','interview','news'];
-    names.forEach(n => panelByName(n)?.classList.toggle('hidden', n !== name));
-    if (name === 'home') renderHomepage();
-    if (name === 'evidence') renderEvidence();
-    if (name === 'codis') renderCODIS();
-  }
-  menuButtons.forEach(btn => btn.addEventListener('click', () => setActivePanel(btn.dataset.panel)));
-  menuToggleBtn?.addEventListener('click', () => {
-    const sidebar = document.querySelector('.sidebar');
-    if (!sidebar) return;
-    sidebar.classList.toggle('open');
-  });
-  // Initialize player city to murder city if available
-  if (result.playerCityId && playerCityNameEl) {
-    playerCityNameEl.textContent = getCityName(result.playerCityId);
-  }
-  setActivePanel('home');
-
-  // Evidence locker rendering & actions
-  function renderEvidence() {
-    const cityId = result.playerCityId;
-    playerCityNameEl.textContent = getCityName(cityId);
-    const list = document.getElementById('evList');
-    const actions = document.getElementById('evActions');
-    list.innerHTML = '';
-    actions.innerHTML = '';
-    evStatus.textContent = '';
-    const items = result.evidence[cityId] || [];
-    if (!items.length) { list.textContent = 'No evidence in this city.'; return; }
-    items.forEach((it) => {
-      const btn = document.createElement('button');
-      btn.className = 'menu-btn';
-      btn.textContent = it.name;
-      btn.addEventListener('click', () => {
-        // show actions
-        actions.innerHTML = '';
-        if (it.actions?.includes('dna')) {
-          const a = document.createElement('button'); a.className = 'start secondary'; a.textContent = 'Send for DNA testing';
-          a.addEventListener('click', () => {
-            const victimId = result.murderVictimId;
-            const killerId = result.killerId;
-            let added = 0;
-            const alreadyKMoniker = result.codis.profiles.some(pr => pr.moniker && pr.moniker === (result.killerMoniker || ''));
-            const alreadyV = result.codis.profiles.some(pr => pr.personId === victimId);
-            // Add moniker as standalone profile sharing the killer's DNA id
-            if (killerId && !alreadyKMoniker) {
-              result.codis.profiles.push({ personId: null, year: END_YEAR, cityId: result.playerCityId || null, moniker: result.killerMoniker || null, dnaId: `killer-${killerId}`, source: 'evidence' });
-              added++;
-            }
-            if (victimId && !alreadyV) { result.codis.profiles.push({ personId: victimId, year: END_YEAR, cityId: result.playerCityId || null, dnaId: `person-${victimId}`, source: 'evidence' }); added++; }
-            if (added) {
-              a.textContent = 'Victim and Killer DNA profiles added to CODIS.';
-              a.disabled = true;
-              evStatus.textContent = '';
-            } else {
-              evStatus.textContent = 'No evidence available.';
-            }
-          });
-          actions.appendChild(a);
-        } else if (it.actions?.includes('dna-person') && it.personId) {
-          const a = document.createElement('button'); a.className = 'start secondary'; a.textContent = 'Send for DNA testing';
-          a.addEventListener('click', () => {
-            const pid = it.personId;
-            const already = result.codis.profiles.some(pr => pr.personId === pid);
-            if (!already) {
-              result.codis.profiles.push({ personId: pid, year: END_YEAR, cityId: result.playerCityId || null, source: 'evidence' });
-              a.textContent = 'Profile added to CODIS.';
-              a.disabled = true;
-              evStatus.textContent = '';
-            } else {
-              evStatus.textContent = 'Already in CODIS.';
-            }
-          });
-          actions.appendChild(a);
-        }
-      });
-      list.appendChild(btn);
-    });
-  }
-
-  // Records search
-  function inRange(lastName, range) {
-    if (!lastName) return false;
-    const c = lastName[0].toUpperCase();
-    const [a,b] = range.split('-');
-    const start = a.trim()[0]; const end = b.trim()[0];
-    return c >= start && c <= end;
-  }
-  function renderRecords() {
-    const type = recTypeEl.value;
-    const range = recRangeEl.value;
-    const yFilter = Number(recYearEl.value || 0);
-    const cityId = result.playerCityId;
-    const lines = [];
-    if (type === 'birth') {
-      for (const p of result.people) {
-        const yb = year(p.birthDate);
-        if (p.cityId !== cityId) continue;
-        if (yFilter && yb !== yFilter) continue;
-        if (!inRange(p.lastName, range)) continue;
-        const father = p.fatherId ? personByIdPre.get(p.fatherId) : null;
-        const mother = p.motherId ? personByIdPre.get(p.motherId) : null;
-        const parentText = `Parents: ${mother ? mother.firstName + ' ' + mother.lastName : 'Unknown'}${father ? ' & ' + father.firstName + ' ' + father.lastName : ''}`;
-        // find birth event for exact date
-        const be = result.events.find(ev => ev.type==='BIRTH' && ev.people[0]===p.id);
-        const dt = be?.details?.date ? ` on ${be.details.date}` : '';
-        lines.push(`${p.lastName}, ${p.firstName} – b. ${yb}${dt} – ${getCityName(p.cityId)} — ${parentText}`);
-      }
-    } else if (type === 'death') {
-      for (const e of result.events) {
-        if (e.type !== 'DEATH') continue;
-        if (e.details?.cityId !== cityId) continue;
-        if (yFilter && e.year !== yFilter) continue;
-        const pid = e.people[0]; const p = personByIdPre.get(pid);
-        if (!p) continue;
-        if (!inRange(p.lastName, range)) continue;
-        const disp = e.details?.disposition || 'unknown';
-        let post = ` (${e.details?.cause || 'cause unknown'}) – ${disp}`;
-        if (disp === 'buried') {
-          const plot = e.details?.plotId || buriedPlotOf(pid);
-          post += plot != null ? ` – Plot ${plot} (${getCityName(e.details?.cityId)})` : '';
-        }
-        const dt = e.details?.date ? ` on ${e.details.date}` : '';
-        lines.push(`${p.lastName}, ${p.firstName} – d. ${e.year}${dt} – ${getCityName(e.details?.cityId)}${post}`);
-      }
-    } else if (type === 'marriage') {
-      for (const m of result.marriages) {
-        if (yFilter && m.year !== yFilter) continue;
-        // Find the MARRIAGE event to get city (stored when marriage added)
-        const marriageEvt = result.events.find(ev => ev.type === 'MARRIAGE' && ev.details?.marriageId === m.id);
-        const mCityId = marriageEvt?.details?.cityId || null;
-        if (mCityId !== cityId) continue;
-        const h = personByIdPre.get(m.husbandId); const w = personByIdPre.get(m.wifeId);
-        const sortKey = (h?.lastName || '');
-        if (!inRange(sortKey, range)) continue;
-        const dt = marriageEvt?.details?.date ? ` on ${marriageEvt.details.date}` : '';
-        lines.push(`${h?.lastName || ''}, ${h?.firstName || ''} & ${w?.firstName || ''} ${w?.lastName || ''} – ${m.year}${dt}`);
-      }
-    } else if (type === 'divorce') {
-      for (const e of result.events) {
-        if (e.type !== 'DIVORCE') continue;
-        if (e.details?.cityId !== cityId) continue;
-        if (yFilter && e.year !== yFilter) continue;
-        const [aId,bId] = e.people;
-        const a = personByIdPre.get(aId); const b = personByIdPre.get(bId);
-        const sortKey = (a?.lastName || '');
-        if (!inRange(sortKey, range)) continue;
-        lines.push(`${a?.lastName || ''}, ${a?.firstName || ''} & ${b?.firstName || ''} ${b?.lastName || ''} – divorced in ${e.year}`);
-      }
-    }
-    lines.sort((a,b) => a.localeCompare(b));
-    recResultsEl.textContent = lines.join('\n');
-  }
-  recSearchBtn?.addEventListener('click', renderRecords);
-
-  // Graveyard lookup
-  gyLookupBtn?.addEventListener('click', () => {
-    const cityId = result.playerCityId || result.murderVictimId?.cityId;
-    const plot = Number(gyPlotEl.value || 0);
-    const gy = result.graveyards[cityId];
-    if (!gy || !plot || !gy.plots[plot]) { gyResultsEl.textContent = 'No records for that plot.'; return; }
-    const occupantIds = gy.plots[plot].slice();
-    function deathYearOf(pid) {
-      const list = eventsByPerson.get(pid) || [];
-      for (let i = list.length - 1; i >= 0; i--) {
-        const e = result.events[list[i] - 1];
-        if (e && e.type === 'DEATH') return e.year;
-      }
-      return null;
-    }
-    const lines = [];
-    for (const id of occupantIds) {
-      const p = personByIdPre.get(id);
-      if (!p) { lines.push(`Person #${id}`); continue; }
-      const bY = year(p.birthDate);
-      const dY = deathYearOf(p.id);
-      const maiden = (p.sex === 'F' && p.maidenName) ? ` (née ${p.maidenName})` : '';
-      const spousePresent = p.spouseId && occupantIds.includes(p.spouseId);
-      const ring = spousePresent ? ' 👪' : '';
-      const birthCity = p.cityId ? getCityName(p.cityId) : 'Unknown';
-      lines.push(`${p.firstName} ${p.lastName}${maiden} (${bY}–${dY ?? ''})${ring} — Born in ${birthCity}`);
-    }
-    gyResultsEl.textContent = `Plot ${plot}:\n` + lines.join('\n');
-  });
-
-  // CODIS rendering
-  function renderCODIS() {
-    codisListEl.innerHTML = '';
-    codisListEl.classList.add('codis-list');
-    // Controls: search + toggle for "added by us"
-    const searchWrap = document.createElement('div'); searchWrap.className='field-row';
-    const search = document.createElement('input'); search.className='input'; search.placeholder='Search CODIS… (first or last name, any order)';
-    const mineOnly = document.createElement('label'); mineOnly.style.display='flex'; mineOnly.style.alignItems='center'; mineOnly.style.gap='6px';
-    const mineChk = document.createElement('input'); mineChk.type='checkbox';
-    const mineTxt = document.createElement('span'); mineTxt.textContent='Show only DNA we added';
-    mineOnly.appendChild(mineChk); mineOnly.appendChild(mineTxt);
-    searchWrap.appendChild(mineOnly);
-    searchWrap.appendChild(search);
-    codisListEl.appendChild(searchWrap);
-    const entries = result.codis.profiles.map((pr, idx) => {
-      const p = personByIdPre.get(pr.personId || -1);
-      const label = pr.moniker ? pr.moniker : (p ? `${p.firstName} ${p.lastName}` : `Profile #${idx+1}`);
-      const sortKey = pr.moniker ? pr.moniker.toUpperCase() : (p ? `${p.lastName || ''} ${p.firstName || ''}`.toUpperCase() : label.toUpperCase());
-      const cityName = pr.cityId ? getCityName(pr.cityId) : '';
-      const srcType = pr.moniker ? 'evidence' : (pr.source === 'LE' ? 'law enforcement' : 'consumer');
-      // Determine sex for display: derive from linked person, or killer mapping for moniker
-      let sex = p ? p.sex : '';
-      if (!sex && pr.moniker && pr.dnaId && pr.dnaId.startsWith('killer-')) {
-        const kid = Number(pr.dnaId.slice('killer-'.length));
-        const kp = personByIdPre.get(kid);
-        if (kp) sex = kp.sex;
-      }
-      return { pr, idx, label, sortKey, cityName, sex, srcType };
-    }).sort((a,b) => a.sortKey.localeCompare(b.sortKey));
-    function renderList(filterQ) {
-      // Clear existing rows (preserve search)
-      Array.from(codisListEl.querySelectorAll('.row')).forEach(n => n.remove());
-      entries
-        .filter(ent => {
-          if (!filterQ) return true;
-          const p = personByIdPre.get(ent.pr.personId||-1);
-          if (ent.pr.moniker) return nameMatches({ firstName: ent.pr.moniker, lastName: '' }, filterQ);
-          if (!p) return false;
-          return nameMatches(p, filterQ);
-        })
-        .filter(ent => {
-          if (!mineChk.checked) return true;
-          // Consider "added by us" = evidence adds or dna-person actions we triggered
-          if (ent.pr.moniker) return true; // killer moniker always from our evidence action
-          const pr = ent.pr;
-          // Profiles we explicitly create via evidence lack source; tag them now for display pipeline
-          // Heuristic: if pr.source is present, include only when not LE; otherwise include if created in END_YEAR
-          if (pr.source === 'LE') return false;
-          if (pr.source === 'consumer') return false; // auto-promoted consumer tests are not "us"
-          return (pr.year === END_YEAR); // most of our explicit adds happen at END_YEAR
-        })
-        .forEach(({ pr, idx, label, cityName, sex, srcType }) => {
-          const row = document.createElement('div');
-          row.className = 'row';
-          const victimTag = (pr.personId && pr.personId === result.murderVictimId) ? ' (Murder victim)' : '';
-          const sexPart = sex ? ` · ${sex}` : '';
-          const srcFrag = srcType ? ` · ${srcType}` : '';
-          row.textContent = `${label}${sexPart}${victimTag} – added ${pr.year || ''}${cityName ? ' — ' + cityName : ''}${srcFrag}`;
-          if (pr.moniker) row.classList.add('killer');
-          row.addEventListener('click', () => showCodisDropdown(row, pr.personId));
-          codisListEl.appendChild(row);
-        });
-    }
-    renderList('');
-    search.addEventListener('input', () => renderList(search.value || ''));
-    mineChk.addEventListener('change', () => renderList(search.value || ''));
-  }
-
-  function showCodisDropdown(container, personId) {
-    // Clear any existing dropdowns
-    Array.from(codisListEl.querySelectorAll('.codis-dropdown')).forEach(el => el.remove());
-    const dd = document.createElement('div');
-    dd.className = 'codis-dropdown';
-    const btn = document.createElement('button');
-    btn.className = 'start secondary';
-    btn.textContent = 'Find relatives';
-    const status = document.createElement('div');
-    status.className = 'codis-status';
-    dd.appendChild(btn);
-    dd.appendChild(status);
-    container.appendChild(dd);
-    btn.addEventListener('click', () => {
-      status.innerHTML = '<span class="spinner" aria-hidden="true"></span> Searching for matches…';
-      btn.disabled = true;
-      setTimeout(() => {
-        renderCODISMatches(personId);
-      }, 2000);
-    });
-  }
-
-  function renderCODISMatches(personId) {
-    // If personId is null (moniker), match by DNA id against the killer
-    let base = personByIdPre.get(personId || -1);
-    if (!base) {
-      // try resolve via DNA id if moniker profile
-      const mon = result.codis.profiles.find(pr => pr.personId === null && pr.moniker);
-      if (mon && mon.dnaId && mon.dnaId.startsWith('killer-')) {
-        const kid = Number(mon.dnaId.slice('killer-'.length));
-        base = personByIdPre.get(kid);
-      }
-    }
-    if (!base) { codisListEl.textContent = 'Profile not linked to a person yet.'; return; }
-    // Header: which profile we are matching from
-    const header = document.createElement('div');
-    header.className = 'title-sub';
-    let displayLabel = '';
-    if (personId == null) {
-      const mon = result.codis.profiles.find(pr => pr.personId === null && pr.moniker);
-      displayLabel = mon ? mon.moniker : `${base.firstName} ${base.lastName}`;
-    } else {
-      displayLabel = `${base.firstName} ${base.lastName}`;
-    }
-    const sx = base.sex ? ` · ${base.sex}` : '';
-    header.textContent = `Matches for ${displayLabel}${sx}`;
-    const adj = new Map();
-    function link(u, v) { const a = adj.get(u) || new Set(); a.add(v); adj.set(u, a); }
-    for (const p of result.people) {
-      if (p.fatherId) { link(p.id, p.fatherId); link(p.fatherId, p.id); }
-      if (p.motherId) { link(p.id, p.motherId); link(p.motherId, p.id); }
-      // Note: do NOT link spouse/partner for genetic matches
-    }
-    const startId = base.id;
-    const dist = new Map([[startId,0]]);
-    const q = [startId];
-    while (q.length) {
-      const u = q.shift();
-      const du = dist.get(u) || 0;
-      if (du > 6) continue;
-      const nbrs = adj.get(u) || new Set();
-      for (const v of nbrs) {
-        if (dist.has(v)) continue;
-        dist.set(v, du + 1);
-        q.push(v);
-      }
-    }
-    function shareParent(a, b) {
-      return (a.fatherId && a.fatherId === b.fatherId) || (a.motherId && a.motherId === b.motherId);
-    }
-    function isParentOf(a, b) { return b.fatherId === a.id || b.motherId === a.id; }
-    function isChildOf(a, b) { return a.fatherId === b.id || a.motherId === b.id; }
-    function isGrandparentOf(a, b) {
-      const f = personByIdPre.get(b.fatherId || -1);
-      const m = personByIdPre.get(b.motherId || -1);
-      return (f && (f.fatherId === a.id || f.motherId === a.id)) || (m && (m.fatherId === a.id || m.motherId === a.id));
-    }
-    function isGrandchildOf(a, b) { return isGrandparentOf(b, a); }
-    function isFullSibling(a, b) {
-      const sharedFather = a.fatherId && b.fatherId && a.fatherId === b.fatherId;
-      const sharedMother = a.motherId && b.motherId && a.motherId === b.motherId;
-      return !!(sharedFather && sharedMother);
-    }
-    function isHalfSibling(a, b) {
-      const sharedFather = a.fatherId && b.fatherId && a.fatherId === b.fatherId;
-      const sharedMother = a.motherId && b.motherId && a.motherId === b.motherId;
-      return (sharedFather && !sharedMother) || (!sharedFather && sharedMother);
-    }
-    function isAvuncular(a, b) { // a is aunt/uncle of b or vice-versa
-      const bf = personByIdPre.get(b.fatherId || -1);
-      const bm = personByIdPre.get(b.motherId || -1);
-      return (bf && shareParent(a, bf)) || (bm && shareParent(a, bm)) || (function(){
-        const af = personByIdPre.get(a.fatherId || -1);
-        const am = personByIdPre.get(a.motherId || -1);
-        return (af && shareParent(b, af)) || (am && shareParent(b, am));
-      })();
-    }
-    function shareGrandparent(a, b) {
-      const aGP = new Set();
-      const af = personByIdPre.get(a.fatherId || -1); const am = personByIdPre.get(a.motherId || -1);
-      if (af) { if (af.fatherId) aGP.add(af.fatherId); if (af.motherId) aGP.add(af.motherId); }
-      if (am) { if (am.fatherId) aGP.add(am.fatherId); if (am.motherId) aGP.add(am.motherId); }
-      const bf = personByIdPre.get(b.fatherId || -1); const bm = personByIdPre.get(b.motherId || -1);
-      const bGP = new Set();
-      if (bf) { if (bf.fatherId) bGP.add(bf.fatherId); if (bf.motherId) bGP.add(bf.motherId); }
-      if (bm) { if (bm.fatherId) bGP.add(bm.fatherId); if (bm.motherId) bGP.add(bm.motherId); }
-      for (const id of aGP) if (bGP.has(id)) return true;
-      return false;
-    }
-
-    // Limit matches to CODIS profiles. Map DNA identities:
-    // - Real people with CODIS profiles
-    // - Killer moniker maps to killer person id in both directions
-    const codisIds = new Set(result.codis.profiles.map(pr => pr.personId).filter(Boolean));
-    const moniker = result.codis.profiles.find(pr => pr.personId === null && pr.moniker && pr.dnaId && pr.dnaId.startsWith('killer-'));
-    if (moniker) {
-      const kid = Number(moniker.dnaId.slice('killer-'.length));
-      if (!Number.isNaN(kid)) codisIds.add(kid);
-    }
-    const rows = [];
-    const excludeIds = new Set();
-    // If both profiles exist (moniker and real person), add an explicit 100% line
-    // Case A: searching from moniker (personId == null) and real-person CODIS profile exists
-    if (personId == null) {
-      const hasRealProfile = result.codis.profiles.some(pr => pr.personId === base.id);
-      if (hasRealProfile) {
-        const line = document.createElement('div');
-        const txt = document.createElement('span');
-        const sx2 = base.sex ? ` · ${base.sex}` : '';
-        const city = base.cityId ? ` — ${getCityName(base.cityId)}` : '';
-        txt.textContent = `${base.firstName} ${base.lastName}${sx2} – 100% – same person/identical twin${city} · evidence`;
-        line.appendChild(txt);
-        rows.push(line);
-      }
-    } else {
-      // Case B: searching from real person and moniker CODIS profile exists for same DNA
-      const mon = result.codis.profiles.find(pr => pr.personId === null && pr.moniker && pr.dnaId === `killer-${base.id}`);
-      if (mon) {
-        const line = document.createElement('div');
-        const txt = document.createElement('span');
-        const sx2 = base.sex ? ` · ${base.sex}` : '';
-        const city = mon.cityId ? ` — ${getCityName(mon.cityId)}` : '';
-        txt.textContent = `${mon.moniker}${sx2} – 100% – same person/identical twin${city} · evidence`;
-        line.appendChild(txt);
-        rows.push(line);
-      }
-    }
-
-    // Identical twin handling: show explicit 100% match and skip duplicate sibling line
-    if (base.twinGroupId && base.twinType === 'MZ') {
-      const twins = result.people.filter(p => p.id !== base.id && p.twinGroupId === base.twinGroupId && p.twinType === 'MZ');
-      twins.forEach(tw => {
-        if (codisIds.has(tw.id)) {
-          const line = document.createElement('div');
-          const txt = document.createElement('span');
-          const sx2 = tw.sex ? ` · ${tw.sex}` : '';
-          const city = tw.cityId ? ` — ${getCityName(tw.cityId)}` : '';
-          const prTw = result.codis.profiles.find(x => x.personId === tw.id) || {};
-          const srcFrag = prTw.source === 'LE' ? ' · law enforcement' : (prTw.moniker ? ' · evidence' : ' · consumer');
-          txt.textContent = `${tw.firstName} ${tw.lastName}${sx2} – 100% – same person/identical twin${city}${srcFrag}`;
-          line.appendChild(txt);
-          rows.push(line);
-          excludeIds.add(tw.id);
-        }
-      });
-    }
-    for (const [pid, d] of dist.entries()) {
-      if (pid === personId) continue;
-      const p = personByIdPre.get(pid);
-      if (!p) continue;
-      if (!codisIds.has(pid)) continue;
-      if (excludeIds.has(pid)) continue; // already rendered as identical twin
-      // Only show up to third cousins (distance <= 8)
-      if ((dist.get(pid) || 99) > 8) continue;
-      let rel = 'distant relative'; let pct = '~0.8%';
-      let firstDegree = false;
-      if (isParentOf(p, base) || isChildOf(p, base)) {
-        rel = 'parent/child'; pct = '50%'; firstDegree = true;
-      } else if (isFullSibling(p, base)) {
-        rel = 'sibling'; pct = '25–50%';
-      } else if (isHalfSibling(p, base) || isGrandparentOf(p, base) || isGrandchildOf(p, base) || isAvuncular(p, base)) {
-        rel = 'second-degree (grandparent/grandchild/avuncular/half-sibling)'; pct = '~25%';
-      } else if (d === 4) { rel = 'first cousin (± one removal)'; pct = '≈12.5%'; }
-      else if (d === 5) { rel = 'first cousin once removed (±)'; pct = '≈6.25%'; }
-      else if (d === 6) { rel = 'second cousin (± one removal)'; pct = '≈3.1%'; }
-      else if (d === 7) { rel = 'second cousin once removed (±)'; pct = '≈1.6%'; }
-      else if (d === 8) { rel = 'third cousin (± one removal)'; pct = '≈0.8%'; }
-
-      const line = document.createElement('div');
-      const txt = document.createElement('span');
-      const sx = p.sex ? ` · ${p.sex}` : '';
-      const city = p.cityId ? ` — ${getCityName(p.cityId)}` : '';
-      // Determine source from CODIS entry
-      const pr = result.codis.profiles.find(x => x.personId === pid) || {};
-      const srcFrag = pr.source === 'LE' ? ' · law enforcement' : (pr.moniker ? ' · evidence' : ' · consumer');
-      txt.textContent = `${p.firstName} ${p.lastName}${sx} – ${pct} – likely ${rel}${city}${srcFrag}`;
-      line.appendChild(txt);
-      // Inline: add person to knowledge graph (for distant matches especially)
-      const known = knowledge.knownPeople.has(pid);
-      if (!known) {
-        const addP = document.createElement('button'); addP.className='inline-link'; addP.textContent='👤 add'; addP.title='Add person to Connections';
-        addP.addEventListener('click', () => { addPersonToKnowledge(pid); addP.replaceWith(doneBadge()); });
-        line.appendChild(addP);
-      } else {
-        line.appendChild(doneBadge());
-      }
-      // First-degree genetic only: parent/child
-      if (firstDegree) {
-        const already = knowledge.knownRelationships.some(r => r.type==='biological' && ((r.a===personId&&r.b===pid)||(r.a===pid&&r.b===personId)));
-        if (!already) {
-          const addGen = document.createElement('button'); addGen.className = 'inline-link'; addGen.textContent = '🧬 add';
-          addGen.title = 'Add genetic connection to Connections';
-          addGen.addEventListener('click', () => { addConnection(personId, pid, 'genetic'); addGen.replaceWith(doneBadge()); });
-          line.appendChild(addGen);
-        } else {
-          const done = doneBadge(); line.appendChild(done);
-        }
-      }
-      rows.push(line);
-    }
-    const back = document.createElement('button'); back.className='start secondary'; back.textContent='Back';
-    back.addEventListener('click', renderCODIS);
-    codisListEl.innerHTML='';
-    codisListEl.appendChild(back);
-    codisListEl.appendChild(header);
-    const box = document.createElement('div'); box.className='detail'; box.style.marginTop='8px';
-    rows.forEach(node => box.appendChild(node));
-    codisListEl.appendChild(box);
-  }
-  codisRefreshBtn?.addEventListener('click', renderCODIS);
-
-  // Newspaper archive - Obituaries
-  function renderNewsYear() {
-    const y = Number(newsYearEl.value || 0);
-    const cityId = result.playerCityId;
-    newsResultsEl.innerHTML = '';
-    // Newspaper masthead and lead story
-    const fullName = getCityName(cityId) || 'City, ST';
-    const cityName = fullName.split(',')[0];
-    const papers = ['Times','Tribune','Herald','Post','Gazette','Courier','Sun','Star'];
-    const pick = papers[Math.floor((result.seed + cityId + y) % papers.length)];
-    const mast = document.createElement('div'); mast.className = 'masthead'; mast.textContent = `${cityName} ${pick}`;
-    const paper = document.createElement('div'); paper.className = 'newspaper';
-    paper.appendChild(mast);
-    const global = getGlobalNewsStory(y);
-    if (global) {
-      const h = document.createElement('div'); h.className = 'headline'; h.textContent = global.title; paper.appendChild(h);
-      const b = document.createElement('div'); b.className = 'lede'; b.textContent = global.body; paper.appendChild(b);
-    }
-    newsResultsEl.appendChild(paper);
-    // Birth announcements (twins collapsed into one line for identical or fraternal twins)
-    const birthsHeader = document.createElement('div'); birthsHeader.className='section-cap'; birthsHeader.textContent = 'Birth Announcements'; paper.appendChild(birthsHeader);
-    const births = result.events.filter(ev => ev.type==='BIRTH' && ev.year===y && ev.details?.cityId===cityId);
-    // Group by twinGroupId when present and same date
-    const seen = new Set();
-    for (const ev of births) {
-      if (seen.has(ev.people[0])) continue;
-      const pid = ev.people[0]; const p = personByIdPre.get(pid); if (!p) continue;
-      const groupId = p.twinGroupId;
-      const sameGroup = groupId ? births.filter(e2 => {
-        const p2 = personByIdPre.get(e2.people[0]||-1);
-        return p2 && p2.twinGroupId===groupId && e2.details?.date===ev.details?.date;
-      }) : [ev];
-      for (const e2 of sameGroup) seen.add(e2.people[0]);
-      const babies = sameGroup.map(e2 => personByIdPre.get(e2.people[0]||-1)).filter(Boolean);
-      const mom = p.motherId ? personByIdPre.get(p.motherId) : null;
-      const dad = p.fatherId ? personByIdPre.get(p.fatherId) : null;
-      const line = document.createElement('div'); line.className='story-line';
-      const names = babies.map(b => `${b.firstName} ${b.lastName}`).join(' and ');
-      const before = document.createElement('span'); before.textContent = `${names}, born ${ev.details?.date || y}, to `; line.appendChild(before);
-      if (mom) {
-        const momSpan = document.createElement('span'); momSpan.textContent = `${mom.firstName} ${mom.lastName}`; line.appendChild(momSpan);
-        const existsMAny = babies.every(b => knowledge.knownRelationships.some(r => r.type==='biological' && ((r.a===b.id&&r.b===mom.id)||(r.a===mom.id&&r.b===b.id))));
-        if (!existsMAny) { const bBtn=document.createElement('button'); bBtn.className='inline-link'; bBtn.textContent='👪 add'; bBtn.title='Add familial connection'; bBtn.addEventListener('click',()=>{ babies.forEach(baby=>addConnection(baby.id,mom.id,'familialParent')); bBtn.replaceWith(doneBadge());}); line.appendChild(bBtn);} else { line.appendChild(doneBadge()); }
-      } else {
-        const unk = document.createElement('span'); unk.textContent = 'Unknown'; line.appendChild(unk);
-      }
-      if (dad) {
-        const andSpan = document.createElement('span'); andSpan.textContent = ' and '; line.appendChild(andSpan);
-        const dadSpan = document.createElement('span'); dadSpan.textContent = `${dad.firstName} ${dad.lastName}`; line.appendChild(dadSpan);
-        const existsDAny = babies.every(b => knowledge.knownRelationships.some(r => r.type==='biological' && ((r.a===b.id&&r.b===dad.id)||(r.a===dad.id&&r.b===b.id))));
-        if (!existsDAny) { const bBtn=document.createElement('button'); bBtn.className='inline-link'; bBtn.textContent='👪 add'; bBtn.title='Add familial connection'; bBtn.addEventListener('click',()=>{ babies.forEach(baby=>addConnection(baby.id,dad.id,'familialParent')); bBtn.replaceWith(doneBadge());}); line.appendChild(bBtn);} else { line.appendChild(doneBadge()); }
-      }
-      const period = document.createElement('span'); period.textContent = '.'; line.appendChild(period);
-      paper.appendChild(line);
-    }
-    // Marriage announcements
-    const marrHeader = document.createElement('div'); marrHeader.className='section-cap'; marrHeader.textContent = 'Marriage Announcements'; paper.appendChild(marrHeader);
-    for (const ev of result.events) {
-      if (ev.type !== 'MARRIAGE') continue;
-      if (ev.year !== y) continue;
-      if (ev.details?.cityId !== cityId) continue;
-      const [a,b] = ev.people; const h = personByIdPre.get(a); const w = personByIdPre.get(b);
-      const line = document.createElement('div'); line.className='story-line';
-      const span = document.createElement('span');
-      span.textContent = `${h?.firstName || ''} ${h?.lastName || ''} and ${w?.firstName || ''} ${w?.lastName || ''} were married ${ev.details?.date || y}.`;
-      line.appendChild(span);
-      if (h && w) {
-        const exists = knowledge.knownRelationships.some(r => r.type==='marriage' && ((r.a===h.id&&r.b===w.id)||(r.a===w.id&&r.b===h.id)));
-        if (!exists) { const b=document.createElement('button'); b.className='inline-link'; b.textContent='👪 add'; b.title='Add marriage connection'; b.addEventListener('click',()=>{addConnection(h.id,w.id,'familial'); b.replaceWith(doneBadge());}); line.appendChild(b);} else { line.appendChild(doneBadge()); }
-      }
-      paper.appendChild(line);
-    }
-    // Obituaries
-    const obitHeader = document.createElement('div'); obitHeader.className='section-cap'; obitHeader.textContent = 'Obituaries'; paper.appendChild(obitHeader);
-    for (const e of result.events) {
-      if (e.type !== 'DEATH') continue;
-      if (e.details?.cityId !== cityId) continue;
-      if (y && e.year !== y) continue;
-      const pid = e.people[0];
-      const p = personByIdPre.get(pid);
-      if (!p) continue;
-      // year-only; no month filter
-      // Build survivors/predeceased list
-      const relatives = [];
-      const father = p.fatherId ? personByIdPre.get(p.fatherId) : null;
-      const mother = p.motherId ? personByIdPre.get(p.motherId) : null;
-      const spouse = p.spouseId ? personByIdPre.get(p.spouseId) : null;
-      const children = result.people.filter(c => c.fatherId === p.id || c.motherId === p.id);
-      const predeceased = [];
-      const survivedBy = [];
-      if (father) ((father.alive) ? survivedBy : predeceased).push(`father ${father.firstName} ${father.lastName}`);
-      if (mother) ((mother.alive) ? survivedBy : predeceased).push(`mother ${mother.firstName} ${mother.lastName}`);
-      if (spouse) ((spouse.alive) ? survivedBy : predeceased).push(`spouse ${spouse.firstName} ${spouse.lastName}`);
-      for (const c of children) {
-        ((c.alive) ? survivedBy : predeceased).push(`child ${c.firstName} ${c.lastName}`);
-      }
-      const life = `(${year(p.birthDate)}-${e.year})`;
-      const pre = `We mourn the passing of ${p.firstName} ${p.lastName} ${life}.`;
-      const header = `${p.firstName} ${p.lastName} – d. ${e.year}${e.details?.date ? ' on ' + e.details.date : ''} – ${getCityName(e.details?.cityId)}`;
-      const parts = [pre, header];
-      if (predeceased.length) parts.push(`Pre-deceased by: ${predeceased.join(', ')}`);
-      if (survivedBy.length) parts.push(`Survived by: ${survivedBy.join(', ')}`);
-      // Single block with inline buttons (no separate column)
-      const container = document.createElement('div');
-      const text = document.createElement('span'); text.textContent = parts.join('\n') + ' ';
-      container.appendChild(text);
-      if (father) { const ex=knowledge.knownRelationships.some(r=>r.type==='biological'&&((r.a===p.id&&r.b===father.id)||(r.a===father.id&&r.b===p.id))); if(!ex){const b=document.createElement('button'); b.className='inline-link'; b.textContent='👪 add'; b.title='Add familial connection (father)'; b.addEventListener('click',()=>{addConnection(p.id,father.id,'familialParent'); b.replaceWith(doneBadge());}); container.appendChild(b);} }
-      if (mother) { const ex=knowledge.knownRelationships.some(r=>r.type==='biological'&&((r.a===p.id&&r.b===mother.id)||(r.a===mother.id&&r.b===p.id))); if(!ex){const b=document.createElement('button'); b.className='inline-link'; b.textContent='👪 add'; b.title='Add familial connection (mother)'; b.addEventListener('click',()=>{addConnection(p.id,mother.id,'familialParent'); b.replaceWith(doneBadge());}); container.appendChild(b);} }
-      if (spouse) { const ex=knowledge.knownRelationships.some(r=>r.type==='marriage'&&((r.a===p.id&&r.b===spouse.id)||(r.a===spouse.id&&r.b===p.id))); if(!ex){const b=document.createElement('button'); b.className='inline-link'; b.textContent='👪 add'; b.title='Add marriage connection'; b.addEventListener('click',()=>{addConnection(p.id,spouse.id,'familial'); b.replaceWith(doneBadge());}); container.appendChild(b);} }
-      for (const c of children) { const ex=knowledge.knownRelationships.some(r=>r.type==='biological'&&((r.a===p.id&&r.b===c.id)||(r.a===c.id&&r.b===p.id))); if(!ex){const b=document.createElement('button'); b.className='inline-link'; b.textContent='👪 add'; b.title='Add familial connection (child)'; b.addEventListener('click',()=>{addConnection(p.id,c.id,'familialParent'); b.replaceWith(doneBadge());}); container.appendChild(b);} }
-      paper.appendChild(container);
-    }
-    if (paper.childNodes.length <= 1 && !global) { const none=document.createElement('div'); none.textContent='No items for that year.'; paper.appendChild(none); }
-  }
-  newsSearchBtn?.addEventListener('click', () => { newsResultsEl.innerHTML=''; renderNewsYear(); });
-
-  // -------- Residents typeahead & Interviews --------
-  const residentSearchEl = document.getElementById('residentSearch');
-  const residentListEl = document.getElementById('residentList');
-  const intHeader = document.getElementById('intHeader');
-  const intTranscript = document.getElementById('intTranscript');
-  const intHello = document.getElementById('intHello');
-  const intBack = document.getElementById('intBack');
-  const intMenu = document.getElementById('intMenu');
-  let interviewingPersonId = null;
-
-  function renderResidentMatches(query) {
-    if (!residentListEl) return;
-    const cityId = result.playerCityId;
-    const q = (query || '').trim();
-    const residents = result.people.filter(p => p.cityId === cityId && p.lastName);
-    const filtered = q ? residents.filter(p => nameMatches(p, q)) : [];
-    filtered.sort((a,b) => a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName));
-    residentListEl.innerHTML = '';
-    const top = filtered.slice(0, 30);
-    top.forEach(p => {
-      const div = document.createElement('div');
-      div.className = 'item';
-      div.textContent = `${p.lastName}, ${p.firstName}`;
-      div.addEventListener('click', () => openInterview(p.id));
-      residentListEl.appendChild(div);
-    });
-  }
-
-  function openInterview(personId) {
-    interviewingPersonId = personId;
-    const p = personByIdPre.get(personId);
-    if (!p) return;
-    const emoji = personEmojiFor(p);
-    if (!result.conversations[personId]) result.conversations[personId] = [];
-    intHeader.textContent = `${emoji} ${p.firstName} ${p.lastName}`;
-    renderTranscript(personId);
-    renderInterviewMenu(personId);
-    // Hide redundant controls now that dialogue options exist
-    if (typeof intHello !== 'undefined' && intHello) intHello.style.display = 'none';
-    if (typeof intBack !== 'undefined' && intBack) intBack.style.display = 'none';
-    if (result.conversations[personId].length === 0) {
-      // FBI introduction + NPC response based on temperament
-      result.conversations[personId].push({ from: 'you', text: "I'm with the FBI. I have a few questions.", ts: Date.now() });
-      const friendlyLines = [
-        'Of course, officer. What would you like to know?',
-        "I'll help any way I can.",
-        'Sure. Ask away.'
-      ];
-      const hostileLines = [
-        "I don't have anything to say to you.",
-        'Get off my porch.',
-        'Not interested. Move along.'
-      ];
-      let line;
-      let dropped = false;
-      if (p.friendly) {
-        line = friendlyLines[Math.floor(Math.random()*friendlyLines.length)];
-      } else {
-        line = hostileLines[Math.floor(Math.random()*hostileLines.length)];
-        dropped = Math.random() < 0.2; // 1/5 chance to drop cigarette
-      }
-      result.conversations[personId].push({ from: 'npc', text: line, ts: Date.now() });
-      result.conversationsState[personId] = result.conversationsState[personId] || {};
-      if (!p.friendly) {
-        result.conversationsState[personId].ended = true;
-        result.conversationsState[personId].droppedCig = dropped;
-      }
-      renderTranscript(personId);
-      // If unfriendly and dropped, add cigarette to evidence locker (current city)
-      if (!p.friendly && dropped) {
-        const cityId = result.playerCityId;
-        result.evidence[cityId] = result.evidence[cityId] || [];
-        result.evidence[cityId].push({ id: `cig-${personId}`, name: `${p.firstName} ${p.lastName}'s Cigarette`, type: 'cigarette', actions: ['dna-person'], personId });
-      }
-    }
-    setActivePanel('interview');
-  }
-
-  function renderInterviewMenu(personId) {
-    const p = personByIdPre.get(personId);
-    if (!p) return;
-    const state = result.conversationsState[personId] || (result.conversationsState[personId] = {});
-    state.asked = state.asked || new Set();
-    state.askedFamily = state.askedFamily || {};
-    intMenu.innerHTML = '';
-    if (state.ended) return; // hostile ended
-    // Base options
-    const ul = document.createElement('div');
-    ul.className = 'list';
-    // DNA sample request
-    if (!state.asked.has('dna')) {
-      const dnaBtn = document.createElement('button'); dnaBtn.className='menu-btn'; dnaBtn.textContent='Would you be willing to give a DNA sample?';
-      dnaBtn.addEventListener('click', () => {
-        const yes = Math.random() < 0.5;
-        if (yes) {
-          result.conversations[personId].push({ from:'npc', text: 'Sure. If it helps.', ts: Date.now() });
-          const cityId = result.playerCityId;
-          result.evidence[cityId] = result.evidence[cityId] || [];
-          result.evidence[cityId].push({ id:`swab-${personId}`, name: `${p.firstName} ${p.lastName}'s Cheek Swab`, type:'swab', actions:['dna-person'], personId });
-        } else {
-          result.conversations[personId].push({ from:'npc', text: "I'm not comfortable with that.", ts: Date.now() });
-        }
-        state.asked.add('dna');
-        renderTranscript(personId);
-        renderInterviewMenu(personId);
-      });
-      ul.appendChild(dnaBtn);
-    }
-
-    // Family exploration
-    const famBtn = document.createElement('button'); famBtn.className='menu-btn'; famBtn.textContent='Tell me about your family.';
-    famBtn.addEventListener('click', () => showFamilyQuestions(personId, personId));
-    ul.appendChild(famBtn);
-
-    // Origin (birthplace and moves)
-    const askedSelfOrigin = (state.askedFamily[personId] && state.askedFamily[personId]['origin']);
-    if (!askedSelfOrigin) {
-      const originBtn = document.createElement('button'); originBtn.className='menu-btn'; originBtn.textContent='Where do you come from?';
-      originBtn.addEventListener('click', () => { 
-        // mark asked and answer
-        state.askedFamily[personId] = state.askedFamily[personId] || {};
-        state.askedFamily[personId]['origin'] = true;
-        answerOriginQuestion(personId, personId);
-        renderInterviewMenu(personId);
-      });
-      ul.appendChild(originBtn);
-    }
-
-    // Killer-only dialogue hook to disambiguate identical twins in cold cases
-    if (personId === result.killerId) {
-      const kBtn = document.createElement('button'); kBtn.className='menu-btn'; kBtn.textContent='Tell me about the night of the murder.';
-      kBtn.addEventListener('click', () => {
-        const murderEvt = result.events.find(e => e.type==='MURDER');
-        const mCity = murderEvt ? getCityName(murderEvt.details?.cityId) : 'the city';
-        const mYear = murderEvt ? murderEvt.year : 'that year';
-        const slips = [
-          `I wasn't anywhere near ${mCity} in ${mYear}. I was across town by the railyard.`,
-          `Everyone keeps asking about ${mYear}. Nothing happened that night by the river in ${mCity}.`,
-          `You think I don't remember ${mYear}? The sirens by the old theatre in ${mCity} kept me up.`,
-        ];
-        const line = slips[Math.floor(Math.random()*slips.length)];
-        result.conversations[personId].push({ from:'npc', text: line, ts: Date.now() });
-        result.conversationsState[personId] = result.conversationsState[personId] || {};
-        result.conversationsState[personId].murderSlip = true;
-        renderTranscript(personId);
-      });
-      ul.appendChild(kBtn);
-    }
-
-    // Ask about someone (submenu)
-    const aboutBtn = document.createElement('button'); aboutBtn.className='menu-btn'; aboutBtn.textContent="I'd like to ask about someone…";
-    aboutBtn.addEventListener('click', () => {
-      intMenu.innerHTML = '';
-      const wrap = document.createElement('div'); wrap.className='list';
-      const prompt = document.createElement('div'); prompt.textContent = 'People we both know:'; wrap.appendChild(prompt);
-      const speaker = personByIdPre.get(personId);
-      const horizon = knownSubgraphFrom(personId);
-      const knownSet = new Set(knowledge.knownPeople);
-      const candidates = Array.from(horizon.nodes)
-        .filter(id => id !== personId && knownSet.has(id))
-        .map(id => personByIdPre.get(id))
-        .filter(Boolean)
-        .sort((a,b)=>{
-          const al = (a.lastName||'').localeCompare(b.lastName||'');
-          if (al !== 0) return al;
-          return (a.firstName||'').localeCompare(b.firstName||'');
-        });
-      if (candidates.length === 0) {
-        const none = document.createElement('div'); none.textContent = 'No one comes to mind.'; wrap.appendChild(none);
-      } else {
-        candidates.forEach(k => {
-          const btn = document.createElement('button'); btn.className='menu-btn'; btn.textContent = `${k.firstName} ${k.lastName}`;
-          btn.addEventListener('click', ()=> showFamilyQuestions(personId, k.id));
-          wrap.appendChild(btn);
-        });
-      }
-      const back = document.createElement('button'); back.className='start secondary'; back.textContent="I'd like to talk about something else"; back.addEventListener('click', ()=>renderInterviewMenu(personId)); wrap.appendChild(back);
-      intMenu.appendChild(wrap);
-    });
-    ul.appendChild(aboutBtn);
-
-    // Navigation options
-    const otherBtn = document.createElement('button'); otherBtn.className='menu-btn'; otherBtn.textContent="Let's talk about something else"; otherBtn.addEventListener('click', ()=>renderInterviewMenu(personId));
-    const byeBtn = document.createElement('button'); byeBtn.className='menu-btn'; byeBtn.textContent='Goodbye for now'; byeBtn.addEventListener('click', ()=>{ result.conversations[personId].push({ from:'you', text:'Goodbye for now.', ts:Date.now() }); renderTranscript(personId); setActivePanel('home'); });
-    ul.appendChild(otherBtn); ul.appendChild(byeBtn);
-    intMenu.appendChild(ul);
-  }
-
-  function showFamilyQuestions(speakerId, targetId) {
-    const who = personByIdPre.get(targetId);
-    if (!who) return;
-    const p = personByIdPre.get(speakerId);
-    if (!p) return;
-    const state = result.conversationsState[speakerId] || (result.conversationsState[speakerId] = { asked:new Set(), askedFamily:{} });
-    state.askedFamily = state.askedFamily || {};
-    const askedForTarget = state.askedFamily[targetId] || {};
-    intMenu.innerHTML = '';
-    const ul = document.createElement('div'); ul.className='list';
-    const label = (me,str)=> (targetId===speakerId? str : str.replaceAll('your', `${who.firstName}'s`));
-    const allQs = [
-      { k:'parents', text:'Who are your parents?' },
-      { k:'siblings', text:'Who are your siblings?' },
-      { k:'children', text:'Who are your children?' },
-      { k:'spouse', text:'Who is your spouse?' },
-      { k:'past', text:'Any past marriages?' },
-      { k:'origin', text:'Where do you come from?' }
-    ];
-    const qs = allQs.filter(q => !askedForTarget[q.k]);
-    if (qs.length === 0) {
-      const none = document.createElement('div'); none.textContent = `No more questions about ${who.firstName}.`; ul.appendChild(none);
-    }
-    qs.forEach(q => {
-      const b = document.createElement('button'); b.className='menu-btn'; b.textContent=label(targetId, q.text);
-      b.addEventListener('click', ()=>answerFamilyQuestion(speakerId, targetId, q.k));
-      ul.appendChild(b);
-    });
-    const back = document.createElement('button'); back.className='start secondary'; back.textContent='Back'; back.addEventListener('click', ()=>renderInterviewMenu(speakerId));
-    intMenu.appendChild(ul); intMenu.appendChild(back);
-  }
-
-  function withinHorizon(speaker, personId) {
-    const { nodes, dist } = knownSubgraphFrom(speaker.id);
-    return nodes.has(personId) && (dist.get(personId) || 99) <= Math.max(2, Math.min(5, speaker.knowledgeRadius || 3));
-  }
-
-  function answerFamilyQuestion(speakerId, targetId, kind) {
-    const speaker = personByIdPre.get(speakerId);
-    const target = personByIdPre.get(targetId);
-    if (!speaker || !target) return;
-    const state = result.conversationsState[speakerId] || (result.conversationsState[speakerId] = { asked:new Set(), askedFamily:{} });
-    state.askedFamily[targetId] = state.askedFamily[targetId] || {};
-    state.askedFamily[targetId][kind] = true;
-    const lines = [];
-    const pushLine = (txt, inline)=>{ result.conversations[speakerId].push({ from:'npc', text: txt, ts: Date.now(), addInline: inline }); };
-    // Parents
-    if (kind==='parents') {
-      if (target.motherId && withinHorizon(speaker, target.motherId)) {
-        const m = personByIdPre.get(target.motherId); if (m) pushLine(`Mother: ${m.firstName} ${m.lastName}`, { aId: target.id, bId: m.id, kind: 'familialParent' });
-      }
-      if (target.fatherId && withinHorizon(speaker, target.fatherId)) {
-        const f = personByIdPre.get(target.fatherId); if (f) pushLine(`Father: ${f.firstName} ${f.lastName}`, { aId: target.id, bId: f.id, kind: 'familialParent' });
-      }
-      // Bio father if affair knowledge
-      if (speaker.knowsAffairs && target.bioFatherId && target.bioFatherId !== target.fatherId && withinHorizon(speaker, target.bioFatherId)) {
-        const bf = personByIdPre.get(target.bioFatherId); if (bf) pushLine(`Biological father: ${bf.firstName} ${bf.lastName}`, { aId: target.id, bId: bf.id, kind: 'genetic' });
-      }
-    }
-    if (kind==='siblings') {
-      for (const s of result.people) {
-        if (s.id===target.id) continue;
-        const sib = (s.fatherId && s.fatherId===target.fatherId) || (s.motherId && s.motherId===target.motherId);
-        if (sib && withinHorizon(speaker, s.id)) pushLine(`Sibling: ${s.firstName} ${s.lastName}`);
-      }
-    }
-    if (kind==='children') {
-      for (const c of result.people) {
-        if (c.fatherId===target.id || c.motherId===target.id) {
-          if (withinHorizon(speaker, c.id)) pushLine(`Child: ${c.firstName} ${c.lastName}`, { aId: c.id, bId: target.id, kind: 'familialParent' });
-          if (speaker.knowsAffairs && c.bioFatherId && c.bioFatherId!==target.id && withinHorizon(speaker, c.bioFatherId)) {
-            const bf = personByIdPre.get(c.bioFatherId); if (bf) pushLine(`Biological father of ${c.firstName}: ${bf.firstName} ${bf.lastName}`, { aId: c.id, bId: bf.id, kind: 'genetic' });
-          }
-        }
-      }
-    }
-    if (kind==='spouse' || kind==='past') {
-      if (target.spouseId && withinHorizon(speaker, target.spouseId)) {
-        const s = personByIdPre.get(target.spouseId); if (s) pushLine(`Spouse: ${s.firstName} ${s.lastName}`, { aId: target.id, bId: s.id, kind: 'familial' });
-      }
-      // Past marriages: use marriage index
-      const past = (marriagesByPerson.get(target.id) || []).filter(id => id !== target.spouseId);
-      for (const otherId of past) {
-        if (withinHorizon(speaker, otherId)) {
-          const o = personByIdPre.get(otherId); if (o) pushLine(`Past marriage: ${o.firstName} ${o.lastName}`, { aId: target.id, bId: o.id, kind: 'familial' });
-        }
-      }
-    }
-    if (kind==='origin') {
-      // Birthplace
-      const birthCity = getCityName(target.cityId);
-      pushLine(`I was born in ${birthCity}.`);
-      // Moves
-      const moves = result.events.filter(e => e.type==='MOVE' && e.people.includes(target.id)).sort((a,b)=>a.year-b.year);
-      for (const mv of moves) {
-        const from = mv.details?.fromCityId ? getCityName(mv.details.fromCityId) : (mv.details?.from || 'Unknown');
-        const to = mv.details?.toCityId ? getCityName(mv.details.toCityId) : (mv.details?.to || 'Unknown');
-        pushLine(`In ${mv.year} I moved from ${from} to ${to}.`);
-      }
-      if (!moves.length) pushLine("I haven't moved much since then.");
-    }
-    renderTranscript(speakerId);
-  }
-
-  function answerOriginQuestion(speakerId, targetId) {
-    answerFamilyQuestion(speakerId, targetId, 'origin');
-  }
-
-  function renderTranscript(personId) {
-    const conv = result.conversations[personId] || [];
-    intTranscript.innerHTML = '';
-    conv.forEach(line => {
-      const div = document.createElement('div');
-      const who = document.createElement('span'); who.textContent = (line.from === 'you' ? 'You: ' : 'Them: ');
-      div.appendChild(who);
-      const textSpan = document.createElement('span'); textSpan.textContent = line.text; div.appendChild(textSpan);
-      if (line.addInline && line.addInline.aId && line.addInline.bId && line.addInline.kind) {
-        const exists = knowledge.knownRelationships.some(r => {
-          const type = line.addInline.kind === 'genetic' ? 'biological' : (line.addInline.kind === 'familialParent' ? 'guardian' : 'marriage');
-          return r.type === type && ((r.a === line.addInline.aId && r.b === line.addInline.bId) || (r.a === line.addInline.bId && r.b === line.addInline.aId));
-        });
-        if (!exists) {
-          const btn = document.createElement('button');
-          btn.className = 'inline-link';
-          btn.textContent = line.addInline.kind === 'genetic' ? '🧬 add' : '👪 add';
-          btn.title = 'Add connection';
-          btn.addEventListener('click', () => { addConnection(line.addInline.aId, line.addInline.bId, line.addInline.kind); btn.replaceWith(doneBadge()); });
-          div.appendChild(document.createTextNode(' '));
-          div.appendChild(btn);
-        } else {
-          div.appendChild(doneBadge());
-        }
-      }
-      intTranscript.appendChild(div);
-    });
-    intTranscript.scrollTop = intTranscript.scrollHeight;
-  }
-
-  // Flexible name matching: supports first, last, or both in any order (prefix tokens)
-  function nameMatches(person, query) {
-    if (!query) return false;
-    const tokens = String(query).trim().toLowerCase().split(/\s+/).filter(Boolean);
-    if (!tokens.length) return false;
-    const first = (person.firstName || '').toLowerCase();
-    const last = (person.lastName || '').toLowerCase();
-    return tokens.every(tok => first.startsWith(tok) || last.startsWith(tok) || (`${first} ${last}`).startsWith(tok) || (`${last} ${first}`).startsWith(tok));
-  }
-
-  residentSearchEl?.addEventListener('input', (e) => renderResidentMatches(e.target.value));
-  // Deprecated: hello/back controls; hidden in openInterview
-
-  // Person inspector: build indexes and bind search
-  function renderPersonResults(query) {
-    const q = (query || '').trim().toLowerCase();
-    const matches = q
-      ? result.people.filter(p => (`${p.firstName} ${p.lastName}`).toLowerCase().includes(q))
-      : result.people.slice(0, 50);
-    const top = matches.slice(0, 50);
-    personResultsEl.innerHTML = '';
-    for (const p of top) {
-      const btn = document.createElement('button');
-      btn.className = 'list-item';
-      const y = year(p.birthDate);
-      btn.textContent = `${p.firstName} ${p.lastName} (b. ${y})`;
-      btn.addEventListener('click', () => renderPersonDetail(p.id));
-      personResultsEl.appendChild(btn);
-    }
-  }
-
-  function renderPersonDetail(personId) {
-    const p = personById.get(personId);
-    if (!p) return;
-    const evts = (eventsByPerson.get(personId) || [])
-      .map(id => result.events[id - 1])
-      .sort((a, b) => a.year - b.year || a.id - b.id);
-    const header = document.createElement('div');
-    header.className = 'person-header';
-    header.textContent = `${p.firstName} ${p.lastName} · ${p.sex} · b. ${year(p.birthDate)} · ${p.alive ? 'alive' : 'deceased'}`;
-    const list = document.createElement('div');
-    list.className = 'timeline';
-    for (const e of evts) {
-      const row = document.createElement('div');
-      row.className = 'timeline-row';
-      row.textContent = `${e.year} – ${formatEvent(e, personId)}`;
-      list.appendChild(row);
-    }
-    personDetailEl.innerHTML = '';
-    personDetailEl.appendChild(header);
-    personDetailEl.appendChild(list);
-    personDetailEl.scrollTop = 0;
-  }
-
-  function formatEvent(evt, povId) {
-    switch (evt.type) {
-      case 'BIRTH': {
-        const city = evt.details?.cityId ? getCityName(evt.details.cityId) : 'Unknown';
-        return `Born in ${city}`;
-      }
-      case 'MARRIAGE': {
-        const [a, b] = evt.people;
-        const otherId = a === povId ? b : a;
-        const other = personById.get(otherId);
-        const city = evt.details?.cityId ? ` in ${getCityName(evt.details.cityId)}` : '';
-        return `Married ${other ? other.firstName + ' ' + other.lastName : 'Unknown'}${city}`;
-      }
-      case 'DIVORCE': {
-        const [a, b] = evt.people;
-        const otherId = a === povId ? b : a;
-        const other = personById.get(otherId);
-        const city = evt.details?.cityId ? ` in ${getCityName(evt.details.cityId)}` : '';
-        return `Divorced ${other ? other.firstName + ' ' + other.lastName : 'Unknown'}${city}`;
-      }
-      case 'MOVE': {
-        const from = evt.details?.fromCityId ? getCityName(evt.details.fromCityId) : (evt.details?.from || 'Unknown');
-        const to = evt.details?.toCityId ? getCityName(evt.details.toCityId) : (evt.details?.to || 'Unknown');
-        return `Moved from ${from} to ${to}`;
-      }
-      case 'JOB_CHANGE': {
-        const job = evt.details?.jobTitle || 'New job';
-        const city = evt.details?.cityId ? ` in ${getCityName(evt.details.cityId)}` : '';
-        return `Changed job to ${job}${city}`;
-      }
-      case 'RETIREMENT': {
-        const city = evt.details?.cityId ? ` in ${getCityName(evt.details.cityId)}` : '';
-        const age = typeof evt.details?.age === 'number' ? ` at ${evt.details.age}` : '';
-        return `Retired${age}${city}`;
-      }
-      case 'AFFAIR': {
-        const [a, b] = evt.people;
-        const otherId = a === povId ? b : a;
-        const other = personById.get(otherId);
-        const city = evt.details?.cityId ? ` in ${getCityName(evt.details.cityId)}` : '';
-        return `Affair with ${other ? other.firstName + ' ' + other.lastName : 'Unknown'}${city}`;
-      }
-      case 'MURDER': {
-        const [killerId, victimId] = evt.people;
-        const city = evt.details?.cityId ? ` in ${getCityName(evt.details.cityId)}` : '';
-        if (povId === killerId) {
-          const victim = personById.get(victimId);
-          return `Committed a murder of ${victim ? victim.firstName + ' ' + victim.lastName : 'Unknown'}${city}`;
-        } else if (povId === victimId) {
-          return `Victim of a murder${city}`;
-        } else {
-          const killer = personById.get(killerId);
-          const victim = personById.get(victimId);
-          return `Murder: ${killer ? killer.firstName + ' ' + killer.lastName : 'Unknown'} -> ${victim ? victim.firstName + ' ' + victim.lastName : 'Unknown'}${city}`;
-        }
-      }
-      case 'DEATH': {
-        const city = evt.details?.cityId ? ` in ${getCityName(evt.details.cityId)}` : '';
-        const age = typeof evt.details?.age === 'number' ? ` at ${evt.details.age}` : '';
-        return `Died${age}${city}`;
-      }
-      default:
-        return `${evt.type}`;
-    }
-  }
-
-  if (personSearchEl) {
-    personSearchEl.addEventListener('input', (e) => {
-      renderPersonResults(e.target.value || '');
-    });
-    renderPersonResults('');
-  }
-
-  function addPersonToKnowledge(personId) {
-    knowledge.knownPeople.add(personId);
-    saveKnowledge(knowledge);
-    renderGenealogy();
+    currentTreeX += maxLevelWidth + treeSpacingX;
   }
 }
 
-function startGame() {
-  heroEl.classList.add('hidden');
-  simEl.classList.remove('hidden');
+function init() {
   runSimulation();
+  
+  // Show all rabbits from all 5 generations
+  for (const rabbit of rabbits) {
+    hares.push(new Hare(rabbit));
+  }
+  
+  window.addEventListener('resize', resize);
+  resize();
+  
+  // Mouse events for selection and dragging
+  canvas.addEventListener('mousedown', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left + camera.x;
+    const mouseY = e.clientY - rect.top + camera.y;
+
+    // Check for X clicks on connection lines
+    for (let i = playerConnections.length - 1; i >= 0; i--) {
+      const conn = playerConnections[i];
+      const p1 = hares.find(h => h.rabbit.id === conn.parentId);
+      const p2 = hares.find(h => h.rabbit.id === conn.childId);
+      if (p1 && p2 && p1.targetX !== null && p2.targetX !== null) {
+        const midX = (p1.x + p2.x) / 2 + FRAME_SIZE;
+        const midY = (p1.y + p2.y) / 2 + FRAME_SIZE;
+        const dist = Math.sqrt((mouseX - midX) ** 2 + (mouseY - midY) ** 2);
+        if (dist < 15) {
+          playerConnections.splice(i, 1);
+          updateTreeDiagram();
+          return;
+        }
+      }
+    }
+
+    // Check for rabbit clicks
+    let clickedHare = null;
+    for (const hare of hares) {
+      const screenX = hare.x;
+      const screenY = hare.y;
+      if (mouseX >= screenX && mouseX <= screenX + FRAME_SIZE * 2 &&
+          mouseY >= screenY && mouseY <= screenY + FRAME_SIZE * 2) {
+        clickedHare = hare;
+        break;
+      }
+    }
+
+    if (clickedHare) {
+      if (selectedHare && selectedHare !== clickedHare) {
+        // Link them: Older is parent, younger is child
+        const h1 = selectedHare;
+        const h2 = clickedHare;
+        const parent = h1.rabbit.birthYear <= h2.rabbit.birthYear ? h1 : h2;
+        const child = parent === h1 ? h2 : h1;
+
+        // Don't add duplicate connections
+        if (!playerConnections.some(c => c.parentId === parent.rabbit.id && c.childId === child.rabbit.id)) {
+          playerConnections.push({ parentId: parent.rabbit.id, childId: child.rabbit.id });
+          updateTreeDiagram();
+        }
+        selectedHare = null;
+      } else {
+        selectedHare = clickedHare;
+      }
+    } else {
+      selectedHare = null;
+      input.isDragging = true;
+      input.lastMouseX = e.clientX;
+      input.lastMouseY = e.clientY;
+    }
+  });
+
+  window.addEventListener('mousemove', (e) => {
+    if (input.isDragging) {
+      const dx = e.clientX - input.lastMouseX;
+      const dy = e.clientY - input.lastMouseY;
+      camera.x -= dx;
+      camera.y -= dy;
+      
+      // Constrain camera
+      camera.x = Math.max(0, Math.min(FIELD_WIDTH - canvas.width, camera.x));
+      camera.y = Math.max(0, Math.min(FIELD_HEIGHT - canvas.height, camera.y));
+      
+      input.lastMouseX = e.clientX;
+      input.lastMouseY = e.clientY;
+    }
+  });
+
+  window.addEventListener('mouseup', () => {
+    input.isDragging = false;
+  });
+
+  loop();
 }
 
-startBtn.addEventListener('click', startGame);
-if (toggleJsonBtn) toggleJsonBtn.addEventListener('click', () => {
-  outputJsonEl.classList.toggle('hidden');
-});
-
-function addChildToIndex(parentId, childId) {
-  if (!parentId) return;
-  const arr = childrenByParent.get(parentId) || [];
-  arr.push(childId);
-  childrenByParent.set(parentId, arr);
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  
+  camera.x = Math.max(0, Math.min(FIELD_WIDTH - canvas.width, camera.x));
+  camera.y = Math.max(0, Math.min(FIELD_HEIGHT - canvas.height, camera.y));
 }
 
+function loop() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  
+  drawGrid();
+
+  // Draw player connections
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+  ctx.lineWidth = 2;
+  for (const conn of playerConnections) {
+    const p1 = hares.find(h => h.rabbit.id === conn.parentId);
+    const p2 = hares.find(h => h.rabbit.id === conn.childId);
+    if (p1 && p2) {
+      const x1 = p1.x - camera.x + FRAME_SIZE;
+      const y1 = p1.y - camera.y + FRAME_SIZE;
+      const x2 = p2.x - camera.x + FRAME_SIZE;
+      const y2 = p2.y - camera.y + FRAME_SIZE;
+      
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+
+      // Draw "X" for deletion
+      const midX = (x1 + x2) / 2;
+      const midY = (y1 + y2) / 2;
+      ctx.fillStyle = '#ff4444';
+      ctx.beginPath();
+      ctx.arc(midX, midY, 10, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'white';
+      ctx.font = 'bold 12px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('X', midX, midY);
+    }
+  }
+
+  hares.sort((a, b) => a.y - b.y);
+  
+  for (const hare of hares) {
+    hare.update();
+    hare.draw();
+  }
+
+  requestAnimationFrame(loop);
+}
+
+function drawGrid() {
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+  ctx.lineWidth = 1;
+  const spacing = 100;
+  
+  const startX = -camera.x % spacing;
+  const startY = -camera.y % spacing;
+  
+  for (let x = startX; x < canvas.width; x += spacing) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, canvas.height);
+    ctx.stroke();
+  }
+  
+  for (let y = startY; y < canvas.height; y += spacing) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(canvas.width, y);
+    ctx.stroke();
+  }
+}

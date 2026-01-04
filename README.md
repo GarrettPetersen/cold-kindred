@@ -1,6 +1,6 @@
-# Cold Kindred
+# mystery.farm
 
-A single-player, browser-based cold case investigation game.
+A single-player, browser-based rabbit genealogical murder mystery.
 
 ## Project Status
 This project has been restarted. Previous progress has been moved to the `archive` folder.

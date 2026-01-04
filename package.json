@@ -1,5 +1,5 @@
 {
-  "name": "cold-kindred",
+  "name": "mystery-farm",
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
@@ -9,15 +9,15 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/GarrettPetersen/cold-kindred.git"
+    "url": "git+https://github.com/GarrettPetersen/mystery-farm.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/GarrettPetersen/cold-kindred/issues"
+    "url": "https://github.com/GarrettPetersen/mystery-farm/issues"
   },
-  "homepage": "https://github.com/GarrettPetersen/cold-kindred#readme",
+  "homepage": "https://mystery.farm",
   "description": "",
   "devDependencies": {
     "vite": "^7.1.9"

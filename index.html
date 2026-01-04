@@ -3,11 +3,27 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Cold Kindred - Hares</title>
+    <title>mystery.farm</title>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
     <canvas id="gameCanvas"></canvas>
+    <div id="ui-overlay" style="position: absolute; top: 20px; right: 20px; pointer-events: none; font-family: monospace; color: white;">
+      <div id="status-panel" style="background: rgba(0,0,0,0.7); padding: 10px 15px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); margin-bottom: 10px; text-align: right;">
+        DNA TESTS: <span id="tests-count" style="color: #44ff44; font-weight: bold;">3</span>
+      </div>
+      <div id="selection-panel" style="display: none; background: rgba(0,0,0,0.7); padding: 15px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); pointer-events: auto;">
+        <h2 id="selected-name" style="margin: 0 0 10px 0; font-size: 18px;"></h2>
+        <p id="selected-species" style="margin: 0 0 15px 0; font-size: 14px; opacity: 0.8;"></p>
+        <button id="dna-test-btn" style="background: #44ff44; color: black; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: bold; width: 100%; margin-bottom: 8px;">DNA TEST</button>
+        <button id="accuse-btn" style="background: #ff4444; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: bold; width: 100%; opacity: 0.5;">ACCUSE</button>
+      </div>
+    </div>
+    <div id="game-over" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.9); color: white; padding: 40px; border-radius: 12px; border: 2px solid #ff4444; text-align: center; font-family: monospace; z-index: 100;">
+      <h1 id="game-over-title" style="font-size: 32px; margin-bottom: 20px;"></h1>
+      <p id="game-over-msg" style="font-size: 18px; margin-bottom: 30px;"></p>
+      <button onclick="location.reload()" style="background: white; color: black; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-weight: bold;">PLAY AGAIN TODAY</button>
+    </div>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

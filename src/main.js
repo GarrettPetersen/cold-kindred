@@ -110,15 +110,27 @@ function saveStats(stats) {
 
 function calculateStreaks() {
   const stats = getStats();
-  const dates = Object.keys(stats.history).sort();
+  const dates = Object.keys(stats.history).sort().reverse(); // Newest to oldest
   if (dates.length === 0) return { win: 0, att: 0, maxWin: 0, maxAtt: 0 };
 
   let currWin = 0, currAtt = 0, maxWin = 0, maxAtt = 0;
   
-  // Calculate historical maxes
+  // Calculate historical maxes (need oldest to newest for this)
+  const cronDates = [...dates].reverse();
   let tempWin = 0, tempAtt = 0;
-  for (let i = 0; i < dates.length; i++) {
-    const res = stats.history[dates[i]];
+  for (let i = 0; i < cronDates.length; i++) {
+    const res = stats.history[cronDates[i]];
+    
+    // Check for gap relative to previous entry
+    if (i > 0) {
+      const dPrev = new Date(cronDates[i-1]);
+      const dCurr = new Date(cronDates[i]);
+      if ((dCurr - dPrev) / 86400000 > 1.5) { // Using 1.5 to be safe with DST/midnights
+        tempWin = 0;
+        tempAtt = 0;
+      }
+    }
+    
     tempAtt++;
     maxAtt = Math.max(maxAtt, tempAtt);
     
@@ -128,32 +140,32 @@ function calculateStreaks() {
     } else {
       tempWin = 0;
     }
-
-    if (i < dates.length - 1) {
-      const d1 = new Date(dates[i]);
-      const d2 = new Date(dates[i+1]);
-      if ((d2 - d1) / 86400000 > 1) {
-        tempWin = 0;
-        tempAtt = 0;
-      }
-    }
   }
 
-  // Calculate current streaks
-  const today = new Date(currentDateStr);
-  let checkDate = today;
-  
-  while (true) {
-    const ds = checkDate.toLocaleDateString('en-CA');
-    const res = stats.history[ds];
-    if (res) {
-      currAtt++;
-      if (res.status === 'success') currWin++;
-      else break; // Win streak broken
-    } else if (ds !== currentDateStr) {
-      break; // Gap found
+  // Calculate current streaks (newest to oldest)
+  const today = currentDateStr;
+  let lastDateFound = null;
+  let winStreakBroken = false;
+
+  for (const ds of dates) {
+    if (lastDateFound) {
+      const d1 = new Date(ds);
+      const d2 = new Date(lastDateFound);
+      if ((d2 - d1) / 86400000 > 1.5) break; // Gap found
+    } else {
+      // If the most recent play isn't today or yesterday, streak is 0
+      const dPlay = new Date(ds);
+      const dToday = new Date(today);
+      if ((dToday - dPlay) / 86400000 > 1.5) break;
     }
-    checkDate = new Date(checkDate.getTime() - 86400000);
+
+    currAtt++;
+    if (stats.history[ds].status === 'success' && !winStreakBroken) {
+      currWin++;
+    } else {
+      winStreakBroken = true;
+    }
+    lastDateFound = ds;
   }
 
   return { win: currWin, att: currAtt, maxWin, maxAtt };

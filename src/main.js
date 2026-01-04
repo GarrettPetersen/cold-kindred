@@ -366,19 +366,34 @@ function generateCluePool(additive = false) {
   const existing = new Set(newClues.map(c => JSON.stringify(c.conn)));
   
   function addRawClue(conn, type, speakerId = null, groupId = null) {
+    // Normalize symmetric connections to prevent duplicates
+    if (conn.type === 'couple') {
+      const [p1, p2] = [conn.p1, conn.p2].sort((a, b) => a - b);
+      conn = { type: 'couple', p1, p2 };
+    } else if (conn.type === 'sibling') {
+      const [a, b] = [conn.a, conn.b].sort((a, b) => a - b);
+      conn = { type: 'sibling', a, b };
+    }
+
+    const connStr = JSON.stringify(conn);
+    if (existing.has(connStr)) return;
     if (newClues.length >= rabbits.length * 0.9) return;
+    
     newClues.push({ id: Math.random().toString(36).substring(2, 11), conn, type, speakerId, groupId, isRead: false });
+    existing.add(connStr);
   }
 
   necessaryConnections.forEach(conn => {
-    if (existing.has(JSON.stringify(conn))) return;
+    const connStr = JSON.stringify(conn);
+    if (existing.has(connStr)) return;
+    
     const p = rabbits.find(r => r.id === conn.parentId);
     const c = rabbits.find(r => r.id === conn.childId);
     if (!p || !c) return;
 
     const r = random();
     if (r < 0.2) {
-      // Strategy 1: Direct Clue (Speaker is Parent, Child, or Random)
+      // Strategy 1: Direct Clue
       const sid = random() < 0.6 ? (random() < 0.5 ? p.id : c.id) : null;
       addRawClue(conn, 'necessary', sid);
     } else if (r < 0.6) {
@@ -387,7 +402,6 @@ function generateCluePool(additive = false) {
       const spouse = rabbits.find(r => r.id === spouseId);
       if (spouse) {
         const gid = Math.random().toString(36).substring(2, 7);
-        // Sequential: Setup (Direct) then Payoff (Inference)
         addRawClue({ parentId: spouse.id, childId: c.id }, 'necessary', null, gid);
         addRawClue({ type: 'couple', p1: p.id, p2: spouse.id }, 'necessary', null, gid);
       } else {
@@ -399,7 +413,6 @@ function generateCluePool(additive = false) {
       if (siblings.length > 0) {
         const sib = pick(siblings);
         const gid = Math.random().toString(36).substring(2, 7);
-        // Sequential: Setup (Direct) then Payoff (Inference)
         addRawClue({ parentId: p.id, childId: sib.id }, 'necessary', null, gid);
         addRawClue({ type: 'sibling', a: c.id, b: sib.id }, 'necessary', c.id, gid);
       } else {
@@ -411,14 +424,14 @@ function generateCluePool(additive = false) {
       const gp = rabbits.find(r => r.id === gpId);
       if (gp) {
         const gid = Math.random().toString(36).substring(2, 7);
-        // Sequential: Setup (Direct) then Payoff (Inference)
         addRawClue({ parentId: gp.id, childId: p.id }, 'necessary', null, gid);
         addRawClue({ type: 'grandparent', gp: gp.id, gc: c.id }, 'necessary', c.id, gid);
       } else {
         addRawClue(conn, 'necessary', p.id);
       }
     }
-    existing.add(JSON.stringify(conn));
+    // Final fallback to ensure the actual connection is added if strategies skipped it or it was unique
+    addRawClue(conn, 'necessary');
   });
 
   const allConns = [];

@@ -1,8 +1,8 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-const FIELD_WIDTH = 1400;
-const FIELD_HEIGHT = 1400;
+const FIELD_WIDTH = 2000;
+const FIELD_HEIGHT = 2000;
 const FRAME_SIZE = 32;
 const CURRENT_YEAR = 2025;
 
@@ -732,7 +732,9 @@ class Animal {
 
 // --- UI & Input ---
 function updateTreeDiagram() {
-  const sx = 200, sy = 200, spx = 150, spy = 150;
+  const minSpacingX = 80, minSpacingY = 100;
+  const preferredSpacingX = 150, preferredSpacingY = 150;
+  
   const hareToTree = new Map(), trees = [];
   playerConnections.forEach(c => {
     let tA = hareToTree.get(c.parentId), tB = hareToTree.get(c.childId);
@@ -741,17 +743,57 @@ function updateTreeDiagram() {
     else if (tB) { if (!tB.includes(c.parentId)) { tB.push(c.parentId); hareToTree.set(c.parentId, tB); } }
     else { const n = [c.parentId, c.childId]; trees.push(n); hareToTree.set(c.parentId, n); hareToTree.set(c.childId, n); }
   });
+
   hares.forEach(h => { if (!hareToTree.has(h.rabbit.id)) { h.targetX = h.targetY = null; } });
-  let currX = sx;
+  if (trees.length === 0) return;
+
+  // First, calculate raw layouts for each tree
+  const treeLayouts = [];
+  let totalRawWidth = 0;
+  let maxTreeHeight = 0;
+
   trees.forEach(t => {
     const roots = t.filter(id => !playerConnections.some(c => c.childId === id));
     const lvls = new Map();
     const walk = (id, l) => { lvls.set(id, Math.max(lvls.get(id) || 0, l)); playerConnections.filter(c => c.parentId === id).forEach(c => walk(c.childId, l + 1)); };
     roots.forEach(r => walk(r, 0));
-    const grps = []; lvls.forEach((l, id) => { if (!grps[l]) grps[l] = []; grps[l].push(id); });
-    let maxW = 0;
-    grps.forEach((ids, l) => { ids.forEach((id, i) => { const h = hares.find(ha => ha.rabbit.id === id); h.targetX = currX + i * spx; h.targetY = sy + l * spy; }); maxW = Math.max(maxW, ids.length * spx); });
-    currX += maxW + spx;
+    
+    const grps = []; 
+    lvls.forEach((l, id) => { if (!grps[l]) grps[l] = []; grps[l].push(id); });
+    
+    let rawTreeWidth = 0;
+    grps.forEach(ids => rawTreeWidth = Math.max(rawTreeWidth, ids.length));
+    
+    treeLayouts.push({ t, grps, rawWidth: rawTreeWidth, rawHeight: grps.length });
+    totalRawWidth += rawTreeWidth;
+    maxTreeHeight = Math.max(maxTreeHeight, grps.length);
+  });
+
+  // Determine scaling/spacing to fit within FIELD boundaries
+  // We leave some margin (100px)
+  const availableW = FIELD_WIDTH - 200;
+  const availableH = FIELD_HEIGHT - 200;
+
+  // Calculate actual spacing needed
+  let spx = Math.max(minSpacingX, Math.min(preferredSpacingX, availableW / Math.max(1, totalRawWidth + trees.length)));
+  let spy = Math.max(minSpacingY, Math.min(preferredSpacingY, availableH / Math.max(1, maxTreeHeight)));
+
+  // Center the entire set of trees
+  const finalTotalWidth = (totalRawWidth * spx) + ((trees.length - 1) * spx);
+  let currX = (FIELD_WIDTH - finalTotalWidth) / 2;
+  const startY = (FIELD_HEIGHT - (maxTreeHeight * spy)) / 2;
+
+  treeLayouts.forEach(layout => {
+    layout.grps.forEach((ids, l) => {
+      const rowWidth = (ids.length - 1) * spx;
+      const rowStartX = currX + (layout.rawWidth * spx - rowWidth) / 2;
+      ids.forEach((id, i) => {
+        const h = hares.find(ha => ha.rabbit.id === id);
+        h.targetX = rowStartX + i * spx;
+        h.targetY = startY + l * spy;
+      });
+    });
+    currX += (layout.rawWidth + 1) * spx;
   });
 }
 
@@ -1106,7 +1148,7 @@ function init() {
   const wasLoaded = loadGame();
 
   // Initialize environment details (same for everyone today)
-  const detailCount = 250;
+  const detailCount = 500;
   for (let i = 0; i < detailCount; i++) {
     envDetails.push({
       x: random() * FIELD_WIDTH,

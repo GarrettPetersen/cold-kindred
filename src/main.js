@@ -118,6 +118,13 @@ let killerId = null;
 let dnaTestsRemaining = 3;
 const notifications = []; // Array of { text, x, y, timer }
 
+// --- Clue System State ---
+let necessaryConnections = []; // Array of { parentId, childId }
+let cluePool = []; // All potential clues
+let activeClues = new Map(); // animalId -> Clue object
+let lastClueTime = 0;
+const CLUE_INTERVAL = 300; // Frames between new bubbles
+
 class AnimalRecord {
   constructor(firstName, sex, birthYear, gen, species, fatherId = null, motherId = null) {
     this.id = nextRabbitId++;
@@ -195,6 +202,159 @@ function getRelationshipLabel(commonAncestors) {
   let label = `${ordinals[n] || n + "th"} cousin`;
   if (removed > 0) label += ` ${removedLabels[removed] || removed + " times"} removed`;
   return label;
+}
+
+// --- Clue System Logic ---
+function getPath(startId, endId) {
+  const path = [];
+  let currentId = startId;
+  const ancestors = getAncestors(startId);
+  const endAncestors = getAncestors(endId);
+
+  // If start is ancestor of end, or vice versa, or they share an ancestor
+  // This is a simplified tree path finder
+  const findPathToAncestor = (id, targetId) => {
+    const p = [];
+    let curr = rabbits.find(r => r.id === id);
+    while (curr && curr.id !== targetId) {
+      const f = rabbits.find(r => r.id === curr.fatherId);
+      const m = rabbits.find(r => r.id === curr.motherId);
+      // This is a bit complex for a general graph, but in our tree we just go UP
+      // We check which parent leads to the target
+      const fAnc = f ? getAncestors(f.id) : new Map();
+      if (curr.fatherId === targetId || fAnc.has(targetId)) {
+        p.push({ parentId: curr.fatherId, childId: curr.id });
+        curr = f;
+      } else {
+        p.push({ parentId: curr.motherId, childId: curr.id });
+        curr = m;
+      }
+    }
+    return p;
+  };
+
+  return findPathToAncestor(startId, endId);
+}
+
+function updateNecessaryConnections() {
+  const necessary = new Set();
+  const knownRelatives = rabbits.filter(r => r.dnaRelation && r.dnaRelation !== "no relation");
+  
+  knownRelatives.forEach(rel => {
+    const common = getCommonAncestors(killerId, rel.id);
+    if (common.length === 0) return;
+    const closest = common.reduce((min, cur) => (cur.dist1 + cur.dist2 < min.dist1 + min.dist2 ? cur : min), common[0]);
+    
+    // Path from relative UP to common ancestor
+    const path1 = getPath(rel.id, closest.id);
+    path1.forEach(conn => necessary.add(JSON.stringify(conn)));
+    
+    // Path from killer UP to common ancestor
+    const path2 = getPath(killerId, closest.id);
+    path2.forEach(conn => necessary.add(JSON.stringify(conn)));
+  });
+
+  necessaryConnections = Array.from(necessary).map(s => JSON.parse(s));
+}
+
+function generateCluePool(additive = false) {
+  const newClues = additive ? cluePool : [];
+  const existingConnStrings = new Set(newClues.map(c => JSON.parse(JSON.stringify(c.conn))).map(c => JSON.stringify(c)));
+
+  const addClue = (text, speakerId, involvedIds, conn, type) => {
+    newClues.push({
+      id: Math.random().toString(36).substr(2, 9),
+      text,
+      speakerId,
+      involvedIds,
+      conn,
+      type,
+      isRead: false
+    });
+  };
+
+  // 1. Generate necessary clues (1-3 clues per connection)
+  necessaryConnections.forEach(conn => {
+    if (additive && existingConnStrings.has(JSON.stringify(conn))) return;
+
+    const parent = rabbits.find(r => r.id === conn.parentId);
+    const child = rabbits.find(r => r.id === conn.childId);
+    if (!parent || !child) return;
+
+    const r = random();
+    if (r < 0.3) {
+      // Type A: Direct (1 clue)
+      const texts = [
+        `${parent.firstName} is my ${parent.sex === 'M' ? 'father' : 'mother'}.`,
+        `${child.firstName} is my ${child.sex === 'M' ? 'son' : 'daughter'}.`,
+        `Have you seen my ${child.sex === 'M' ? 'son' : 'daughter'} ${child.firstName}?`
+      ];
+      addClue(pick(texts), r < 0.5 ? child.id : parent.id, [parent.id, child.id], conn, 'necessary');
+    } else if (r < 0.6) {
+      // Type B: Grandparent/Grandchild (1 clue, but covers depth)
+      // Look for the grandparent of 'child' (parent of 'parent')
+      const grandparent = rabbits.find(r => r.id === parent.fatherId || r.id === parent.motherId);
+      if (grandparent) {
+        const texts = [
+          `${grandparent.firstName} is my ${grandparent.sex === 'M' ? 'grandfather' : 'grandmother'}.`,
+          `${child.firstName} is my ${child.sex === 'M' ? 'grandson' : 'granddaughter'}.`
+        ];
+        addClue(pick(texts), random() < 0.5 ? child.id : grandparent.id, [grandparent.id, child.id], conn, 'necessary');
+      } else {
+        // Fallback to direct
+        addClue(`${parent.firstName} is my parent.`, child.id, [parent.id], conn, 'necessary');
+      }
+    } else {
+      // Type C: Combination Clues (2-3 clues)
+      const subType = random();
+      if (subType < 0.5) {
+        // Sibling Inference (2 clues)
+        const siblings = rabbits.filter(r => (r.fatherId === parent.id || r.motherId === parent.id) && r.id !== child.id);
+        if (siblings.length > 0) {
+          const sib = pick(siblings);
+          addClue(`I have a ${sib.sex === 'M' ? 'brother' : 'sister'} named ${sib.firstName}.`, child.id, [sib.id], conn, 'necessary');
+          addClue(`${parent.firstName} is the parent of ${sib.firstName}.`, pick(rabbits).id, [parent.id, sib.id], conn, 'necessary');
+        } else {
+          addClue(`${parent.firstName} is my parent.`, child.id, [parent.id], conn, 'necessary');
+        }
+      } else {
+        // Spouse Inference (2 clues)
+        const spouseId = parent.sex === 'M' ? child.motherId : child.fatherId;
+        const spouse = rabbits.find(r => r.id === spouseId);
+        if (spouse) {
+          addClue(`${parent.firstName} and ${spouse.firstName} are the parents of ${child.firstName}.`, pick(rabbits).id, [parent.id, spouse.id, child.id], conn, 'necessary');
+        } else {
+          addClue(`${parent.firstName} is my parent.`, child.id, [parent.id], conn, 'necessary');
+        }
+      }
+    }
+    existingConnStrings.add(JSON.stringify(conn));
+  });
+
+  // 2. Generate extra clues
+  const currentNecessary = newClues.filter(c => c.type === 'necessary').length;
+  const currentExtra = newClues.filter(c => c.type === 'extra').length;
+  
+  if (currentExtra < currentNecessary) {
+    const allConnections = [];
+    rabbits.forEach(r => {
+      if (r.fatherId) allConnections.push({ parentId: r.fatherId, childId: r.id });
+      if (r.motherId) allConnections.push({ parentId: r.motherId, childId: r.id });
+    });
+
+    const needed = currentNecessary - currentExtra;
+    const availableExtra = allConnections.filter(c => !existingConnStrings.has(JSON.stringify(c)));
+    const shuffledExtra = availableExtra.sort(() => random() - 0.5);
+
+    for (let i = 0; i < Math.min(shuffledExtra.length, needed); i++) {
+      const conn = shuffledExtra[i];
+      const parent = rabbits.find(r => r.id === conn.parentId);
+      const child = rabbits.find(r => r.id === conn.childId);
+      addClue(`${parent.firstName} is ${child.firstName}'s parent.`, pick(rabbits).id, [parent.id, child.id], conn, 'extra');
+    }
+  }
+
+  cluePool = newClues;
 }
 
 function runSimulation() {
@@ -321,6 +481,9 @@ function runSimulation() {
     killerId = fallback.id;
     console.log(`Fallback Killer: ${fallback.firstName} (ID: ${killerId})`);
   }
+
+  updateNecessaryConnections();
+  generateCluePool();
 }
 
 // --- Rendering & Game Engine ---
@@ -493,6 +656,33 @@ class Animal {
       ctx.font = `bold ${Math.floor(12 * camera.zoom)}px Arial`; ctx.fillStyle = '#44ff44';
       ctx.fillText(`🧬 ${this.rabbit.dnaRelation}`, Math.floor(screenX) + scaledSize/2, Math.floor(screenY) - 10 * camera.zoom);
     }
+    
+    // Draw Speech Bubble if there's an active clue
+    const clue = activeClues.get(this.rabbit.id);
+    if (clue) {
+      const bubbleX = Math.floor(screenX) + scaledSize * 0.8;
+      const bubbleY = Math.floor(screenY) - 10 * camera.zoom;
+      const bubbleWidth = 30 * camera.zoom;
+      const bubbleHeight = 25 * camera.zoom;
+      
+      ctx.fillStyle = clue.isRead ? 'rgba(200, 200, 200, 0.8)' : 'rgba(255, 255, 255, 0.9)';
+      ctx.beginPath();
+      ctx.roundRect(bubbleX, bubbleY - bubbleHeight, bubbleWidth, bubbleHeight, 5 * camera.zoom);
+      ctx.fill();
+      
+      // Little triangle pointing to head
+      ctx.beginPath();
+      ctx.moveTo(bubbleX + 5 * camera.zoom, bubbleY);
+      ctx.lineTo(bubbleX + 15 * camera.zoom, bubbleY);
+      ctx.lineTo(bubbleX + 10 * camera.zoom, bubbleY + 5 * camera.zoom);
+      ctx.fill();
+      
+      ctx.fillStyle = 'black';
+      ctx.font = `bold ${Math.floor(14 * camera.zoom)}px Arial`;
+      ctx.textAlign = 'center';
+      ctx.fillText('?', bubbleX + bubbleWidth / 2, bubbleY - bubbleHeight / 2 + 5 * camera.zoom);
+    }
+    
     ctx.shadowBlur = 0;
   }
 }
@@ -557,7 +747,24 @@ function init() {
     }
     let clickedHare = null;
     for (const hare of hares) {
-      if (worldX >= hare.x && worldX <= hare.x + FRAME_SIZE * 2 && worldY >= hare.y && worldY <= hare.y + FRAME_SIZE * 2) { clickedHare = hare; break; }
+      if (worldX >= hare.x && worldX <= hare.x + FRAME_SIZE * 2 && worldY >= hare.y && worldY <= hare.y + FRAME_SIZE * 2) { 
+        // Check for speech bubble click first
+        const clue = activeClues.get(hare.rabbit.id);
+        if (clue) {
+          const scaledSize = FRAME_SIZE * 2;
+          const bubbleX = hare.x + scaledSize * 0.8;
+          const bubbleY = hare.y - 10 / camera.zoom;
+          const bubbleWidth = 30 / camera.zoom;
+          const bubbleHeight = 25 / camera.zoom;
+          
+          if (worldX >= bubbleX && worldX <= bubbleX + bubbleWidth && worldY >= bubbleY - bubbleHeight && worldY <= bubbleY) {
+            clue.isRead = true;
+            notifications.push({ text: clue.text, x: clientX, y: clientY - 40, timer: 240, color: '#ffffff' });
+            return true;
+          }
+        }
+        clickedHare = hare; break; 
+      }
     }
     if (clickedHare) {
       if (selectedHare && selectedHare !== clickedHare) {
@@ -643,6 +850,8 @@ function init() {
     
     if (relationship) {
       selectedHare.rabbit.dnaRelation = relationship;
+      updateNecessaryConnections();
+      generateCluePool(true); // Add new clues for the newly revealed branch
     } else {
       selectedHare.rabbit.dnaRelation = "no relation";
     }
@@ -714,6 +923,8 @@ function init() {
 
   // Touch events
   canvas.addEventListener('touchstart', (e) => {
+    // Prevent default browser behavior (scroll, etc.)
+    e.preventDefault();
     if (e.touches.length === 1) {
       const touch = e.touches[0];
       const worldPos = getMouseWorldPos(touch);
@@ -732,8 +943,14 @@ function init() {
 
   canvas.addEventListener('touchmove', (e) => {
     e.preventDefault();
-    if (e.touches.length === 1 && input.isDragging) {
+    if (e.touches.length === 1) {
       const touch = e.touches[0];
+      if (!input.isDragging) {
+        // Reset drag state if we just transitioned from 2 fingers or missed start
+        input.isDragging = true;
+        input.lastMouseX = touch.clientX;
+        input.lastMouseY = touch.clientY;
+      }
       camera.x -= (touch.clientX - input.lastMouseX) / camera.zoom;
       camera.y -= (touch.clientY - input.lastMouseY) / camera.zoom;
       input.lastMouseX = touch.clientX;
@@ -764,6 +981,11 @@ function init() {
     input.lastTouchDist = 0;
   });
 
+  canvas.addEventListener('touchcancel', () => {
+    input.isDragging = false;
+    input.lastTouchDist = 0;
+  });
+
   loop();
 }
 
@@ -789,7 +1011,35 @@ function resize() {
   constrainCamera();
 }
 
+function tickClues() {
+  lastClueTime++;
+  if (lastClueTime >= CLUE_INTERVAL) {
+    lastClueTime = 0;
+    
+    // Find unissued clues
+    const issuedIds = new Set(Array.from(activeClues.values()).map(c => c.id));
+    const availableClues = cluePool.filter(c => !issuedIds.has(c.id));
+    
+    if (availableClues.length > 0) {
+      const clue = pick(availableClues);
+      // Try to give it to the speaker, but if they already have one, pick someone else
+      let targetId = clue.speakerId;
+      if (activeClues.has(targetId)) {
+        const otherRabbits = rabbits.filter(r => !activeClues.has(r.id));
+        if (otherRabbits.length > 0) {
+          targetId = pick(otherRabbits).id;
+        } else {
+          // No one left to give a bubble to
+          return;
+        }
+      }
+      activeClues.set(targetId, clue);
+    }
+  }
+}
+
 function loop() {
+  tickClues();
   ctx.clearRect(0, 0, canvas.width, canvas.height); drawGrid();
   ctx.save(); ctx.font = 'bold 24px monospace'; ctx.fillStyle = 'rgba(255, 255, 255, 0.2)'; ctx.textAlign = 'left'; ctx.fillText('mystery.farm', 20, 40); ctx.restore();
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)'; ctx.lineWidth = 2 * camera.zoom;
@@ -828,7 +1078,15 @@ function loop() {
   hares.sort((a, b) => a.y - b.y);
   for (const hare of hares) { hare.update(); hare.draw(); }
   for (let i = notifications.length - 1; i >= 0; i--) {
-    const n = notifications[i]; ctx.font = 'bold 16px Arial'; ctx.fillStyle = `rgba(255, 68, 68, ${n.timer / 60})`; ctx.textAlign = 'center'; ctx.fillText(n.text, n.x, n.y - (120 - n.timer) * 0.5); n.timer--; if (n.timer <= 0) notifications.splice(i, 1);
+    const n = notifications[i]; ctx.font = 'bold 16px Arial'; 
+    const color = n.color || '#ff4444';
+    ctx.fillStyle = color;
+    // Add alpha based on timer
+    ctx.globalAlpha = Math.min(1.0, n.timer / 30);
+    ctx.textAlign = 'center'; 
+    ctx.fillText(n.text, n.x, n.y - (120 - n.timer) * 0.5); 
+    ctx.globalAlpha = 1.0;
+    n.timer--; if (n.timer <= 0) notifications.splice(i, 1);
   }
   requestAnimationFrame(loop);
 }

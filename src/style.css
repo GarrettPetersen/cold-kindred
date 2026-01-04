@@ -10,4 +10,5 @@ body, html {
 #gameCanvas {
   display: block;
   image-rendering: pixelated; /* Keep the pixel art crisp */
+  touch-action: none; /* Prevent browser handling of touch gestures */
 }

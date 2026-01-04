@@ -833,7 +833,8 @@ function showGameOver(isWin) {
   </div>`;
 
   function gLoop() {
-    gCtx.clearRect(0, 0, gCanvas.width, gCanvas.height);
+    gCtx.fillStyle = '#3e8948';
+    gCtx.fillRect(0, 0, gCanvas.width, gCanvas.height);
     gCtx.imageSmoothingEnabled = false;
     const centerX = gCanvas.width / 2;
     const centerY = gCanvas.height / 2;
@@ -948,7 +949,8 @@ function showIntro() {
   }));
 
   function introLoop() {
-    iCtx.clearRect(0, 0, iCanvas.width, iCanvas.height);
+    iCtx.fillStyle = '#3e8948';
+    iCtx.fillRect(0, 0, iCanvas.width, iCanvas.height);
     iCtx.imageSmoothingEnabled = false;
     
     const centerX = iCanvas.width / 2;
@@ -1353,7 +1355,9 @@ function loop() {
       }
     }
   }
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#3e8948';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
   ctx.strokeStyle = 'rgba(255,255,255,0.05)'; const sp = 100 * camera.zoom;
   for (let x = (-camera.x * camera.zoom) % sp; x < canvas.width; x += sp) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); }
   for (let y = (-camera.y * camera.zoom) % sp; y < canvas.height; y += sp) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke(); }

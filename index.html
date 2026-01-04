@@ -12,8 +12,8 @@
     <!-- Intro Modal -->
     <div id="intro-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); color: white; z-index: 200; font-family: monospace; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px; box-sizing: border-box; pointer-events: auto;">
       <div id="intro-content" style="max-width: 800px; width: 100%;">
-        <div id="intro-visual" style="margin-bottom: 40px; display: flex; justify-content: center;">
-          <canvas id="introCanvas" width="400" height="200" style="image-rendering: pixelated; transform: scale(1.5); background: rgba(255,255,255,0.05); border-radius: 8px;"></canvas>
+        <div id="intro-visual" style="margin-bottom: 20px; display: flex; justify-content: center;">
+          <canvas id="introCanvas" width="400" height="200" style="image-rendering: pixelated; width: 600px; height: 300px; max-width: 100%; height: auto; background: #3e8948; border-radius: 8px;"></canvas>
         </div>
         <h2 id="intro-title" style="color: #ff4444; font-size: 28px; margin-bottom: 20px; text-transform: uppercase; letter-spacing: 2px;"></h2>
         <div id="intro-text" style="font-size: 18px; line-height: 1.6; margin-bottom: 40px; min-height: 120px; color: #ccc; white-space: pre-line;"></div>
@@ -40,7 +40,7 @@
     </div>
 
     <!-- Transcript UI -->
-    <div id="transcript-container" style="position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 600px; background: rgba(0,0,0,0.85); border-top: 2px solid rgba(255,255,255,0.2); border-radius: 12px 12px 0 0; color: white; font-family: monospace; z-index: 100; transition: height 0.3s ease; height: 40px; display: flex; flex-direction: column;">
+    <div id="transcript-container" style="position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 600px; background: #000; border-top: 2px solid rgba(255,255,255,0.2); border-radius: 12px 12px 0 0; color: white; font-family: monospace; z-index: 100; transition: height 0.3s ease; height: 40px; display: flex; flex-direction: column;">
       <div id="transcript-header" style="padding: 10px 20px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1);">
         <div id="latest-clue" style="overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex-grow: 1; font-size: 14px; color: #44ff44;">Case Log: No clues yet...</div>
         <span id="transcript-toggle" style="margin-left: 15px; font-size: 12px;">▲ OPEN</span>
@@ -51,8 +51,8 @@
     </div>
     <div id="game-over" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); color: white; z-index: 300; font-family: monospace; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px; box-sizing: border-box; pointer-events: auto;">
       <div id="game-over-content" style="max-width: 600px;">
-        <div id="game-over-visual" style="margin-bottom: 40px; display: flex; justify-content: center;">
-          <canvas id="gameOverCanvas" width="400" height="200" style="image-rendering: pixelated; transform: scale(1.5); background: rgba(255,255,255,0.05); border-radius: 8px;"></canvas>
+        <div id="game-over-visual" style="margin-bottom: 20px; display: flex; justify-content: center;">
+          <canvas id="gameOverCanvas" width="400" height="200" style="image-rendering: pixelated; width: 600px; height: 300px; max-width: 100%; height: auto; background: #3e8948; border-radius: 8px;"></canvas>
         </div>
         <h1 id="game-over-title" style="color: #44ff44; font-size: 32px; margin-bottom: 20px; text-transform: uppercase; letter-spacing: 2px;"></h1>
         <p id="game-over-msg" style="font-size: 18px; line-height: 1.6; margin-bottom: 40px; min-height: 100px; color: #ccc;"></p>

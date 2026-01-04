@@ -1294,12 +1294,29 @@ function init() {
 
 function constrainCamera() {
   const vw = canvas.width / camera.zoom, vh = canvas.height / camera.zoom;
-  if (vw > FIELD_WIDTH) camera.x = (FIELD_WIDTH - vw) / 2; else camera.x = Math.max(0, Math.min(FIELD_WIDTH - vw, camera.x));
   
-  // Allow scrolling further down to account for the UI transcript covering the bottom
-  const bottomPadding = 250 / camera.zoom;
-  if (vh > FIELD_HEIGHT + bottomPadding) camera.y = (FIELD_HEIGHT + bottomPadding - vh) / 2; 
-  else camera.y = Math.max(0, Math.min(FIELD_HEIGHT + bottomPadding - vh, camera.y));
+  // Padding values in world units (scaled by zoom)
+  const padSide = 300 / camera.zoom;
+  const padTop = 150 / camera.zoom;
+  const padBottom = 400 / camera.zoom; // Extra space for transcript UI
+
+  // Horizontal constraint
+  const minX = -padSide;
+  const maxX = FIELD_WIDTH + padSide - vw;
+  if (vw > FIELD_WIDTH + padSide * 2) {
+    camera.x = (FIELD_WIDTH - vw) / 2;
+  } else {
+    camera.x = Math.max(minX, Math.min(maxX, camera.x));
+  }
+
+  // Vertical constraint
+  const minY = -padTop;
+  const maxY = FIELD_HEIGHT + padBottom - vh;
+  if (vh > FIELD_HEIGHT + padTop + padBottom) {
+    camera.y = (FIELD_HEIGHT - vh) / 2;
+  } else {
+    camera.y = Math.max(minY, Math.min(maxY, camera.y));
+  }
 }
 
 function loop() {
@@ -1341,6 +1358,16 @@ function loop() {
   for (let x = (-camera.x * camera.zoom) % sp; x < canvas.width; x += sp) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); }
   for (let y = (-camera.y * camera.zoom) % sp; y < canvas.height; y += sp) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke(); }
   
+  // Draw walkable area boundary
+  ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+  ctx.lineWidth = 4 * camera.zoom;
+  ctx.strokeRect(
+    -camera.x * camera.zoom,
+    -camera.y * camera.zoom,
+    FIELD_WIDTH * camera.zoom,
+    FIELD_HEIGHT * camera.zoom
+  );
+
   // Draw grass sprites
   envDetails.forEach(d => {
     const img = grassSprites[d.spriteIndex];

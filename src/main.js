@@ -948,6 +948,10 @@ function showIntro() {
     animal: hares.find(h => h.rabbit.id === r.id)
   }));
 
+  // Check for cookie consent
+  const hasConsent = localStorage.getItem('mysteryFarm_consent');
+  const consentText = !hasConsent ? "<br><br><span style='font-size: 12px; opacity: 0.6;'>By continuing, you agree to the use of local storage to save your game progress and stats.</span>" : "";
+
   function introLoop() {
     iCtx.fillStyle = '#3e8948';
     iCtx.fillRect(0, 0, iCanvas.width, iCanvas.height);
@@ -956,16 +960,9 @@ function showIntro() {
     const centerX = iCanvas.width / 2;
     const centerY = iCanvas.height / 2;
 
-    function parseToHTML(txt) {
-      return txt.replace(/\[\[(\d+):(.*?)\]\]/g, (match, id, name) => {
-        const r = rabbits.find(rb => rb.id == id);
-        return `<span style="color: ${getHSL(r)}; font-weight: bold;">${name}</span>`;
-      });
-    }
-
     if (introStep === 0) {
       title.textContent = "A HEINOUS CRIME";
-      textContainer.innerHTML = `<span style="color: ${getHSL(victim)}; font-weight: bold;">${victim.name}</span> the ${victim.species.replace('_', ' ')} was found dead in the clover field.`;
+      textContainer.innerHTML = `<span style="color: ${getHSL(victim)}; font-weight: bold;">${victim.name}</span> the ${victim.species.replace('_', ' ')} was found dead in the clover field.${consentText}`;
       
       // Animate victim death (play once and stay)
       introAnimTimer += 0.08;
@@ -1076,6 +1073,7 @@ function showIntro() {
       btn.textContent = "START INVESTIGATION";
     } else {
       modal.style.display = 'none';
+      localStorage.setItem('mysteryFarm_consent', 'true'); // Save consent when they finish the intro
       introStep = 0;
       introAnimTimer = 0;
       return;
@@ -1302,7 +1300,7 @@ function init() {
 
   if (gameState.isFinished) {
     showGameOver(gameState.wasSuccess);
-  } else {
+  } else if (!wasLoaded) {
     showIntro();
   }
   

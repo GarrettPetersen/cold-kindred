@@ -8,6 +8,22 @@
   </head>
   <body>
     <canvas id="gameCanvas"></canvas>
+    
+    <!-- Intro Modal -->
+    <div id="intro-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); color: white; z-index: 200; font-family: monospace; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px; box-sizing: border-box; pointer-events: auto;">
+      <div id="intro-content" style="max-width: 800px; width: 100%;">
+        <div id="intro-visual" style="margin-bottom: 40px; display: flex; justify-content: center;">
+          <canvas id="introCanvas" width="400" height="200" style="image-rendering: pixelated; transform: scale(1.5); background: rgba(255,255,255,0.05); border-radius: 8px;"></canvas>
+        </div>
+        <h2 id="intro-title" style="color: #ff4444; font-size: 28px; margin-bottom: 20px; text-transform: uppercase; letter-spacing: 2px;"></h2>
+        <div id="intro-text" style="font-size: 18px; line-height: 1.6; margin-bottom: 40px; min-height: 120px; color: #ccc; white-space: pre-line;"></div>
+        <button id="intro-next" style="background: white; color: black; border: none; padding: 12px 40px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 16px; letter-spacing: 1px;">NEXT</button>
+      </div>
+    </div>
+
+    <!-- Help Button -->
+    <button id="help-btn" style="position: absolute; top: 20px; left: 20px; width: 44px; height: 44px; border-radius: 50%; background: rgba(0,0,0,0.7); border: 1px solid rgba(255,255,255,0.3); color: white; font-weight: bold; font-size: 24px; cursor: pointer; pointer-events: auto; display: flex; align-items: center; justify-content: center; font-family: monospace; z-index: 150; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">?</button>
+
     <div id="ui-overlay" style="position: absolute; top: 20px; right: 20px; pointer-events: none; font-family: monospace; color: white;">
       <div id="status-panel" style="background: rgba(0,0,0,0.7); padding: 10px 15px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); margin-bottom: 10px; text-align: right; width: 200px; box-sizing: border-box;">
         DNA TESTS: <span id="tests-count" style="color: #44ff44; font-weight: bold;">3</span>

@@ -1052,12 +1052,27 @@ function showIntro() {
       btn.textContent = "NEXT";
     } else if (introStep === 3) {
       title.textContent = "SOLVE THE CASE";
-      textContainer.innerHTML = "Talk to the animals for clues and use your 3 DNA tests wisely.<br><br>Click one animal and then another to record a parent/child relationship and build your family tree.";
+      textContainer.innerHTML = "Click the speech bubbles to talk to animals for clues. Use your 3 DNA tests wisely.<br><br>Click one animal and then another to record a parent/child relationship and build your family tree.";
       
-      iCtx.font = "30px Arial";
-      iCtx.textAlign = "center";
-      iCtx.textBaseline = "middle";
-      iCtx.fillText("🔍", centerX, centerY);
+      // Draw a sample animal with a speech bubble
+      const sample = rabbits.find(r => r.id !== killerId) || rabbits[0];
+      const rx = centerX - 32;
+      const ry = centerY - 20;
+
+      iCtx.save();
+      iCtx.filter = `hue-rotate(${sample.tint.hue}deg) saturate(${sample.tint.saturate}%) brightness(${sample.tint.brightness}%)`;
+      iCtx.drawImage(sprites[sample.species].idle, 0, 0, 32, 32, rx, ry, 64, 64);
+      iCtx.restore();
+
+      // Speech bubble
+      const bx = rx + 50, by = ry - 10, bw = 30, bh = 25, r = 5;
+      const s = Math.max(0, Math.min(100, sample.tint.saturate)), l = Math.max(0, Math.min(100, sample.tint.brightness));
+      iCtx.fillStyle = `hsla(${sample.tint.hue}, ${s}%, ${l}%, 0.9)`;
+      iCtx.beginPath(); iCtx.moveTo(bx + r, by - bh); iCtx.lineTo(bx + bw - r, by - bh); iCtx.quadraticCurveTo(bx + bw, by - bh, bx + bw, by - bh + r); iCtx.lineTo(bx + bw, by - r); iCtx.quadraticCurveTo(bx + bw, by, bx + bw - r, by); iCtx.lineTo(bx + r, by); iCtx.quadraticCurveTo(bx, by, bx, by - r); iCtx.lineTo(bx, by - bh + r); iCtx.quadraticCurveTo(bx, by - bh, bx + r, by - bh); iCtx.closePath(); iCtx.fill();
+      iCtx.beginPath(); iCtx.moveTo(bx + 5, by); iCtx.lineTo(bx + 15, by); iCtx.lineTo(bx + 10, by + 5); iCtx.fill();
+      iCtx.fillStyle = 'white'; iCtx.font = "bold 14px Arial"; iCtx.textAlign = "center";
+      iCtx.fillText('?', bx + bw / 2, by - bh / 2 + 5);
+
       btn.textContent = "START INVESTIGATION";
     } else {
       modal.style.display = 'none';

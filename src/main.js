@@ -1,8 +1,8 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-const FIELD_WIDTH = 2000;
-const FIELD_HEIGHT = 2000;
+const FIELD_WIDTH = 1400;
+const FIELD_HEIGHT = 1400;
 const FRAME_SIZE = 32;
 const CURRENT_YEAR = 2025;
 
@@ -75,7 +75,15 @@ const envDetails = [];
 const clueQueue = [];
 
 const camera = { x: 0, y: 0, zoom: 1.0, minZoom: 0.1, maxZoom: 3.0 };
-const input = { isDragging: false, lastMouseX: 0, lastMouseY: 0, lastTouchDist: 0 };
+const input = { 
+  isDragging: false, 
+  lastMouseX: 0, 
+  lastMouseY: 0, 
+  startX: 0, 
+  startY: 0,
+  hasMoved: false,
+  lastTouchDist: 0 
+};
 
 class AnimalRecord {
   constructor(firstName, sex, birthYear, gen, species, fatherId = null, motherId = null) {
@@ -194,25 +202,9 @@ function generateCluePool(additive = false) {
   const newClues = additive ? [...cluePool] : [];
   const existing = new Set(newClues.map(c => JSON.stringify(c.conn)));
   
-  function addRawClue(text, speakerId, conn, type, groupId = null) {
+  function addRawClue(conn, type, speakerId = null, groupId = null) {
     if (newClues.length >= rabbits.length * 0.9) return;
-    newClues.push({ id: Math.random().toString(36).substring(2, 11), text, speakerId, conn, type, isRead: false, groupId });
-  }
-
-  function createDirectClueText(p, c, speakerId) {
-    const pRole = p.sex === 'M' ? 'father' : 'mother';
-    const pRoleShort = p.sex === 'M' ? 'dad' : 'mom';
-    const cRole = c.sex === 'M' ? 'son' : 'daughter';
-    const cRoleShort = c.sex === 'M' ? 'boy' : 'girl';
-    const cPoss = c.sex === 'M' ? 'his' : 'her';
-
-    if (speakerId === c.id) {
-      return pick([`${p.firstName} is my ${pRole}.`, `Have you seen my ${pRoleShort}, ${p.firstName}?`, `I believe ${p.firstName} is my ${pRoleShort}.`]);
-    } else if (speakerId === p.id) {
-      return pick([`${c.firstName} is my ${cRole}.`, `I'm looking for my ${cRoleShort}, ${c.firstName}.`, `${c.firstName} belongs to my family.`]);
-    } else {
-      return pick([`${p.firstName} is ${c.firstName}'s ${pRoleShort}.`, `${c.firstName} is ${p.firstName}'s ${cRole}.`, `I saw ${c.firstName} with ${cPoss} ${pRoleShort}, ${p.firstName}.`]);
-    }
+    newClues.push({ id: Math.random().toString(36).substring(2, 11), conn, type, speakerId, groupId, isRead: false });
   }
 
   necessaryConnections.forEach(conn => {
@@ -223,38 +215,38 @@ function generateCluePool(additive = false) {
 
     const r = random();
     if (r < 0.2) {
-      // Direct Clue
-      const speakerId = random() < 0.6 ? (random() < 0.5 ? p.id : c.id) : pick(rabbits).id;
-      addRawClue(createDirectClueText(p, c, speakerId), speakerId, conn, 'necessary');
+      // Strategy 1: Direct Clue (Speaker is Parent, Child, or Random)
+      const sid = random() < 0.6 ? (random() < 0.5 ? p.id : c.id) : null;
+      addRawClue(conn, 'necessary', sid);
     } else if (r < 0.6) {
-      // Strategy 2: Spouse/Couple Inference (Double Clue)
+      // Strategy 2: Spouse/Couple Inference
       const spouseId = p.sex === 'M' ? c.motherId : c.fatherId;
       const spouse = rabbits.find(r => r.id === spouseId);
       if (spouse) {
         const gid = Math.random().toString(36).substring(2, 7);
-        addRawClue(createDirectClueText(spouse, c, random() < 0.5 ? spouse.id : c.id), spouse.id, conn, 'necessary', gid);
-        addRawClue(`${p.firstName} and ${spouse.firstName} are such a lovely couple.`, pick(rabbits).id, conn, 'necessary', gid);
+        addRawClue({ parentId: spouse.id, childId: c.id }, 'necessary', null, gid);
+        addRawClue({ type: 'couple', p1: p.id, p2: spouse.id }, 'necessary', null, gid);
       } else {
-        addRawClue(createDirectClueText(p, c, c.id), c.id, conn, 'necessary');
+        addRawClue(conn, 'necessary', c.id);
       }
     } else {
-      // Sibling Inference (Double Clue)
+      // Strategy 3: Sibling Inference
       const siblings = rabbits.filter(r => (r.fatherId === p.id || r.motherId === p.id) && r.id !== c.id);
       if (siblings.length > 0) {
         const sib = pick(siblings);
         const gid = Math.random().toString(36).substring(2, 7);
-        addRawClue(`${sib.firstName} is my ${sib.sex === 'M' ? 'brother' : 'sister'}.`, c.id, conn, 'necessary', gid);
-        addRawClue(`${p.firstName} is the ${p.sex === 'M' ? 'father' : 'mother'} of ${sib.firstName}.`, pick(rabbits).id, conn, 'necessary', gid);
+        addRawClue({ type: 'sibling', a: c.id, b: sib.id }, 'necessary', c.id, gid);
+        addRawClue({ parentId: p.id, childId: sib.id }, 'necessary', null, gid);
       } else {
-        // Grandparent Inference (Double Clue)
+        // Strategy 4: Grandparent Inference
         const gpId = p.fatherId || p.motherId;
         const gp = rabbits.find(r => r.id === gpId);
         if (gp) {
           const gid = Math.random().toString(36).substring(2, 7);
-          addRawClue(`${gp.firstName} is my ${gp.sex === 'M' ? 'grandfather' : 'grandmother'}.`, c.id, conn, 'necessary', gid);
-          addRawClue(`${p.firstName} is ${gp.firstName}'s ${p.sex === 'M' ? 'son' : 'daughter'}.`, pick(rabbits).id, conn, 'necessary', gid);
+          addRawClue({ type: 'grandparent', gp: gp.id, gc: c.id }, 'necessary', c.id, gid);
+          addRawClue({ parentId: gp.id, childId: p.id }, 'necessary', null, gid);
         } else {
-          addRawClue(createDirectClueText(p, c, p.id), p.id, conn, 'necessary');
+          addRawClue(conn, 'necessary', p.id);
         }
       }
     }
@@ -266,34 +258,76 @@ function generateCluePool(additive = false) {
   const needed = Math.max(20, newClues.length) - newClues.filter(c => c.type === 'extra').length;
   const availExtra = allConns.filter(c => !existing.has(JSON.stringify(c))).sort(() => random() - 0.5);
   for (let i = 0; i < Math.min(availExtra.length, needed); i++) {
-    const conn = availExtra[i];
-    const p = rabbits.find(r => r.id === conn.parentId), c = rabbits.find(r => r.id === conn.childId);
-    if (p && c) addRawClue(createDirectClueText(p, c, pick(rabbits).id), pick(rabbits).id, conn, 'extra');
+    addRawClue(availExtra[i], 'extra');
   }
+  
   cluePool = newClues;
 
   // Prioritize clues involving the two starting DNA relatives
   if (!additive) {
     const dnaRelIds = rabbits.filter(r => r.dnaRelation).map(r => r.id);
-    const prioritized = newClues.filter(c => c.type === 'necessary' && (dnaRelIds.includes(c.conn.parentId) || dnaRelIds.includes(c.conn.childId)));
+    const prioritized = newClues.filter(c => {
+      if (c.type !== 'necessary') return false;
+      const conn = c.conn;
+      if (conn.parentId && (dnaRelIds.includes(conn.parentId) || dnaRelIds.includes(conn.childId))) return true;
+      if (conn.type === 'couple' && (dnaRelIds.includes(conn.p1) || dnaRelIds.includes(conn.p2))) return true;
+      if (conn.type === 'sibling' && (dnaRelIds.includes(conn.a) || dnaRelIds.includes(conn.b))) return true;
+      if (conn.type === 'grandparent' && (dnaRelIds.includes(conn.gp) || dnaRelIds.includes(conn.gc))) return true;
+      return false;
+    });
     
     if (prioritized.length > 0) {
       const queuedIds = new Set();
-      // Pick up to two priority groups/clues to seed the queue
       for (let i = 0; i < 2; i++) {
         const avail = prioritized.filter(c => !queuedIds.has(c.id));
         if (avail.length === 0) break;
         const choice = pick(avail);
         const group = choice.groupId ? newClues.filter(c => c.groupId === choice.groupId) : [choice];
-        group.forEach(c => {
-          if (!queuedIds.has(c.id)) {
-            clueQueue.push(c);
-            queuedIds.add(c.id);
-          }
-        });
+        group.forEach(cl => { if (!queuedIds.has(cl.id)) { clueQueue.push(cl); queuedIds.add(cl.id); } });
       }
     }
   }
+}
+
+function generateClueText(clue, speakerId) {
+  const s = rabbits.find(r => r.id === speakerId);
+  
+  if (clue.conn.type === 'couple') {
+    const p1 = rabbits.find(r => r.id === clue.conn.p1);
+    const p2 = rabbits.find(r => r.id === clue.conn.p2);
+    return pick([`${p1.firstName} and ${p2.firstName} are such a lovely couple.`, `I saw ${p1.firstName} and ${p2.firstName} together recently.`, `Aren't ${p1.firstName} and ${p2.firstName} just perfect for each other?`]);
+  }
+  
+  if (clue.conn.type === 'sibling') {
+    const a = rabbits.find(r => r.id === clue.conn.a);
+    const b = rabbits.find(r => r.id === clue.conn.b);
+    const bRole = b.sex === 'M' ? 'brother' : 'sister';
+    if (speakerId === a.id) return pick([`${b.firstName} is my ${bRole}.`, `Have you seen my ${bRole}, ${b.firstName}?`, `I grew up with ${b.firstName}.`]);
+    if (speakerId === b.id) return pick([`${a.firstName} is my ${a.sex === 'M' ? 'brother' : 'sister'}.`, `I'm looking for my ${a.sex === 'M' ? 'brother' : 'sister'}, ${a.firstName}.`]);
+    return pick([`${a.firstName} and ${b.firstName} are siblings.`, `I believe ${a.firstName} and ${b.firstName} are ${a.sex === b.sex ? (a.sex === 'M' ? 'brothers' : 'sisters') : 'brother and sister'}.`]);
+  }
+
+  if (clue.conn.type === 'grandparent') {
+    const gp = rabbits.find(r => r.id === clue.conn.gp);
+    const gc = rabbits.find(r => r.id === clue.conn.gc);
+    const gpRole = gp.sex === 'M' ? 'grandfather' : 'grandmother';
+    if (speakerId === gc.id) return pick([`${gp.firstName} is my ${gpRole}.`, `I believe ${gp.firstName} is my ${gpRole}.`, `My ${gpRole} is ${gp.firstName}.`]);
+    return pick([`${gp.firstName} is ${gc.firstName}'s ${gpRole}.`, `${gc.firstName} is ${gp.firstName}'s ${gc.sex === 'M' ? 'grandson' : 'granddaughter'}.`]);
+  }
+
+  // Standard parent-child connection
+  const p = rabbits.find(r => r.id === clue.conn.parentId);
+  const c = rabbits.find(r => r.id === clue.conn.childId);
+  const pRole = p.sex === 'M' ? 'father' : 'mother';
+  const pRoleShort = p.sex === 'M' ? 'dad' : 'mom';
+  const cRole = c.sex === 'M' ? 'son' : 'daughter';
+  const cRoleShort = c.sex === 'M' ? 'boy' : 'girl';
+  const cPoss = c.sex === 'M' ? 'his' : 'her';
+
+  if (speakerId === c.id) return pick([`${p.firstName} is my ${pRole}.`, `Have you seen my ${pRoleShort}, ${p.firstName}?`, `I believe ${p.firstName} is my ${pRoleShort}.`]);
+  if (speakerId === p.id) return pick([`${c.firstName} is my ${cRole}.`, `I'm looking for my ${cRoleShort}, ${c.firstName}.`, `${c.firstName} belongs to my family.`]);
+  
+  return pick([`${p.firstName} is ${c.firstName}'s ${pRoleShort}.`, `${c.firstName} is ${p.firstName}'s ${cRole}.`, `I saw ${c.firstName} with ${cPoss} ${pRoleShort}, ${p.firstName}.`]);
 }
 
 // --- Simulation ---
@@ -642,7 +676,7 @@ function showIntro() {
       btn.textContent = "NEXT";
     } else if (introStep === 3) {
       title.textContent = "SOLVE THE CASE";
-      textContainer.textContent = "Talk to the animals for clues and use your 3 DNA tests wisely.";
+      textContainer.textContent = "Talk to the animals for clues and use your 3 DNA tests wisely.\n\nClick one animal and then another to record a parent/child relationship and build your family tree.";
       
       iCtx.font = "30px Arial";
       iCtx.textAlign = "center";
@@ -667,7 +701,7 @@ function init() {
   rabbits.forEach(r => hares.push(new Animal(r)));
 
   // Initialize environment details
-  const detailCount = 500;
+  const detailCount = 250;
   for (let i = 0; i < detailCount; i++) {
     envDetails.push({
       x: random() * FIELD_WIDTH,
@@ -692,7 +726,14 @@ function init() {
       const clue = activeClues.get(h.rabbit.id);
       if (clue) {
         const m = clue.isRead ? 0.6 : 1.0, bw = 30 * m, bh = 25 * m, bx = h.x + FRAME_SIZE * 1.6, by = h.y - 15;
-        if (wx >= bx - 5 && wx <= bx + bw + 5 && wy >= by - bh - 5 && wy <= by + 5) { clue.isRead = true; notifications.push({ text: clue.text, x: cx, y: cy - 20, timer: 360, timerMax: 360, color: '#fff' }); return true; }
+        if (wx >= bx - 5 && wx <= bx + bw + 5 && wy >= by - bh - 5 && wy <= by + 5) { 
+          if (!clue.isRead) {
+            clue.isRead = true; 
+            clue.generatedText = generateClueText(clue, h.rabbit.id);
+          }
+          notifications.push({ text: clue.generatedText, x: cx, y: cy - 20, timer: 360, timerMax: 360, color: '#fff' }); 
+          return true; 
+        }
       }
     }
     const cToP = new Map(); playerConnections.forEach(c => { if (!cToP.has(c.childId)) cToP.set(c.childId, []); cToP.get(c.childId).push(c); });
@@ -717,13 +758,91 @@ function init() {
     return false;
   };
 
-  canvas.addEventListener('mousedown', e => { const p = getPos(e); if (!handleAct(p.x, p.y, p.cx, p.cy)) { selectedHare = null; updateUI(); input.isDragging = true; input.lastMouseX = p.cx; input.lastMouseY = p.cy; } });
-  window.addEventListener('mousemove', e => { if (input.isDragging) { camera.x -= (e.clientX - input.lastMouseX) / camera.zoom; camera.y -= (e.clientY - input.lastMouseY) / camera.zoom; input.lastMouseX = e.clientX; input.lastMouseY = e.clientY; constrainCamera(); } });
-  window.addEventListener('mouseup', () => input.isDragging = false);
+  canvas.addEventListener('mousedown', e => { 
+    const p = getPos(e); 
+    input.isDragging = true; 
+    input.startX = p.cx; 
+    input.startY = p.cy;
+    input.lastMouseX = p.cx; 
+    input.lastMouseY = p.cy;
+    input.hasMoved = false;
+  });
+
+  window.addEventListener('mousemove', e => { 
+    if (input.isDragging) { 
+      const dx = e.clientX - input.lastMouseX;
+      const dy = e.clientY - input.lastMouseY;
+      if (Math.hypot(e.clientX - input.startX, e.clientY - input.startY) > 5) {
+        input.hasMoved = true;
+      }
+      camera.x -= dx / camera.zoom; 
+      camera.y -= dy / camera.zoom; 
+      input.lastMouseX = e.clientX; 
+      input.lastMouseY = e.clientY; 
+      constrainCamera(); 
+    } 
+  });
+
+  window.addEventListener('mouseup', e => { 
+    if (input.isDragging && !input.hasMoved) {
+      const p = getPos(e);
+      if (!handleAct(p.x, p.y, p.cx, p.cy)) {
+        selectedHare = null;
+        updateUI();
+      }
+    }
+    input.isDragging = false; 
+  });
+
   canvas.addEventListener('wheel', e => { e.preventDefault(); const p = getPos(e), oldZ = camera.zoom; camera.zoom = Math.max(camera.minZoom, Math.min(camera.maxZoom, camera.zoom * Math.pow(1.1, -e.deltaY / 100))); camera.x += (p.x - camera.x) * (1 - oldZ / camera.zoom); camera.y += (p.y - camera.y) * (1 - oldZ / camera.zoom); constrainCamera(); }, { passive: false });
-  canvas.addEventListener('touchstart', e => { e.preventDefault(); if (e.touches.length === 1) { const p = getPos(e); if (!handleAct(p.x, p.y, p.cx, p.cy)) { selectedHare = null; updateUI(); input.isDragging = true; input.lastMouseX = p.cx; input.lastMouseY = p.cy; } } else if (e.touches.length === 2) { input.isDragging = false; input.lastTouchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); } }, { passive: false });
-  canvas.addEventListener('touchmove', e => { e.preventDefault(); if (e.touches.length === 1 && input.isDragging) { const p = getPos(e); camera.x -= (p.cx - input.lastMouseX) / camera.zoom; camera.y -= (p.cy - input.lastMouseY) / camera.zoom; input.lastMouseX = p.cx; input.lastMouseY = p.cy; constrainCamera(); } else if (e.touches.length === 2) { const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY), midX = (e.touches[0].clientX + e.touches[1].clientX) / 2, midY = (e.touches[0].clientY + e.touches[1].clientY) / 2, rect = canvas.getBoundingClientRect(), wx = (midX - rect.left) / camera.zoom + camera.x, wy = (midY - rect.top) / camera.zoom + camera.y, oldZ = camera.zoom; camera.zoom = Math.max(camera.minZoom, Math.min(camera.maxZoom, camera.zoom * (d / input.lastTouchDist))); camera.x += (wx - camera.x) * (1 - oldZ / camera.zoom); camera.y += (wy - camera.y) * (1 - oldZ / camera.zoom); input.lastTouchDist = d; constrainCamera(); } }, { passive: false });
-  canvas.addEventListener('touchend', () => { input.isDragging = false; input.lastTouchDist = 0; });
+
+  canvas.addEventListener('touchstart', e => { 
+    e.preventDefault(); 
+    if (e.touches.length === 1) { 
+      const p = getPos(e); 
+      input.isDragging = true; 
+      input.startX = p.cx; 
+      input.startY = p.cy;
+      input.lastMouseX = p.cx; 
+      input.lastMouseY = p.cy;
+      input.hasMoved = false;
+    } else if (e.touches.length === 2) { 
+      input.isDragging = false; 
+      input.lastTouchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); 
+    } 
+  }, { passive: false });
+
+  canvas.addEventListener('touchmove', e => { 
+    e.preventDefault(); 
+    if (e.touches.length === 1 && input.isDragging) { 
+      const p = getPos(e); 
+      const dx = p.cx - input.lastMouseX;
+      const dy = p.cy - input.lastMouseY;
+      if (Math.hypot(p.cx - input.startX, p.cy - input.startY) > 10) {
+        input.hasMoved = true;
+      }
+      camera.x -= dx / camera.zoom; 
+      camera.y -= dy / camera.zoom; 
+      input.lastMouseX = p.cx; 
+      input.lastMouseY = p.cy; 
+      constrainCamera(); 
+    } else if (e.touches.length === 2) { 
+      const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY), midX = (e.touches[0].clientX + e.touches[1].clientX) / 2, midY = (e.touches[0].clientY + e.touches[1].clientY) / 2, rect = canvas.getBoundingClientRect(), wx = (midX - rect.left) / camera.zoom + camera.x, wy = (midY - rect.top) / camera.zoom + camera.y, oldZ = camera.zoom; camera.zoom = Math.max(camera.minZoom, Math.min(camera.maxZoom, camera.zoom * (d / input.lastTouchDist))); camera.x += (wx - camera.x) * (1 - oldZ / camera.zoom); camera.y += (wy - camera.y) * (1 - oldZ / camera.zoom); input.lastTouchDist = d; constrainCamera(); 
+    } 
+  }, { passive: false });
+
+  canvas.addEventListener('touchend', e => { 
+    if (input.isDragging && !input.hasMoved) {
+      const rect = canvas.getBoundingClientRect();
+      const p = { x: (input.lastMouseX - rect.left) / camera.zoom + camera.x, y: (input.lastMouseY - rect.top) / camera.zoom + camera.y, cx: input.lastMouseX, cy: input.lastMouseY };
+      if (!handleAct(p.x, p.y, p.cx, p.cy)) {
+        selectedHare = null;
+        updateUI();
+      }
+    }
+    input.isDragging = false; 
+    input.lastTouchDist = 0; 
+  });
   dnaBtn.addEventListener('pointerdown', e => e.stopPropagation());
   dnaBtn.addEventListener('click', e => {
     e.preventDefault(); if (!selectedHare || dnaTestsRemaining <= 0 || selectedHare.rabbit.isTested) return;

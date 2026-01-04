@@ -702,7 +702,7 @@ class Animal {
   draw() {
     const sx = (this.x - camera.x) * camera.zoom, sy = (this.y - camera.y) * camera.zoom, sz = FRAME_SIZE * 2 * camera.zoom;
     // Account for labels and speech bubbles in culling
-    if (sx < -sz * 2 || sx > canvas.width + sz || sy < -sz * 2 || sy > canvas.height + sz) return;
+    if (sx < -sz * 4 || sx > canvas.width + sz * 4 || sy < -sz * 4 || sy > canvas.height + sz * 4) return;
     let d = this.direction; if (this.rabbit.species === 'Fox' && this.state === 'run') { if (d === 2) d = 3; else if (d === 3) d = 2; }
     ctx.save();
     ctx.filter = `hue-rotate(${this.rabbit.tint.hue}deg) saturate(${this.rabbit.tint.saturate}%) brightness(${this.rabbit.tint.brightness}%)`;
@@ -738,12 +738,23 @@ class Animal {
     }
     const clue = activeClues.get(this.rabbit.id);
     if (clue) {
-      const isR = clue.isRead, m = isR ? 0.6 : 1.0, bx = sx + sz * 0.8, by = sy - 15 * camera.zoom, bw = 30 * camera.zoom * m, bh = 25 * camera.zoom * m, r = 5 * camera.zoom * m;
+      const isR = clue.isRead;
+      // Partial scaling for unread bubbles: they stay larger when zoomed out
+      const bubbleScale = isR ? camera.zoom : (camera.zoom * 0.4 + 0.6);
+      
+      const m = isR ? 0.6 : 1.0;
+      const bw = 30 * bubbleScale * m, bh = 25 * bubbleScale * m, r = 5 * bubbleScale * m;
+      const bx = sx + sz * 0.8, by = sy - 15 * camera.zoom;
+      
       const s = Math.max(0, Math.min(100, this.rabbit.tint.saturate)), l = Math.max(0, Math.min(100, this.rabbit.tint.brightness));
       ctx.fillStyle = isR ? 'rgba(150, 150, 150, 0.6)' : `hsla(${this.rabbit.tint.hue}, ${s}%, ${l}%, 0.9)`;
       ctx.beginPath(); ctx.moveTo(bx + r, by - bh); ctx.lineTo(bx + bw - r, by - bh); ctx.quadraticCurveTo(bx + bw, by - bh, bx + bw, by - bh + r); ctx.lineTo(bx + bw, by - r); ctx.quadraticCurveTo(bx + bw, by, bx + bw - r, by); ctx.lineTo(bx + r, by); ctx.quadraticCurveTo(bx, by, bx, by - r); ctx.lineTo(bx, by - bh + r); ctx.quadraticCurveTo(bx, by - bh, bx + r, by - bh); ctx.closePath(); ctx.fill();
-      ctx.beginPath(); ctx.moveTo(bx + 5 * camera.zoom * m, by); ctx.lineTo(bx + 15 * camera.zoom * m, by); ctx.lineTo(bx + 10 * camera.zoom * m, by + 5 * camera.zoom * m); ctx.fill();
-      if (!isR) { ctx.fillStyle = 'white'; ctx.font = `bold ${Math.floor(14 * camera.zoom)}px Arial`; ctx.fillText('?', bx + bw / 2, by - bh / 2 + 5 * camera.zoom); }
+      ctx.beginPath(); ctx.moveTo(bx + 5 * bubbleScale * m, by); ctx.lineTo(bx + 15 * bubbleScale * m, by); ctx.lineTo(bx + 10 * bubbleScale * m, by + 5 * bubbleScale * m); ctx.fill();
+      if (!isR) { 
+        ctx.fillStyle = 'white'; 
+        ctx.font = `bold ${Math.floor(14 * bubbleScale)}px Arial`; 
+        ctx.fillText('?', bx + bw / 2, by - bh / 2 + 5 * bubbleScale); 
+      }
     }
     ctx.shadowBlur = 0;
   }
@@ -751,8 +762,8 @@ class Animal {
 
 // --- UI & Input ---
 function updateTreeDiagram() {
-  const minSpacingX = 80, minSpacingY = 100;
-  const preferredSpacingX = 150, preferredSpacingY = 150;
+  const minSpacingX = 80, minSpacingY = 120;
+  const preferredSpacingX = 160, preferredSpacingY = 160;
   
   const hareToTree = new Map(), trees = [];
   playerConnections.forEach(c => {
@@ -766,7 +777,6 @@ function updateTreeDiagram() {
   hares.forEach(h => { if (!hareToTree.has(h.rabbit.id)) { h.targetX = h.targetY = null; } });
   if (trees.length === 0) return;
 
-  // First, calculate raw layouts for each tree
   const treeLayouts = [];
   let totalRawWidth = 0;
   let maxTreeHeight = 0;
@@ -774,7 +784,16 @@ function updateTreeDiagram() {
   trees.forEach(t => {
     const roots = t.filter(id => !playerConnections.some(c => c.childId === id));
     const lvls = new Map();
-    const walk = (id, l) => { lvls.set(id, Math.max(lvls.get(id) || 0, l)); playerConnections.filter(c => c.parentId === id).forEach(c => walk(c.childId, l + 1)); };
+    const childrenMap = new Map();
+    playerConnections.forEach(c => {
+      if (!childrenMap.has(c.parentId)) childrenMap.set(c.parentId, []);
+      childrenMap.get(c.parentId).push(c.childId);
+    });
+
+    const walk = (id, l) => { 
+      lvls.set(id, Math.max(lvls.get(id) || 0, l)); 
+      (childrenMap.get(id) || []).forEach(cid => walk(cid, l + 1)); 
+    };
     roots.forEach(r => walk(r, 0));
     
     const grps = []; 
@@ -788,21 +807,17 @@ function updateTreeDiagram() {
     maxTreeHeight = Math.max(maxTreeHeight, grps.length);
   });
 
-  // Determine scaling/spacing to fit within FIELD boundaries
-  // We leave some margin (100px)
   const availableW = FIELD_WIDTH - 200;
   const availableH = FIELD_HEIGHT - 200;
-
-  // Calculate actual spacing needed
   let spx = Math.max(minSpacingX, Math.min(preferredSpacingX, availableW / Math.max(1, totalRawWidth + trees.length)));
   let spy = Math.max(minSpacingY, Math.min(preferredSpacingY, availableH / Math.max(1, maxTreeHeight)));
 
-  // Center the entire set of trees
   const finalTotalWidth = (totalRawWidth * spx) + ((trees.length - 1) * spx);
   let currX = (FIELD_WIDTH - finalTotalWidth) / 2;
   const startY = (FIELD_HEIGHT - (maxTreeHeight * spy)) / 2;
 
   treeLayouts.forEach(layout => {
+    // Basic row-based layout but we'll try to center parents over kids
     layout.grps.forEach((ids, l) => {
       const rowWidth = (ids.length - 1) * spx;
       const rowStartX = currX + (layout.rawWidth * spx - rowWidth) / 2;
@@ -1193,9 +1208,21 @@ function init() {
     for (const h of hares) {
       const clue = activeClues.get(h.rabbit.id);
       if (clue) {
-        const m = clue.isRead ? 0.6 : 1.0, bw = 30 * m, bh = 25 * m, bx = h.x + FRAME_SIZE * 1.6, by = h.y - 15;
-        if (wx >= bx - 5 && wx <= bx + bw + 5 && wy >= by - bh - 5 && wy <= by + 5) { 
-          if (!clue.isRead) {
+        const isR = clue.isRead;
+        const bubbleScale = isR ? camera.zoom : (camera.zoom * 0.4 + 0.6);
+        const m = isR ? 0.6 : 1.0;
+        const bw = 30 * bubbleScale * m, bh = 25 * bubbleScale * m;
+        // World coordinates for bubble hitbox
+        const sz = FRAME_SIZE * 2;
+        const bx = h.x + sz * 0.8, by = h.y - (15 * camera.zoom) / camera.zoom; // approximate
+        
+        // Accurate screen-to-world hitbox check for scaled bubbles
+        const sx = (h.x - camera.x) * camera.zoom, sy = (h.y - camera.y) * camera.zoom;
+        const ssz = sz * camera.zoom;
+        const sbx = sx + ssz * 0.8, sby = sy - 15 * camera.zoom;
+        
+        if (cx >= sbx - 5 && cx <= sbx + bw + 5 && cy >= sby - bh - 5 && cy <= sby + 5) { 
+          if (!isR) {
             clue.isRead = true; 
             clue.generatedText = generateClueText(clue, h.rabbit.id);
             caseLog.push(`${h.rabbit.firstName}: ${clue.generatedText}`);
@@ -1477,22 +1504,69 @@ function loop() {
   ctx.fillText('mystery.farm', 20, 75); // Positioned below the Help (?) button
   ctx.restore();
   
-  ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 2 * camera.zoom;
-  const cByC = new Map(); playerConnections.forEach(c => { if (!cByC.has(c.childId)) cByC.set(c.childId, []); cByC.get(c.childId).push(c); });
-  cByC.forEach((conns, cid) => {
-    const c = hares.find(h => h.rabbit.id === cid); if (!c) return;
-    const cx = (c.x - camera.x + FRAME_SIZE) * camera.zoom, cy = (c.y - camera.y + FRAME_SIZE) * camera.zoom;
-    const ps = conns.map(co => hares.find(h => h.rabbit.id === co.parentId)).filter(Boolean);
-    const midY = ((ps.reduce((s, p) => s + (p.y - camera.y + FRAME_SIZE), 0) / ps.length + c.y - camera.y + FRAME_SIZE) / 2) * camera.zoom;
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+  ctx.lineWidth = 2 * camera.zoom;
+
+  // Group connections into "Family Units" (Unions)
+  const unions = new Map(); // Key: sorted parent IDs string, Value: { parents: [], children: [] }
+  const childToParents = new Map();
+  playerConnections.forEach(c => {
+    if (!childToParents.has(c.childId)) childToParents.set(c.childId, []);
+    childToParents.get(c.childId).push(c.parentId);
+  });
+
+  childToParents.forEach((parents, cid) => {
+    const key = parents.sort((a, b) => a - b).join(',');
+    if (!unions.has(key)) unions.set(key, { parents, children: [] });
+    unions.get(key).children.push(cid);
+  });
+
+  unions.forEach(u => {
+    const ps = u.parents.map(id => hares.find(h => h.rabbit.id === id)).filter(Boolean);
+    const cs = u.children.map(id => hares.find(h => h.rabbit.id === id)).filter(Boolean);
+    if (ps.length === 0 || cs.length === 0) return;
+
+    // Calculate vertical mid-point for the union bar
+    const avgPy = ps.reduce((sum, p) => sum + (p.y + FRAME_SIZE), 0) / ps.length;
+    const avgCy = cs.reduce((sum, c) => sum + (c.y + FRAME_SIZE), 0) / cs.length;
+    const midY = (avgPy + avgCy) / 2;
+
+    const screenMidY = (midY - camera.y) * camera.zoom;
+    const parentXRange = { min: Infinity, max: -Infinity };
+    const childXRange = { min: Infinity, max: -Infinity };
+
+    // 1. Draw vertical stems from parents to midY
     ps.forEach(p => {
-      const px = (p.x - camera.x + FRAME_SIZE) * camera.zoom, py = (p.y - camera.y + FRAME_SIZE) * camera.zoom;
-      ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px, midY); ctx.lineTo(cx, midY); ctx.lineTo(cx, cy); ctx.stroke();
-      if (selectedHare === p || selectedHare === c) {
-        ctx.fillStyle = '#f44'; ctx.beginPath(); ctx.arc(px, (py + midY) / 2, 10 * camera.zoom, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#fff'; ctx.font = `bold ${Math.floor(12 * camera.zoom)}px Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('X', px, (py + midY) / 2);
+      const px = (p.x - camera.x + FRAME_SIZE) * camera.zoom;
+      const py = (p.y - camera.y + FRAME_SIZE) * camera.zoom;
+      ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px, screenMidY); ctx.stroke();
+      parentXRange.min = Math.min(parentXRange.min, px);
+      parentXRange.max = Math.max(parentXRange.max, px);
+
+      // Draw "X" on parent stem if selected
+      if (selectedHare === p || cs.some(c => selectedHare === c)) {
+        const xBtnY = (py + screenMidY) / 2;
+        ctx.fillStyle = '#f44'; ctx.beginPath(); ctx.arc(px, xBtnY, 10 * camera.zoom, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.font = `bold ${Math.floor(12 * camera.zoom)}px Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('X', px, xBtnY);
       }
     });
+
+    // 2. Draw vertical stems from midY to children
+    cs.forEach(c => {
+      const cx = (c.x - camera.x + FRAME_SIZE) * camera.zoom;
+      const cy = (c.y - camera.y + FRAME_SIZE) * camera.zoom;
+      ctx.beginPath(); ctx.moveTo(cx, screenMidY); ctx.lineTo(cx, cy); ctx.stroke();
+      childXRange.min = Math.min(childXRange.min, cx);
+      childXRange.max = Math.max(childXRange.max, cx);
+    });
+
+    // 3. Draw the horizontal "Union Bar"
+    const barMinX = Math.min(parentXRange.min, childXRange.min);
+    const barMaxX = Math.max(parentXRange.max, childXRange.max);
+    ctx.beginPath(); ctx.moveTo(barMinX, screenMidY); ctx.lineTo(barMaxX, screenMidY); ctx.stroke();
   });
+  ctx.restore();
 
   hares.sort((a, b) => a.y - b.y).forEach(h => { h.update(); h.draw(); });
   

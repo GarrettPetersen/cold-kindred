@@ -158,8 +158,35 @@ function updateNecessaryConnections() {
 function generateCluePool(additive = false) {
   const newClues = additive ? [...cluePool] : [];
   const existing = new Set(newClues.map(c => JSON.stringify(c.conn)));
-  function add(text, speakerId, conn, type) {
-    if (newClues.length >= rabbits.length * 0.8) return; // Cap clues at 80% of population
+  
+  function createClueText(p, c, speakerId) {
+    const pRole = p.sex === 'M' ? 'father' : 'mother';
+    const pRoleShort = p.sex === 'M' ? 'dad' : 'mom';
+    const cRole = c.sex === 'M' ? 'son' : 'daughter';
+    const cRoleShort = c.sex === 'M' ? 'boy' : 'girl';
+    const cPossessive = c.sex === 'M' ? 'his' : 'her';
+
+    const options = [];
+    if (speakerId === c.id) {
+      options.push(`${p.firstName} is my ${pRole}.`);
+      options.push(`Have you seen my ${pRoleShort}, ${p.firstName}?`);
+      options.push(`I believe ${p.firstName} is my ${pRoleShort}.`);
+    } else if (speakerId === p.id) {
+      options.push(`${c.firstName} is my ${cRole}.`);
+      options.push(`I'm looking for my ${cRoleShort}, ${c.firstName}.`);
+      options.push(`${c.firstName} belongs to my family.`);
+    } else {
+      options.push(`${p.firstName} is ${c.firstName}'s ${pRoleShort}.`);
+      options.push(`${c.firstName} is ${p.firstName}'s ${cRole}.`);
+      options.push(`${p.firstName} and ${c.firstName} are ${pRoleShort} and ${cRole}.`);
+      options.push(`I saw ${c.firstName} with ${cPossessive} ${pRoleShort}, ${p.firstName}.`);
+    }
+    return pick(options);
+  }
+
+  function add(p, c, speakerId, conn, type) {
+    if (newClues.length >= rabbits.length * 0.8) return;
+    const text = createClueText(p, c, speakerId);
     newClues.push({ id: Math.random().toString(36).substring(2, 11), text, speakerId, conn, type, isRead: false });
   };
 
@@ -168,9 +195,8 @@ function generateCluePool(additive = false) {
     const p = rabbits.find(r => r.id === conn.parentId);
     const c = rabbits.find(r => r.id === conn.childId);
     if (!p || !c) return;
-    const r = random();
-    if (r < 0.5) add(`${p.firstName} is my ${p.sex === 'M' ? 'father' : 'mother'}.`, c.id, conn, 'necessary');
-    else add(`${c.firstName} is my ${c.sex === 'M' ? 'son' : 'daughter'}.`, p.id, conn, 'necessary');
+    const speakerId = random() < 0.5 ? (random() < 0.5 ? p.id : c.id) : pick(rabbits).id;
+    add(p, c, speakerId, conn, 'necessary');
     existing.add(JSON.stringify(conn));
   });
 
@@ -182,7 +208,9 @@ function generateCluePool(additive = false) {
     const conn = availExtra[i];
     const p = rabbits.find(r => r.id === conn.parentId);
     const c = rabbits.find(r => r.id === conn.childId);
-    add(`${p.firstName} is ${c.firstName}'s parent.`, pick(rabbits).id, conn, 'extra');
+    if (!p || !c) continue;
+    const speakerId = random() < 0.2 ? (random() < 0.5 ? p.id : c.id) : pick(rabbits).id;
+    add(p, c, speakerId, conn, 'extra');
   }
   cluePool = newClues;
 }
@@ -287,7 +315,26 @@ class Animal {
     ctx.filter = `hue-rotate(${this.rabbit.tint.hue}deg) saturate(${this.rabbit.tint.saturate}%) brightness(${this.rabbit.tint.brightness}%)`;
     ctx.drawImage(sprites[this.rabbit.species][this.state], this.frame * FRAME_SIZE, d * FRAME_SIZE, FRAME_SIZE, FRAME_SIZE, Math.floor(sx), Math.floor(sy), sz, sz);
     ctx.restore();
-    if (selectedHare === this) { ctx.beginPath(); ctx.ellipse(sx + sz / 2, sy + sz * 0.9, sz * 0.4, sz * 0.2, 0, 0, Math.PI * 2); ctx.strokeStyle = 'white'; ctx.lineWidth = 2 * camera.zoom; ctx.stroke(); }
+    if (selectedHare === this) {
+      const pulse = Math.sin(Date.now() / 200) * 0.1 + 0.9;
+      ctx.beginPath();
+      ctx.ellipse(sx + sz / 2, sy + sz * 0.9, sz * 0.4 * pulse, sz * 0.2 * pulse, 0, 0, Math.PI * 2);
+      ctx.strokeStyle = '#44ff44'; // Green for active link mode
+      ctx.lineWidth = 3 * camera.zoom;
+      ctx.stroke();
+      
+      // Add a small "LINK" text or pulse glow
+      ctx.shadowBlur = 10 * camera.zoom;
+      ctx.shadowColor = '#44ff44';
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      // Draw floating text above head with pulse alpha
+      const textAlpha = Math.sin(Date.now() / 200) * 0.3 + 0.7;
+      ctx.fillStyle = `rgba(68, 255, 68, ${textAlpha})`;
+      ctx.font = `bold ${Math.floor(10 * camera.zoom)}px monospace`;
+      ctx.fillText("SELECT RELATIVE", sx + sz / 2, sy - 40 * camera.zoom);
+    }
     ctx.font = `${Math.floor(12 * camera.zoom)}px monospace`; ctx.fillStyle = 'white'; ctx.textAlign = 'center'; ctx.shadowBlur = 2 * camera.zoom; ctx.shadowColor = 'black';
     ctx.fillText(`${this.rabbit.firstName} (${CURRENT_YEAR - this.rabbit.birthYear})`, sx + sz / 2, sy + sz + 10 * camera.zoom);
     if (this.rabbit.dnaRelation) { ctx.font = `bold ${Math.floor(12 * camera.zoom)}px Arial`; ctx.fillStyle = '#44ff44'; ctx.fillText(`🧬 ${this.rabbit.dnaRelation}`, sx + sz / 2, sy - 10 * camera.zoom); }
@@ -332,7 +379,13 @@ const sPanel = document.getElementById('selection-panel'), sName = document.getE
 
 function updateUI() {
   if (selectedHare) {
-    sPanel.style.display = 'block'; sName.textContent = `${selectedHare.rabbit.firstName} (${CURRENT_YEAR - selectedHare.rabbit.birthYear})`; sSpec.textContent = selectedHare.rabbit.species;
+    sPanel.style.display = 'block'; 
+    sName.textContent = `${selectedHare.rabbit.firstName} (${CURRENT_YEAR - selectedHare.rabbit.birthYear})`; 
+    sSpec.textContent = selectedHare.rabbit.species;
+    
+    const hint = document.getElementById('selection-hint');
+    if (hint) hint.style.display = 'block';
+
     if (dnaTestsRemaining > 0) {
       dnaBtn.style.display = 'block'; accBtn.style.display = 'none';
       if (selectedHare.rabbit.isTested) { dnaBtn.disabled = true; dnaBtn.style.opacity = '0.5'; dnaBtn.textContent = 'ALREADY TESTED'; }
@@ -355,36 +408,54 @@ function init() {
   };
 
   const handleAct = (wx, wy, cx, cy) => {
+    // 1. Check for speech bubble clicks FIRST (they float above/beside animals)
+    for (const hare of hares) {
+      const clue = activeClues.get(hare.rabbit.id);
+      if (clue) {
+        const isR = clue.isRead, m = isR ? 0.6 : 1.0;
+        // World-space bubble bounds
+        const bw = 30 * m, bh = 25 * m;
+        const bx = hare.x + FRAME_SIZE * 1.6;
+        const by = hare.y - 15;
+        
+        // Check if click is inside bubble box (with a bit of padding for easier clicking)
+        if (wx >= bx - 5 && wx <= bx + bw + 5 && wy >= by - bh - 5 && wy <= by + 5) {
+          clue.isRead = true;
+          // Add a notification that stays on screen for 6 seconds
+          notifications.push({ text: clue.text, x: cx, y: cy - 20, timer: 360, timerMax: 360, color: '#ffffff' });
+          return true;
+        }
+      }
+    }
+
+    // 2. Check for "X" button clicks on family tree lines
     const childToParents = new Map(); playerConnections.forEach(c => { if (!childToParents.has(c.childId)) childToParents.set(c.childId, []); childToParents.get(c.childId).push(c); });
     for (const [cid, conns] of childToParents) {
       const child = hares.find(h => h.rabbit.id === cid); if (!child) continue;
       const py = conns.reduce((s, c) => s + (hares.find(h => h.rabbit.id === c.parentId).y + FRAME_SIZE), 0) / conns.length, midY = (py + child.y + FRAME_SIZE) / 2;
       for (const c of conns) {
         const p = hares.find(h => h.rabbit.id === c.parentId); if (selectedHare !== p && selectedHare !== child) continue;
-        if (Math.hypot(wx - (p.x + FRAME_SIZE), wy - (p.y + FRAME_SIZE + midY) / 2) < 15 / camera.zoom) { playerConnections.splice(playerConnections.indexOf(c), 1); updateTreeDiagram(); return true; }
-      }
-    }
-    const clicked = hares.find(h => wx >= h.x && wx <= h.x + FRAME_SIZE * 2 && wy >= h.y && wy <= h.y + FRAME_SIZE * 2);
-    if (clicked) {
-      const clue = activeClues.get(clicked.rabbit.id);
-      if (clue) {
-        // Corrected hit detection for speech bubble
-        const isR = clue.isRead, m = isR ? 0.6 : 1.0;
-        // World-space bubble center (matching the 'draw' offsets)
-        const bubbleWorldX = clicked.x + FRAME_SIZE * 1.6;
-        const bubbleWorldY = clicked.y - 15 - (25 * m) / 2;
-        const hitRadius = (25 * m) / camera.zoom; // Increase hit area relative to zoom
-        
-        if (Math.hypot(wx - bubbleWorldX, wy - bubbleWorldY) < Math.max(20, hitRadius)) {
-          clue.isRead = true; 
-          notifications.push({ text: clue.text, x: cx, y: cy - 40, timer: 240, color: '#fff' }); 
+        if (Math.hypot(wx - (p.x + FRAME_SIZE), wy - (p.y + FRAME_SIZE + midY) / 2) < 25 / camera.zoom) { 
+          playerConnections.splice(playerConnections.indexOf(c), 1); 
+          updateTreeDiagram(); 
+          notifications.push({ text: "Removed", x: cx, y: cy - 20, timer: 60, timerMax: 60, color: '#f44' });
           return true; 
         }
       }
+    }
+
+    // 3. Check for animal selection/linking
+    const clicked = hares.find(h => wx >= h.x && wx <= h.x + FRAME_SIZE * 2 && wy >= h.y && wy <= h.y + FRAME_SIZE * 2);
+    if (clicked) {
       if (selectedHare && selectedHare !== clicked) {
         const p = selectedHare.rabbit.birthYear <= clicked.rabbit.birthYear ? selectedHare : clicked, c = p === selectedHare ? clicked : selectedHare;
-        if (playerConnections.some(conn => conn.childId === c.rabbit.id && rabbits.find(r => r.id === conn.parentId).sex === p.rabbit.sex)) notifications.push({ text: `${c.rabbit.firstName} already has a ${p.rabbit.sex === 'M' ? 'father' : 'mother'}!`, x: cx, y: cy, timer: 120 });
-        else if (!playerConnections.some(conn => conn.parentId === p.rabbit.id && conn.childId === c.rabbit.id)) { playerConnections.push({ parentId: p.rabbit.id, childId: c.rabbit.id }); updateTreeDiagram(); }
+        if (playerConnections.some(conn => conn.childId === c.rabbit.id && rabbits.find(r => r.id === conn.parentId).sex === p.rabbit.sex)) {
+          notifications.push({ text: `${c.rabbit.firstName} already has a ${p.rabbit.sex === 'M' ? 'father' : 'mother'}!`, x: cx, y: cy, timer: 120, timerMax: 120 });
+        } else if (!playerConnections.some(conn => conn.parentId === p.rabbit.id && conn.childId === c.rabbit.id)) { 
+          playerConnections.push({ parentId: p.rabbit.id, childId: c.rabbit.id }); 
+          updateTreeDiagram(); 
+          notifications.push({ text: "Linked!", x: cx, y: cy - 20, timer: 60, timerMax: 60, color: '#44ff44' });
+        }
         selectedHare = null;
       } else selectedHare = clicked;
       updateUI(); return true;
@@ -462,7 +533,24 @@ function loop() {
 
   hares.sort((a, b) => a.y - b.y).forEach(h => { h.update(); h.draw(); });
   for (let i = notifications.length - 1; i >= 0; i--) {
-    const n = notifications[i]; ctx.font = 'bold 16px Arial'; ctx.fillStyle = n.color || '#f44'; ctx.globalAlpha = Math.min(1, n.timer / 30); ctx.textAlign = 'center'; ctx.fillText(n.text, n.x, n.y - (120 - n.timer) * 0.5); ctx.globalAlpha = 1; if (--n.timer <= 0) notifications.splice(i, 1);
+    const n = notifications[i]; 
+    ctx.font = 'bold 18px Arial'; 
+    ctx.fillStyle = n.color || '#f44'; 
+    ctx.globalAlpha = Math.min(1, n.timer / 30); 
+    ctx.textAlign = 'center'; 
+    ctx.shadowBlur = 4;
+    ctx.shadowColor = 'black';
+    
+    // Calculate floating Y with clamping to keep it on screen
+    const maxTimer = n.timerMax || 360;
+    const floatOffset = (maxTimer - n.timer) * 0.2;
+    const targetY = n.y - floatOffset;
+    const clampedY = Math.max(40, targetY); // Ensure at least 40px from top
+    
+    ctx.fillText(n.text, n.x, clampedY); 
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1; 
+    if (--n.timer <= 0) notifications.splice(i, 1);
   }
   requestAnimationFrame(loop);
 }

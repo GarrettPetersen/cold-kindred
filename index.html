@@ -9,12 +9,15 @@
   <body>
     <canvas id="gameCanvas"></canvas>
     <div id="ui-overlay" style="position: absolute; top: 20px; right: 20px; pointer-events: none; font-family: monospace; color: white;">
-      <div id="status-panel" style="background: rgba(0,0,0,0.7); padding: 10px 15px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); margin-bottom: 10px; text-align: right;">
+      <div id="status-panel" style="background: rgba(0,0,0,0.7); padding: 10px 15px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); margin-bottom: 10px; text-align: right; width: 200px; box-sizing: border-box;">
         DNA TESTS: <span id="tests-count" style="color: #44ff44; font-weight: bold;">3</span>
       </div>
-      <div id="selection-panel" style="display: none; background: rgba(0,0,0,0.7); padding: 15px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); pointer-events: auto;">
-        <h2 id="selected-name" style="margin: 0 0 10px 0; font-size: 18px;"></h2>
+      <div id="selection-panel" style="display: none; background: rgba(0,0,0,0.7); padding: 15px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); pointer-events: auto; width: 200px; box-sizing: border-box;">
+        <h2 id="selected-name" style="margin: 0 0 10px 0; font-size: 18px; word-wrap: break-word;"></h2>
         <p id="selected-species" style="margin: 0 0 15px 0; font-size: 14px; opacity: 0.8;"></p>
+        <div id="selection-hint" style="background: rgba(255,255,255,0.1); padding: 8px; border-radius: 4px; font-size: 12px; color: #ccc; margin-bottom: 15px; border-left: 3px solid #44ff44; line-height: 1.4;">
+          Click another animal to link them as parent & child.
+        </div>
         <button id="dna-test-btn" style="background: #44ff44; color: black; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: bold; width: 100%; margin-bottom: 8px;">DNA TEST</button>
         <button id="accuse-btn" style="background: #ff4444; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: bold; width: 100%; opacity: 0.5;">ACCUSE</button>
       </div>

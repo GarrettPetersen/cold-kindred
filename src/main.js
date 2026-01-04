@@ -9,22 +9,34 @@ const CURRENT_YEAR = 2025;
 // --- Seeded Random ---
 function getDailySeed() {
   const now = new Date();
-  const dateStr = now.toISOString().split('T')[0];
+  const dateStr = now.toLocaleDateString('en-CA'); // YYYY-MM-DD
   let hash = 0;
   for (let i = 0; i < dateStr.length; i++) {
     hash = (hash << 5) - hash + dateStr.charCodeAt(i);
     hash |= 0;
   }
-  return Math.abs(hash);
+  return { seed: Math.abs(hash), dateStr };
 }
 
-const seed = getDailySeed();
+const { seed, dateStr: currentDateStr } = getDailySeed();
 let rngState = seed;
 function random() {
   rngState = (rngState * 1664525 + 1013904223) % 4294967296;
   return rngState / 4294967296;
 }
 function pick(arr) { return arr[Math.floor(random() * arr.length)]; }
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function getHSL(r) {
+  if (!r || !r.tint) return '#fff';
+  return `hsl(${r.tint.hue}, ${r.tint.saturate}%, ${r.tint.brightness}%)`;
+}
 
 // --- Names ---
 const MALE_NAMES = ['James', 'John', 'Robert', 'Michael', 'William', 'David', 'Richard', 'Joseph', 'Thomas', 'Charles', 'Christopher', 'Daniel', 'Matthew', 'Anthony', 'Mark', 'Donald', 'Steven', 'Paul', 'Andrew', 'Joshua', 'Kenneth', 'Kevin', 'Brian', 'George', 'Timothy', 'Ronald', 'Edward', 'Jason', 'Jeffrey', 'Ryan', 'Jacob', 'Gary', 'Nicholas', 'Eric', 'Jonathan', 'Stephen', 'Larry', 'Justin', 'Scott', 'Brandon', 'Benjamin', 'Samuel', 'Gregory', 'Frank', 'Alexander', 'Raymond', 'Patrick', 'Jack', 'Dennis', 'Jerry', 'Tyler', 'Aaron', 'Jose', 'Adam', 'Nathan', 'Henry', 'Zachary', 'Douglas', 'Peter', 'Kyle', 'Noah', 'Ethan', 'Jeremy', 'Walter', 'Christian', 'Keith', 'Roger', 'Terry', 'Austin', 'Sean', 'Gerald', 'Carl', 'Harold', 'Dylan', 'Arthur', 'Lawrence', 'Jordan', 'Jesse', 'Bryan', 'Billy', 'Bruce', 'Gabriel', 'Logan', 'Alan', 'Juan', 'Roy', 'Ralph', 'Randy', 'Eugene', 'Vincent', 'Bobby', 'Russell', 'Louis', 'Philip', 'Johnny', 'Miguel', 'Caleb', 'Lucas', 'Alfred', 'Bradley', 'Oliver', 'Liam', 'Mason', 'Elias', 'Hudson', 'Hunter', 'Asher', 'Silas', 'Leo', 'Finn', 'Arlo', 'Milo', 'Felix', 'Jasper', 'Oscar', 'Theo', 'Hugo', 'Otto', 'Barnaby', 'Bartholomew', 'Benedict', 'Bram', 'Casper', 'Clement', 'Cyril', 'Dexter', 'Edmund', 'Ernest', 'Atticus', 'Augustus', 'Basil', 'Bear', 'Beau', 'Beckett', 'Bennett', 'Brooks', 'Caspian', 'Cato', 'Cedric', 'Chester', 'Conrad', 'Darwin', 'Dash', 'Dorian', 'Elio', 'Emmett', 'Enzo', 'Evander', 'Ezra', 'Flynn', 'Gideon', 'Gulliver', 'Hamish', 'Harvey', 'Ilo', 'Indigo', 'Jude', 'Julian', 'Kit', 'Knox', 'Lachlan', 'Leander', 'Linus', 'Lucian', 'Magnus', 'Malachi', 'Monty', 'Nico', 'Orion', 'Otis', 'Otto', 'Pascal', 'Phineas', 'Quill', 'Rafe', 'Remy', 'Rory', 'Rufus', 'Sacha', 'Sebastian', 'Stellan', 'Sylvan', 'Teddy', 'Tobias', 'Wilder', 'Xander', 'Zane', 'Ziggy'];
@@ -43,26 +55,36 @@ for (let i = 1; i <= 6; i++) {
 
 let assetsLoaded = 0;
 const TOTAL_ASSETS = SPECIES.length * 4 + 6;
-function onAssetLoad() { if (++assetsLoaded === TOTAL_ASSETS) init(); }
+function onAssetLoad() { 
+  if (++assetsLoaded === TOTAL_ASSETS) init(); 
+}
 
-grassSprites.forEach(img => img.onload = onAssetLoad);
+grassSprites.forEach(img => { img.onload = onAssetLoad; img.onerror = onAssetLoad; });
+for (let i = 1; i <= 6; i++) {
+  grassSprites[i-1].src = `/assets/environment/5 Grass/${i}.png`;
+}
+
 SPECIES.forEach(s => {
   const walkFile = s === 'Fox' ? 'Fox_walk_with_shadow.png' : `${s}_Walk_with_shadow.png`;
   const runFile = s === 'Black_grouse' ? 'Black_grouse_Flight_with_shadow.png' : `${s}_Run_with_shadow.png`;
+  
+  // Assign handlers before setting src to avoid race conditions with cache
+  sprites[s].idle.onload = sprites[s].walk.onload = sprites[s].run.onload = sprites[s].death.onload = onAssetLoad;
+  sprites[s].idle.onerror = sprites[s].walk.onerror = sprites[s].run.onerror = sprites[s].death.onerror = onAssetLoad;
+
   sprites[s].idle.src = `/assets/${s}/${s}_Idle_with_shadow.png`;
   sprites[s].walk.src = `/assets/${s}/${walkFile}`;
   sprites[s].run.src = `/assets/${s}/${runFile}`;
   sprites[s].death.src = `/assets/${s}/${s}_Death_with_shadow.png`;
-  sprites[s].idle.onload = sprites[s].walk.onload = sprites[s].run.onload = sprites[s].death.onload = onAssetLoad;
 });
 
 // --- State ---
 const rabbits = [];
 let nextRabbitId = 1;
-const playerConnections = [];
+let playerConnections = [];
 let selectedHare = null;
 let killerId = null;
-let victim = { name: '', species: '', sex: '' };
+let victim = { name: '', species: '', sex: '', tint: null };
 let dnaTestsRemaining = 3;
 const notifications = [];
 let necessaryConnections = [];
@@ -73,6 +95,147 @@ const CLUE_INTERVAL = 120;
 const hares = [];
 const envDetails = [];
 const clueQueue = [];
+let caseLog = []; // Stores strings like "Name: Clue text"
+let gameState = { isFinished: false, wasSuccess: false };
+
+// --- Persistence & Stats ---
+function getStats() {
+  const stats = localStorage.getItem('mysteryFarm_stats');
+  return stats ? JSON.parse(stats) : { history: {} };
+}
+
+function saveStats(stats) {
+  localStorage.setItem('mysteryFarm_stats', JSON.stringify(stats));
+}
+
+function calculateStreaks() {
+  const stats = getStats();
+  const dates = Object.keys(stats.history).sort();
+  if (dates.length === 0) return { win: 0, att: 0, maxWin: 0, maxAtt: 0 };
+
+  let currWin = 0, currAtt = 0, maxWin = 0, maxAtt = 0;
+  
+  // Calculate historical maxes
+  let tempWin = 0, tempAtt = 0;
+  for (let i = 0; i < dates.length; i++) {
+    const res = stats.history[dates[i]];
+    tempAtt++;
+    maxAtt = Math.max(maxAtt, tempAtt);
+    
+    if (res.status === 'success') {
+      tempWin++;
+      maxWin = Math.max(maxWin, tempWin);
+    } else {
+      tempWin = 0;
+    }
+
+    if (i < dates.length - 1) {
+      const d1 = new Date(dates[i]);
+      const d2 = new Date(dates[i+1]);
+      if ((d2 - d1) / 86400000 > 1) {
+        tempWin = 0;
+        tempAtt = 0;
+      }
+    }
+  }
+
+  // Calculate current streaks
+  const today = new Date(currentDateStr);
+  let checkDate = today;
+  
+  while (true) {
+    const ds = checkDate.toLocaleDateString('en-CA');
+    const res = stats.history[ds];
+    if (res) {
+      currAtt++;
+      if (res.status === 'success') currWin++;
+      else break; // Win streak broken
+    } else if (ds !== currentDateStr) {
+      break; // Gap found
+    }
+    checkDate = new Date(checkDate.getTime() - 86400000);
+  }
+
+  return { win: currWin, att: currAtt, maxWin, maxAtt };
+}
+
+function saveGame() {
+  const data = {
+    date: currentDateStr,
+    dnaTestsRemaining,
+    playerConnections,
+    caseLog,
+    isFinished: gameState.isFinished,
+    wasSuccess: gameState.wasSuccess,
+    activeClueIds: Array.from(activeClues.values()).map(c => ({ id: c.id, speakerId: Array.from(activeClues.keys()).find(k => activeClues.get(k) === c), isRead: c.isRead, generatedText: c.generatedText }))
+  };
+  localStorage.setItem('mysteryFarm_current', JSON.stringify(data));
+  
+  if (gameState.isFinished) {
+    const stats = getStats();
+    stats.history[currentDateStr] = { status: gameState.wasSuccess ? 'success' : 'failure' };
+    saveStats(stats);
+  }
+}
+
+function loadGame() {
+  const saved = localStorage.getItem('mysteryFarm_current');
+  if (!saved) return false;
+  
+  const data = JSON.parse(saved);
+  if (data.date !== currentDateStr) {
+    const stats = getStats();
+    if (!stats.history[data.date]) {
+      stats.history[data.date] = { status: 'incomplete' };
+      saveStats(stats);
+    }
+    return false;
+  }
+  
+  // Clear the transcript UI before re-hydrating
+  const list = document.getElementById('transcript-list');
+  if (list) list.innerHTML = '';
+  const latest = document.getElementById('latest-clue');
+  if (latest) latest.innerHTML = 'Case Log: No clues yet...';
+
+  dnaTestsRemaining = data.dnaTestsRemaining ?? 3;
+  playerConnections = data.playerConnections || [];
+  caseLog = data.caseLog || [];
+  gameState.isFinished = data.isFinished || false;
+  gameState.wasSuccess = data.wasSuccess || false;
+  
+  if (data.activeClueIds) {
+    data.activeClueIds.forEach(cData => {
+      const clue = cluePool.find(cp => cp.id === cData.id);
+      if (clue) {
+        clue.isRead = cData.isRead;
+        clue.generatedText = cData.generatedText;
+        activeClues.set(cData.speakerId, clue);
+      }
+    });
+  }
+  
+  caseLog.forEach(entry => {
+    const splitIdx = entry.indexOf(': ');
+    if (splitIdx === -1) {
+      // System message
+      updateTranscriptUI(entry, null);
+      return;
+    }
+    const name = entry.substring(0, splitIdx);
+    const text = entry.substring(splitIdx + 2);
+    if (name === "Case File") {
+      updateTranscriptUI(text, null);
+    } else {
+      const speaker = rabbits.find(r => r.firstName === name);
+      if (speaker) updateTranscriptUI(text, speaker.id);
+    }
+  });
+  if (tCount) tCount.textContent = dnaTestsRemaining;
+  updateTreeDiagram();
+  
+  return true;
+}
 
 const camera = { x: 0, y: 0, zoom: 1.0, minZoom: 0.1, maxZoom: 3.0 };
 const input = { 
@@ -224,30 +387,35 @@ function generateCluePool(additive = false) {
       const spouse = rabbits.find(r => r.id === spouseId);
       if (spouse) {
         const gid = Math.random().toString(36).substring(2, 7);
+        // Sequential: Setup (Direct) then Payoff (Inference)
         addRawClue({ parentId: spouse.id, childId: c.id }, 'necessary', null, gid);
         addRawClue({ type: 'couple', p1: p.id, p2: spouse.id }, 'necessary', null, gid);
       } else {
         addRawClue(conn, 'necessary', c.id);
       }
-    } else {
+    } else if (r < 0.85) {
       // Strategy 3: Sibling Inference
       const siblings = rabbits.filter(r => (r.fatherId === p.id || r.motherId === p.id) && r.id !== c.id);
       if (siblings.length > 0) {
         const sib = pick(siblings);
         const gid = Math.random().toString(36).substring(2, 7);
-        addRawClue({ type: 'sibling', a: c.id, b: sib.id }, 'necessary', c.id, gid);
+        // Sequential: Setup (Direct) then Payoff (Inference)
         addRawClue({ parentId: p.id, childId: sib.id }, 'necessary', null, gid);
+        addRawClue({ type: 'sibling', a: c.id, b: sib.id }, 'necessary', c.id, gid);
       } else {
-        // Strategy 4: Grandparent Inference
-        const gpId = p.fatherId || p.motherId;
-        const gp = rabbits.find(r => r.id === gpId);
-        if (gp) {
-          const gid = Math.random().toString(36).substring(2, 7);
-          addRawClue({ type: 'grandparent', gp: gp.id, gc: c.id }, 'necessary', c.id, gid);
-          addRawClue({ parentId: gp.id, childId: p.id }, 'necessary', null, gid);
-        } else {
-          addRawClue(conn, 'necessary', p.id);
-        }
+        addRawClue(conn, 'necessary', c.id);
+      }
+    } else {
+      // Strategy 4: Grandparent Inference
+      const gpId = p.fatherId || p.motherId;
+      const gp = rabbits.find(r => r.id === gpId);
+      if (gp) {
+        const gid = Math.random().toString(36).substring(2, 7);
+        // Sequential: Setup (Direct) then Payoff (Inference)
+        addRawClue({ parentId: gp.id, childId: p.id }, 'necessary', null, gid);
+        addRawClue({ type: 'grandparent', gp: gp.id, gc: c.id }, 'necessary', c.id, gid);
+      } else {
+        addRawClue(conn, 'necessary', p.id);
       }
     }
     existing.add(JSON.stringify(conn));
@@ -291,28 +459,37 @@ function generateCluePool(additive = false) {
 
 function generateClueText(clue, speakerId) {
   const s = rabbits.find(r => r.id === speakerId);
+  const mark = (id) => {
+    const r = rabbits.find(rb => rb.id === id);
+    return `[[${id}:${r.firstName}]]`;
+  };
   
   if (clue.conn.type === 'couple') {
     const p1 = rabbits.find(r => r.id === clue.conn.p1);
     const p2 = rabbits.find(r => r.id === clue.conn.p2);
-    return pick([`${p1.firstName} and ${p2.firstName} are such a lovely couple.`, `I saw ${p1.firstName} and ${p2.firstName} together recently.`, `Aren't ${p1.firstName} and ${p2.firstName} just perfect for each other?`]);
+    return pick([
+      `${mark(p1.id)} and ${mark(p2.id)} have a family together.`,
+      `I've seen ${mark(p1.id)} and ${mark(p2.id)} with their little ones.`,
+      `Aren't ${mark(p1.id)} and ${mark(p2.id)} such a devoted pair of parents?`,
+      `${mark(p1.id)} and ${mark(p2.id)} are definitely building a nest together.`
+    ]);
   }
   
   if (clue.conn.type === 'sibling') {
     const a = rabbits.find(r => r.id === clue.conn.a);
     const b = rabbits.find(r => r.id === clue.conn.b);
     const bRole = b.sex === 'M' ? 'brother' : 'sister';
-    if (speakerId === a.id) return pick([`${b.firstName} is my ${bRole}.`, `Have you seen my ${bRole}, ${b.firstName}?`, `I grew up with ${b.firstName}.`]);
-    if (speakerId === b.id) return pick([`${a.firstName} is my ${a.sex === 'M' ? 'brother' : 'sister'}.`, `I'm looking for my ${a.sex === 'M' ? 'brother' : 'sister'}, ${a.firstName}.`]);
-    return pick([`${a.firstName} and ${b.firstName} are siblings.`, `I believe ${a.firstName} and ${b.firstName} are ${a.sex === b.sex ? (a.sex === 'M' ? 'brothers' : 'sisters') : 'brother and sister'}.`]);
+    if (speakerId === a.id) return pick([`${mark(b.id)} is my ${bRole}.`, `Have you seen my ${bRole}, ${mark(b.id)}?`, `I grew up with ${mark(b.id)}.`]);
+    if (speakerId === b.id) return pick([`${mark(a.id)} is my ${a.sex === 'M' ? 'brother' : 'sister'}.`, `I'm looking for my ${a.sex === 'M' ? 'brother' : 'sister'}, ${mark(a.id)}.`]);
+    return pick([`${mark(a.id)} and ${mark(b.id)} are siblings.`, `I believe ${mark(a.id)} and ${mark(b.id)} are ${a.sex === b.sex ? (a.sex === 'M' ? 'brothers' : 'sisters') : 'brother and sister'}.`]);
   }
 
   if (clue.conn.type === 'grandparent') {
     const gp = rabbits.find(r => r.id === clue.conn.gp);
     const gc = rabbits.find(r => r.id === clue.conn.gc);
     const gpRole = gp.sex === 'M' ? 'grandfather' : 'grandmother';
-    if (speakerId === gc.id) return pick([`${gp.firstName} is my ${gpRole}.`, `I believe ${gp.firstName} is my ${gpRole}.`, `My ${gpRole} is ${gp.firstName}.`]);
-    return pick([`${gp.firstName} is ${gc.firstName}'s ${gpRole}.`, `${gc.firstName} is ${gp.firstName}'s ${gc.sex === 'M' ? 'grandson' : 'granddaughter'}.`]);
+    if (speakerId === gc.id) return pick([`${mark(gp.id)} is my ${gpRole}.`, `I believe ${mark(gp.id)} is my ${gpRole}.`, `My ${gpRole} is ${mark(gp.id)}.`]);
+    return pick([`${mark(gp.id)} is ${mark(gc.id)}'s ${gpRole}.`, `${mark(gc.id)} is ${mark(gp.id)}'s ${gc.sex === 'M' ? 'grandson' : 'granddaughter'}.`]);
   }
 
   // Standard parent-child connection
@@ -324,21 +501,28 @@ function generateClueText(clue, speakerId) {
   const cRoleShort = c.sex === 'M' ? 'boy' : 'girl';
   const cPoss = c.sex === 'M' ? 'his' : 'her';
 
-  if (speakerId === c.id) return pick([`${p.firstName} is my ${pRole}.`, `Have you seen my ${pRoleShort}, ${p.firstName}?`, `I believe ${p.firstName} is my ${pRoleShort}.`]);
-  if (speakerId === p.id) return pick([`${c.firstName} is my ${cRole}.`, `I'm looking for my ${cRoleShort}, ${c.firstName}.`, `${c.firstName} belongs to my family.`]);
+  if (speakerId === c.id) return pick([`${mark(p.id)} is my ${pRole}.`, `Have you seen my ${pRoleShort}, ${mark(p.id)}?`, `I believe ${mark(p.id)} is my ${pRoleShort}.`]);
+  if (speakerId === p.id) return pick([`${mark(c.id)} is my ${cRole}.`, `I'm looking for my ${cRoleShort}, ${mark(c.id)}.`, `${mark(c.id)} belongs to my family.`]);
   
-  return pick([`${p.firstName} is ${c.firstName}'s ${pRoleShort}.`, `${c.firstName} is ${p.firstName}'s ${cRole}.`, `I saw ${c.firstName} with ${cPoss} ${pRoleShort}, ${p.firstName}.`]);
+  return pick([`${mark(p.id)} is ${mark(c.id)}'s ${pRoleShort}.`, `${mark(c.id)} is ${mark(p.id)}'s ${cRole}.`, `I saw ${mark(c.id)} with ${cPoss} ${pRoleShort}, ${mark(p.id)}.`]);
 }
 
 // --- Simulation ---
 function runSimulation() {
-  const mPool = [...MALE_NAMES].sort(() => random() - 0.5);
-  const fPool = [...FEMALE_NAMES].sort(() => random() - 0.5);
+  rabbits.length = 0;
+  nextRabbitId = 1;
+  const mPool = shuffle([...MALE_NAMES]);
+  const fPool = shuffle([...FEMALE_NAMES]);
   
   // Pick victim before populating the world
   const vSex = random() < 0.5 ? 'M' : 'F';
   const vPool = vSex === 'M' ? mPool : fPool;
-  victim = { name: vPool.pop(), species: pick(SPECIES), sex: vSex };
+  victim = { 
+    name: vPool.pop(), 
+    species: pick(SPECIES), 
+    sex: vSex,
+    tint: { hue: random() * 360, saturate: 70 + random() * 30, brightness: 70 + random() * 20 }
+  };
   
   const g0 = [];
   // Founders further back to prevent negative ages. Shrunk to 10 for smaller population.
@@ -352,8 +536,8 @@ function runSimulation() {
   let prev = g0;
   for (let gen = 1; gen <= 4; gen++) {
     const next = [];
-    let ms = prev.filter(r => r.sex === 'M').sort(() => random() - 0.5);
-    let fs = prev.filter(r => r.sex === 'F').sort(() => random() - 0.5);
+    let ms = shuffle(prev.filter(r => r.sex === 'M'));
+    let fs = shuffle(prev.filter(r => r.sex === 'F'));
     const pairs = Math.min(ms.length, fs.length);
     for (let i = 0; i < pairs; i++) {
       const children = 1 + Math.floor(random() * 3);
@@ -371,7 +555,7 @@ function runSimulation() {
     prev = next;
   }
 
-  const cands = rabbits.filter(r => r.generation >= 3).sort(() => random() - 0.5);
+  const cands = shuffle(rabbits.filter(r => r.generation >= 3));
   let found = false;
   for (const cand of cands) {
     const killer = cand;
@@ -391,8 +575,7 @@ function runSimulation() {
       let maxDist = -1;
       
       // Sample a subset if there are too many to avoid O(N^2) performance issues
-      const sampleSize = Math.min(relatives.length, 20);
-      const sample = relatives.sort(() => random() - 0.5).slice(0, sampleSize);
+      const sample = shuffle([...relatives]).slice(0, 20);
       
       for (let i = 0; i < sample.length; i++) {
         for (let j = i + 1; j < sample.length; j++) {
@@ -417,9 +600,9 @@ function runSimulation() {
 
   if (!found) {
     killerId = (cands[0] || rabbits[rabbits.length - 1]).id;
-    const others = rabbits.filter(r => r.id !== killerId)
+    const others = shuffle(rabbits.filter(r => r.id !== killerId)
       .map(r => ({ r, common: getCommonAncestors(killerId, r.id) }))
-      .filter(e => e.common.length > 0)
+      .filter(e => e.common.length > 0))
       .sort((a, b) => (b.common[0].dist1 + b.common[0].dist2) - (a.common[0].dist1 + a.common[0].dist2));
     
     if (others.length >= 2) {
@@ -429,6 +612,15 @@ function runSimulation() {
   }
   updateNecessaryConnections();
   generateCluePool();
+
+  // Initial Case Log entry
+  const killer = rabbits.find(r => r.id === killerId);
+  const kSexLabel = killer.sex === 'M' ? 'male' : 'female';
+  const kSpeciesLabel = killer.species.replace('_', ' ');
+  const vSpeciesLabel = victim.species.replace('_', ' ');
+  const initialEntry = `Case File: <span style="color: ${getHSL(victim)}; font-weight: bold;">${victim.name} the ${vSpeciesLabel}</span> was found dead. DNA evidence indicates the killer is a ${kSexLabel} ${kSpeciesLabel}.`;
+  caseLog.push(initialEntry);
+  updateTranscriptUI(initialEntry.replace("Case File: ", ""), null);
 }
 
 // --- Animal Sprite ---
@@ -501,7 +693,11 @@ class Animal {
       ctx.fillText("SELECT RELATIVE", sx + sz / 2, sy - 40 * camera.zoom);
     }
     const fontSize = Math.max(10, Math.floor(12 * camera.zoom));
-    ctx.font = `${fontSize}px monospace`; ctx.fillStyle = 'white'; ctx.textAlign = 'center'; ctx.shadowBlur = 2; ctx.shadowColor = 'black';
+    ctx.font = `${fontSize}px monospace`; 
+    ctx.fillStyle = getHSL(this.rabbit);
+    ctx.textAlign = 'center'; 
+    ctx.shadowBlur = 2; 
+    ctx.shadowColor = 'black';
     ctx.fillText(`${this.rabbit.firstName} (${CURRENT_YEAR - this.rabbit.birthYear})`, sx + sz / 2, sy + sz + 10 * camera.zoom);
     if (this.rabbit.dnaRelation) { 
       ctx.font = `bold ${fontSize}px Arial`; ctx.fillStyle = '#44ff44'; 
@@ -560,6 +756,174 @@ function updateUI() {
   } else sPanel.style.display = 'none';
 }
 
+function updateTranscriptUI(newEntry, speakerId) {
+  const container = document.getElementById('transcript-container');
+  const list = document.getElementById('transcript-list');
+  const latest = document.getElementById('latest-clue');
+  
+  function parseText(txt) {
+    return txt.replace(/\[\[(\d+):(.*?)\]\]/g, (match, id, name) => {
+      const r = rabbits.find(rb => rb.id == id);
+      return `<span style="color: ${getHSL(r)}; font-weight: bold;">${name}</span>`;
+    });
+  }
+
+  if (newEntry) {
+    const speaker = rabbits.find(r => r.id === speakerId);
+    const speakerPart = speaker ? `<span style="color: ${getHSL(speaker)}; font-weight: bold;">${speaker.firstName}</span>: ` : "";
+    const parsedText = parseText(newEntry);
+    
+    latest.innerHTML = speaker ? `Case Log: ${speakerPart}${parsedText}` : `Case Log: ${parsedText}`;
+    
+    const entryEl = document.createElement('div');
+    entryEl.style.marginBottom = '10px';
+    if (speaker) {
+      entryEl.style.borderLeft = `3px solid ${getHSL(speaker)}`;
+      entryEl.style.paddingLeft = '10px';
+    } else {
+      entryEl.style.borderLeft = `3px solid #ff4444`;
+      entryEl.style.paddingLeft = '10px';
+      entryEl.style.fontStyle = 'italic';
+      entryEl.style.opacity = '0.9';
+    }
+    entryEl.innerHTML = `${speakerPart}${parsedText}`;
+    list.appendChild(entryEl);
+    list.scrollTop = list.scrollHeight;
+  }
+}
+
+let gameOverStep = 0;
+let gameOverAnimTimer = 0;
+let gameOverHandle = null;
+let killerQuote = "";
+
+const VILLAIN_QUOTES = [
+  "I would have got away with it if it weren't for all the DNA evidence!",
+  "Curses! My genetic footprint betrayed me!",
+  "I thought I cleaned that weapon thoroughly...",
+  "Genealogy? In a clover field? Unthinkable!",
+  "My family tree has always been a bit rotten.",
+  "I only did it for the prime clover patch!"
+];
+
+function showGameOver(isWin) {
+  const modal = document.getElementById('game-over');
+  const title = document.getElementById('game-over-title');
+  const msg = document.getElementById('game-over-msg');
+  const nextBtn = document.getElementById('game-over-next');
+  const restartBtn = document.getElementById('game-over-restart');
+  const gCanvas = document.getElementById('gameOverCanvas');
+  const gCtx = gCanvas.getContext('2d');
+  
+  // Save game state
+  gameState.isFinished = true;
+  gameState.wasSuccess = isWin;
+  saveGame();
+
+  modal.style.display = 'flex';
+  if (gameOverHandle) cancelAnimationFrame(gameOverHandle);
+  
+  const killer = rabbits.find(r => r.id === killerId);
+  if (!killerQuote) killerQuote = pick(VILLAIN_QUOTES);
+
+  const stats = calculateStreaks();
+  const statsLine = `<br><br><div style="font-size: 14px; opacity: 0.8; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 15px;">
+    WIN STREAK: ${stats.win} (MAX: ${stats.maxWin})<br>
+    ATTEMPT STREAK: ${stats.att} (MAX: ${stats.maxAtt})
+  </div>`;
+
+  function gLoop() {
+    gCtx.clearRect(0, 0, gCanvas.width, gCanvas.height);
+    gCtx.imageSmoothingEnabled = false;
+    const centerX = gCanvas.width / 2;
+    const centerY = gCanvas.height / 2;
+
+    if (!isWin) {
+      title.textContent = "WRONG SUSPECT!";
+      title.style.color = "#ff4444";
+      const innocent = selectedHare.rabbit;
+      msg.innerHTML = `<span style="color: ${getHSL(innocent)}; font-weight: bold;">${innocent.firstName}</span> was innocent. It was <span style="color: ${getHSL(killer)}; font-weight: bold;">${killer.firstName}</span>!${statsLine}`;
+      
+      gameOverAnimTimer += 0.1;
+      const frame = Math.floor(gameOverAnimTimer) % 6;
+      gCtx.save();
+      gCtx.filter = `hue-rotate(${killer.tint.hue}deg) saturate(${killer.tint.saturate}%) brightness(${killer.tint.brightness}%)`;
+      gCtx.drawImage(sprites[killer.species].walk, frame * 32, 0, 32, 32, centerX - 32, centerY - 32, 64, 64);
+      gCtx.restore();
+      
+      nextBtn.style.display = "none";
+      restartBtn.style.display = "block";
+      return;
+    }
+
+    if (gameOverStep === 0) {
+      title.textContent = "CASE SOLVED!";
+      title.style.color = "#44ff44";
+      msg.innerHTML = `You found the killer! <span style="color: ${getHSL(killer)}; font-weight: bold;">${killer.firstName}</span> has been apprehended.`;
+      
+      gCtx.save();
+      gCtx.filter = `hue-rotate(${killer.tint.hue}deg) saturate(${killer.tint.saturate}%) brightness(${killer.tint.brightness}%)`;
+      gCtx.drawImage(sprites[killer.species].idle, 0, 0, 32, 32, centerX - 32, centerY - 32, 64, 64);
+      gCtx.restore();
+      
+      nextBtn.textContent = "NEXT";
+    } else if (gameOverStep === 1) {
+      title.textContent = "THE CONFESSION";
+      msg.innerHTML = `<span style="color: ${getHSL(killer)}; font-weight: bold;">${killer.firstName}</span>: "${killerQuote}"`;
+      
+      gCtx.save();
+      gCtx.filter = `hue-rotate(${killer.tint.hue}deg) saturate(${killer.tint.saturate}%) brightness(${killer.tint.brightness}%)`;
+      gCtx.drawImage(sprites[killer.species].idle, 0, 0, 32, 32, centerX - 32, centerY - 32, 64, 64);
+      gCtx.restore();
+    } else if (gameOverStep === 2) {
+      title.textContent = "JUSTICE";
+      msg.textContent = "Now it's time to execute the killer.";
+      
+      gameOverAnimTimer += 0.08;
+      const frame = Math.min(5, Math.floor(gameOverAnimTimer));
+      const spr = sprites[killer.species].death;
+      gCtx.save();
+      gCtx.filter = `hue-rotate(${killer.tint.hue}deg) saturate(${killer.tint.saturate}%) brightness(${killer.tint.brightness}%)`;
+      gCtx.drawImage(spr, frame * 32, 0, 32, 32, centerX - 32, centerY - 32, 64, 64);
+      gCtx.restore();
+      
+      if (frame === 5) nextBtn.textContent = "FINISH";
+    } else {
+      title.textContent = "HOORAY!";
+      msg.innerHTML = `Justice is served. The farm is safe once again.${statsLine}`;
+      
+      gCtx.font = "40px Arial";
+      gCtx.textAlign = "center";
+      gCtx.fillText("🏆", centerX, centerY);
+      
+      nextBtn.style.display = "none";
+      restartBtn.style.display = "block";
+      return;
+    }
+    
+    gameOverHandle = requestAnimationFrame(gLoop);
+  }
+  gLoop();
+}
+
+let isTranscriptOpen = false;
+function toggleTranscript() {
+  const container = document.getElementById('transcript-container');
+  const list = document.getElementById('transcript-list');
+  const toggle = document.getElementById('transcript-toggle');
+  
+  isTranscriptOpen = !isTranscriptOpen;
+  if (isTranscriptOpen) {
+    container.style.height = '200px';
+    list.style.display = 'block';
+    toggle.textContent = '▼ CLOSE';
+  } else {
+    container.style.height = '40px';
+    list.style.display = 'none';
+    toggle.textContent = '▲ OPEN';
+  }
+}
+
 let introStep = 0;
 let introAnimFrame = 0;
 let introAnimTimer = 0;
@@ -590,16 +954,26 @@ function showIntro() {
     const centerX = iCanvas.width / 2;
     const centerY = iCanvas.height / 2;
 
+    function parseToHTML(txt) {
+      return txt.replace(/\[\[(\d+):(.*?)\]\]/g, (match, id, name) => {
+        const r = rabbits.find(rb => rb.id == id);
+        return `<span style="color: ${getHSL(r)}; font-weight: bold;">${name}</span>`;
+      });
+    }
+
     if (introStep === 0) {
       title.textContent = "A HEINOUS CRIME";
-      textContainer.textContent = `${victim.name} the ${victim.species.replace('_', ' ')} was found dead in the clover field.`;
+      textContainer.innerHTML = `<span style="color: ${getHSL(victim)}; font-weight: bold;">${victim.name}</span> the ${victim.species.replace('_', ' ')} was found dead in the clover field.`;
       
       // Animate victim death (play once and stay)
       introAnimTimer += 0.08;
       const frame = Math.min(5, Math.floor(introAnimTimer));
       const spr = sprites[victim.species].death;
       // Draw at 2x size on the higher res canvas
+      iCtx.save();
+      iCtx.filter = `hue-rotate(${victim.tint.hue}deg) saturate(${victim.tint.saturate}%) brightness(${victim.tint.brightness}%)`;
       iCtx.drawImage(spr, frame * 32, 0, 32, 32, centerX - 32, centerY - 32, 64, 64);
+      iCtx.restore();
       btn.textContent = "NEXT";
     } else if (introStep === 1) {
       title.textContent = "MURDER MOST FOUL!";
@@ -668,15 +1042,15 @@ function showIntro() {
         iCtx.restore();
         
         // Name BELOW
-        iCtx.fillStyle = 'white';
-        iCtx.font = '14px monospace';
+        iCtx.fillStyle = getHSL(rel);
+        iCtx.font = 'bold 14px monospace';
         iCtx.textAlign = 'center';
         iCtx.fillText(rel.firstName, rx + 32, ry + 80);
       });
       btn.textContent = "NEXT";
     } else if (introStep === 3) {
       title.textContent = "SOLVE THE CASE";
-      textContainer.textContent = "Talk to the animals for clues and use your 3 DNA tests wisely.\n\nClick one animal and then another to record a parent/child relationship and build your family tree.";
+      textContainer.innerHTML = "Talk to the animals for clues and use your 3 DNA tests wisely.<br><br>Click one animal and then another to record a parent/child relationship and build your family tree.";
       
       iCtx.font = "30px Arial";
       iCtx.textAlign = "center";
@@ -699,8 +1073,11 @@ function showIntro() {
 function init() {
   runSimulation();
   rabbits.forEach(r => hares.push(new Animal(r)));
+  
+  // Try loading saved game for today
+  const wasLoaded = loadGame();
 
-  // Initialize environment details
+  // Initialize environment details (same for everyone today)
   const detailCount = 250;
   for (let i = 0; i < detailCount; i++) {
     envDetails.push({
@@ -722,6 +1099,8 @@ function init() {
   };
 
   const handleAct = (wx, wy, cx, cy) => {
+    if (gameState.isFinished) return false;
+
     for (const h of hares) {
       const clue = activeClues.get(h.rabbit.id);
       if (clue) {
@@ -730,6 +1109,9 @@ function init() {
           if (!clue.isRead) {
             clue.isRead = true; 
             clue.generatedText = generateClueText(clue, h.rabbit.id);
+            caseLog.push(`${h.rabbit.firstName}: ${clue.generatedText}`);
+            updateTranscriptUI(clue.generatedText, h.rabbit.id);
+            saveGame();
           }
           notifications.push({ text: clue.generatedText, x: cx, y: cy - 20, timer: 360, timerMax: 360, color: '#fff' }); 
           return true; 
@@ -742,7 +1124,13 @@ function init() {
       const py = conns.reduce((s, c) => s + (hares.find(h => h.rabbit.id === c.parentId).y + FRAME_SIZE), 0) / conns.length, midY = (py + child.y + FRAME_SIZE) / 2;
       for (const c of conns) {
         const p = hares.find(h => h.rabbit.id === c.parentId); if (selectedHare !== p && selectedHare !== child) continue;
-        if (Math.hypot(wx - (p.x + FRAME_SIZE), wy - (p.y + FRAME_SIZE + midY) / 2) < 25 / camera.zoom) { playerConnections.splice(playerConnections.indexOf(c), 1); updateTreeDiagram(); notifications.push({ text: "Removed", x: cx, y: cy - 20, timer: 60, timerMax: 60, color: '#f44' }); return true; }
+        if (Math.hypot(wx - (p.x + FRAME_SIZE), wy - (p.y + FRAME_SIZE + midY) / 2) < 25 / camera.zoom) { 
+          playerConnections.splice(playerConnections.indexOf(c), 1); 
+          updateTreeDiagram(); 
+          saveGame();
+          notifications.push({ text: "Removed", x: cx, y: cy - 20, timer: 60, timerMax: 60, color: '#f44' }); 
+          return true; 
+        }
       }
     }
     const clicked = hares.find(h => wx >= h.x && wx <= h.x + FRAME_SIZE * 2 && wy >= h.y && wy <= h.y + FRAME_SIZE * 2);
@@ -750,7 +1138,12 @@ function init() {
       if (selectedHare && selectedHare !== clicked) {
         const p = selectedHare.rabbit.birthYear <= clicked.rabbit.birthYear ? selectedHare : clicked, c = p === selectedHare ? clicked : selectedHare;
         if (playerConnections.some(conn => conn.childId === c.rabbit.id && rabbits.find(r => r.id === conn.parentId).sex === p.rabbit.sex)) notifications.push({ text: `${c.rabbit.firstName} already has a ${p.rabbit.sex === 'M' ? 'father' : 'mother'}!`, x: cx, y: cy, timer: 120, timerMax: 120 });
-        else if (!playerConnections.some(conn => conn.parentId === p.rabbit.id && conn.childId === c.rabbit.id)) { playerConnections.push({ parentId: p.rabbit.id, childId: c.rabbit.id }); updateTreeDiagram(); notifications.push({ text: "Linked!", x: cx, y: cy - 20, timer: 60, timerMax: 60, color: '#44ff44' }); }
+        else if (!playerConnections.some(conn => conn.parentId === p.rabbit.id && conn.childId === c.rabbit.id)) { 
+          playerConnections.push({ parentId: p.rabbit.id, childId: c.rabbit.id }); 
+          updateTreeDiagram(); 
+          saveGame();
+          notifications.push({ text: "Linked!", x: cx, y: cy - 20, timer: 60, timerMax: 60, color: '#44ff44' }); 
+        }
         selectedHare = null;
       } else selectedHare = clicked;
       updateUI(); return true;
@@ -846,18 +1239,17 @@ function init() {
   dnaBtn.addEventListener('pointerdown', e => e.stopPropagation());
   dnaBtn.addEventListener('click', e => {
     e.preventDefault(); if (!selectedHare || dnaTestsRemaining <= 0 || selectedHare.rabbit.isTested) return;
-    if (selectedHare.rabbit.id === killerId) { gOver.style.display = 'block'; gTitle.textContent = 'CASE SOLVED!'; gTitle.style.color = '#44ff44'; gMsg.textContent = `DNA confirmed ${selectedHare.rabbit.firstName} as the killer!`; return; }
+    if (selectedHare.rabbit.id === killerId) { showGameOver(true); return; }
     const rel = getRelationshipLabel(getCommonAncestors(killerId, selectedHare.rabbit.id), killerId, selectedHare.rabbit.id);
     selectedHare.rabbit.dnaRelation = rel || "no relation"; selectedHare.rabbit.isTested = true; dnaTestsRemaining--; tCount.textContent = dnaTestsRemaining;
     if (rel) { updateNecessaryConnections(); generateCluePool(true); }
     updateUI();
+    saveGame();
   });
   accBtn.addEventListener('pointerdown', e => e.stopPropagation());
   accBtn.addEventListener('click', e => {
     e.preventDefault(); if (!selectedHare || dnaTestsRemaining > 0) return;
-    gOver.style.display = 'block';
-    if (selectedHare.rabbit.id === killerId) { gTitle.textContent = 'CASE SOLVED!'; gTitle.style.color = '#44ff44'; gMsg.textContent = `Correct! ${selectedHare.rabbit.firstName} was the killer.`; }
-    else { gTitle.textContent = 'WRONG SUSPECT!'; gTitle.style.color = '#ff4444'; const k = rabbits.find(r => r.id === killerId); gMsg.textContent = `${selectedHare.rabbit.firstName} was innocent. It was ${k.firstName}!`; }
+    showGameOver(selectedHare.rabbit.id === killerId);
   });
 
   document.getElementById('intro-next').addEventListener('click', () => {
@@ -865,19 +1257,49 @@ function init() {
     showIntro();
   });
 
+  document.getElementById('game-over-next').addEventListener('click', () => {
+    gameOverStep++;
+    gameOverAnimTimer = 0;
+    const killer = rabbits.find(r => r.id === killerId);
+    showGameOver(true);
+  });
+
   document.getElementById('help-btn').addEventListener('click', () => {
     introStep = 0;
     showIntro();
   });
 
-  showIntro();
+  document.getElementById('transcript-header').addEventListener('click', toggleTranscript);
+
+  // Cheat code: type "killer" to reveal the killer in the transcript
+  let cheatBuffer = "";
+  window.addEventListener('keyup', e => {
+    cheatBuffer = (cheatBuffer + e.key.toLowerCase()).slice(-6);
+    if (cheatBuffer === "killer") {
+      const k = rabbits.find(r => r.id === killerId);
+      const msg = `DEBUG: The killer is [[${k.id}:${k.firstName}]] (a ${k.sex === 'M' ? 'male' : 'female'} ${k.species})`;
+      updateTranscriptUI(msg, k.id);
+      cheatBuffer = "";
+    }
+  });
+
+  if (gameState.isFinished) {
+    showGameOver(gameState.wasSuccess);
+  } else {
+    showIntro();
+  }
+  
   loop();
 }
 
 function constrainCamera() {
   const vw = canvas.width / camera.zoom, vh = canvas.height / camera.zoom;
   if (vw > FIELD_WIDTH) camera.x = (FIELD_WIDTH - vw) / 2; else camera.x = Math.max(0, Math.min(FIELD_WIDTH - vw, camera.x));
-  if (vh > FIELD_HEIGHT) camera.y = (FIELD_HEIGHT - vh) / 2; else camera.y = Math.max(0, Math.min(FIELD_HEIGHT - vh, camera.y));
+  
+  // Allow scrolling further down to account for the UI transcript covering the bottom
+  const bottomPadding = 250 / camera.zoom;
+  if (vh > FIELD_HEIGHT + bottomPadding) camera.y = (FIELD_HEIGHT + bottomPadding - vh) / 2; 
+  else camera.y = Math.max(0, Math.min(FIELD_HEIGHT + bottomPadding - vh, camera.y));
 }
 
 function loop() {
@@ -905,8 +1327,8 @@ function loop() {
       if (clueQueue.length > 0) {
         const c = clueQueue.shift();
         let tid = c.speakerId;
-        // Find a speaker if original is taken
-        if (activeClues.has(tid)) {
+        // Find a speaker if original is taken or not specified
+        if (!tid || activeClues.has(tid)) {
           const free = hares.filter(h => !activeClues.has(h.rabbit.id));
           if (free.length > 0) tid = pick(free).rabbit.id; else tid = null;
         }
@@ -929,7 +1351,13 @@ function loop() {
     ctx.drawImage(img, Math.floor(sx), Math.floor(sy), Math.floor(szW), Math.floor(szH));
   });
 
-  ctx.save(); ctx.font = 'bold 24px monospace'; ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.fillText('mystery.farm', 20, 40); ctx.restore();
+  ctx.save(); 
+  ctx.font = 'bold 24px monospace'; 
+  ctx.fillStyle = 'rgba(255,255,255,0.2)'; 
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.fillText('mystery.farm', 20, 75); // Positioned below the Help (?) button
+  ctx.restore();
   
   ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 2 * camera.zoom;
   const cByC = new Map(); playerConnections.forEach(c => { if (!cByC.has(c.childId)) cByC.set(c.childId, []); cByC.get(c.childId).push(c); });
@@ -949,10 +1377,39 @@ function loop() {
   });
 
   hares.sort((a, b) => a.y - b.y).forEach(h => { h.update(); h.draw(); });
+  
+  // Render notifications/rich text
   for (let i = notifications.length - 1; i >= 0; i--) {
-    const n = notifications[i]; ctx.font = 'bold 18px Arial'; ctx.fillStyle = n.color || '#f44'; ctx.globalAlpha = Math.min(1, n.timer / 30); ctx.textAlign = 'center'; ctx.shadowBlur = 4; ctx.shadowColor = 'black';
+    const n = notifications[i]; 
+    ctx.font = 'bold 18px Arial'; 
+    ctx.textAlign = 'center'; 
+    ctx.shadowBlur = 4; 
+    ctx.shadowColor = 'black';
+    ctx.globalAlpha = Math.min(1, n.timer / 30);
+    
     const maxT = n.timerMax || 360, fO = (maxT - n.timer) * 0.2, tY = n.y - fO, cY = Math.max(40, tY);
-    ctx.fillText(n.text, n.x, cY); ctx.shadowBlur = 0; ctx.globalAlpha = 1; if (--n.timer <= 0) notifications.splice(i, 1);
+    
+    // Simple rich text drawing for canvas
+    const text = n.text;
+    const parts = text.split(/(\[\[\d+:.*?\]\])/g);
+    let currentX = n.x - ctx.measureText(text.replace(/\[\[\d+:(.*?)\]\]/g, '$1')).width / 2;
+    
+    parts.forEach(part => {
+      const match = part.match(/\[\[(\d+):(.*?)\]\]/);
+      if (match) {
+        const r = rabbits.find(rb => rb.id == match[1]);
+        ctx.fillStyle = getHSL(r);
+        const name = match[2];
+        ctx.fillText(name, currentX + ctx.measureText(name).width / 2, cY);
+        currentX += ctx.measureText(name).width;
+      } else {
+        ctx.fillStyle = n.color || '#fff';
+        ctx.fillText(part, currentX + ctx.measureText(part).width / 2, cY);
+        currentX += ctx.measureText(part).width;
+      }
+    });
+
+    ctx.shadowBlur = 0; ctx.globalAlpha = 1; if (--n.timer <= 0) notifications.splice(i, 1);
   }
   requestAnimationFrame(loop);
 }

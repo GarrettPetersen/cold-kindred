@@ -98,7 +98,7 @@ const envDetails = [];
 let clueQueue = [];
 let globallyIssuedClueIds = new Set();
 let caseLog = []; // Stores strings like "Name: Clue text"
-let gameState = { isFinished: false, wasSuccess: false };
+let gameState = { isFinished: false, wasSuccess: false, startTime: null, endTime: null };
 
 // --- Persistence & Stats ---
 function getStats() {
@@ -181,6 +181,8 @@ function saveGame() {
     caseLog,
     isFinished: gameState.isFinished,
     wasSuccess: gameState.wasSuccess,
+    startTime: gameState.startTime,
+    endTime: gameState.endTime,
     globallyIssuedClueIds: Array.from(globallyIssuedClueIds),
     clueQueueIds: clueQueue.map(c => c.id),
     activeClueIds: Array.from(activeClues.values()).map(c => ({ id: c.id, speakerId: Array.from(activeClues.keys()).find(k => activeClues.get(k) === c), isRead: c.isRead, generatedText: c.generatedText })),
@@ -190,7 +192,14 @@ function saveGame() {
   
   if (gameState.isFinished) {
     const stats = getStats();
-    stats.history[currentDateStr] = { status: gameState.wasSuccess ? 'success' : 'failure' };
+    let solveTime = null;
+    if (gameState.startTime && gameState.endTime) {
+      solveTime = gameState.endTime - gameState.startTime;
+    }
+    stats.history[currentDateStr] = { 
+      status: gameState.wasSuccess ? 'success' : 'failure',
+      solveTime: solveTime
+    };
     saveStats(stats);
   }
 }
@@ -220,6 +229,8 @@ function loadGame() {
   caseLog = data.caseLog || [];
   gameState.isFinished = data.isFinished || false;
   gameState.wasSuccess = data.wasSuccess || false;
+  gameState.startTime = data.startTime || null;
+  gameState.endTime = data.endTime || null;
   globallyIssuedClueIds = new Set(data.globallyIssuedClueIds || []);
   
   if (data.clueQueueIds) {
@@ -1074,6 +1085,20 @@ function updateTreeDiagram() {
 const sPanel = document.getElementById('selection-panel'), sName = document.getElementById('selected-name'), sSpec = document.getElementById('selected-species'), dnaBtn = document.getElementById('dna-test-btn'), tCount = document.getElementById('tests-count'), accBtn = document.getElementById('accuse-btn'), gOver = document.getElementById('game-over'), gTitle = document.getElementById('game-over-title'), gMsg = document.getElementById('game-over-msg');
 
 function updateUI() {
+  const stopwatch = document.getElementById('stopwatch');
+  if (stopwatch) {
+    if (gameState.startTime) {
+      const currentEnd = gameState.endTime || Date.now();
+      const diff = currentEnd - gameState.startTime;
+      const mins = Math.floor(diff / 60000);
+      const secs = Math.floor((diff % 60000) / 1000);
+      const decs = Math.floor((diff % 1000) / 100);
+      stopwatch.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${decs}`;
+    } else {
+      stopwatch.textContent = "00:00.0";
+    }
+  }
+
   const playAgainUi = document.getElementById('play-again-ui');
   if (gameState.isFinished) {
     if (playAgainUi) playAgainUi.style.display = 'block';
@@ -1181,6 +1206,7 @@ function showGameOver(isWin) {
   // Save game state
   gameState.isFinished = true;
   gameState.wasSuccess = isWin;
+  gameState.endTime = Date.now();
   saveGame();
 
   modal.style.display = 'flex';
@@ -1193,9 +1219,18 @@ function showGameOver(isWin) {
   }
 
   const stats = calculateStreaks();
+  let timeStr = "";
+  if (gameState.startTime && gameState.endTime) {
+    const diff = gameState.endTime - gameState.startTime;
+    const mins = Math.floor(diff / 60000);
+    const secs = Math.floor((diff % 60000) / 1000);
+    const decs = Math.floor((diff % 1000) / 100);
+    timeStr = `<br>TIME: ${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${decs}`;
+  }
+
   const statsLine = `<br><br><div style="font-size: 14px; opacity: 0.8; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 15px;">
     WIN STREAK: ${stats.win} (MAX: ${stats.maxWin})<br>
-    ATTEMPT STREAK: ${stats.att} (MAX: ${stats.maxAtt})
+    ATTEMPT STREAK: ${stats.att} (MAX: ${stats.maxAtt})${timeStr}
   </div>`;
 
   viewFarmBtn.onclick = () => {
@@ -1445,6 +1480,10 @@ function showIntro() {
     } else {
       modal.style.display = 'none';
       localStorage.setItem('mysteryFarm_consent', 'true'); // Save consent when they finish the intro
+      if (!gameState.startTime) {
+        gameState.startTime = Date.now();
+        saveGame();
+      }
       introStep = 0;
       introAnimTimer = 0;
       return;
@@ -1960,6 +1999,9 @@ function loop() {
 
   hares.sort((a, b) => a.y - b.y).forEach(h => { h.update(); h.draw(); });
   
+  // Update stopwatch display in real-time
+  updateUI();
+
   // 4. Draw recorded "X" buttons on TOP of animals/labels
   xButtons.forEach(btn => {
     ctx.save();

@@ -1,4 +1,15 @@
-import { Haptics, ImpactStyle } from '@capacitor/haptics';
+// --- Haptics Helper (Safe for web) ---
+let triggerHaptic = () => {};
+// Only attempt to load haptics if we are in a Capacitor native environment
+if (typeof window !== 'undefined' && window.Capacitor && window.Capacitor.getPlatform() !== 'web') {
+  // Use a template string to keep bundlers from eagerly resolving it on web
+  const pluginName = '@capacitor/haptics';
+  import(pluginName).then(m => {
+    triggerHaptic = () => m.Haptics.impact({ style: m.ImpactStyle.Heavy });
+  }).catch(() => {
+    // Silently ignore if plugin fails to load
+  });
+}
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -1578,7 +1589,7 @@ function showGameOver(isWin) {
           headPhysics = { x: bodyX, y: bodyY, vx: 5 + Math.random() * 3, vy: -10 - Math.random() * 4, rot: 0, vrot: 0.2 };
           impactTime = gameOverAnimTimer;
           // Trigger haptic feedback on mobile
-          try { Haptics.impact({ style: ImpactStyle.Heavy }); } catch(e) {}
+          triggerHaptic();
         }
         
         headPhysics.x += headPhysics.vx;

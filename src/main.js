@@ -1579,12 +1579,26 @@ function loop() {
     ctx.shadowColor = 'black';
     ctx.globalAlpha = Math.min(1, n.timer / 30);
     
-    const maxT = n.timerMax || 360, fO = (maxT - n.timer) * 0.2, tY = n.y - fO, cY = Math.max(40, tY);
+    const maxT = n.timerMax || 360, fO = (maxT - n.timer) * 0.2, tY = n.y - fO;
+    let cY = Math.max(40, tY);
+    
+    // Allow room for transcript at bottom
+    const transcriptEl = document.getElementById('transcript-container');
+    const bottomLimit = canvas.height - (transcriptEl ? transcriptEl.offsetHeight : 40) - 20;
+    cY = Math.min(cY, bottomLimit);
     
     // Simple rich text drawing for canvas
     const text = n.text;
+    const cleanText = text.replace(/\[\[\d+:(.*?)\]\]/g, '$1');
+    const totalWidth = ctx.measureText(cleanText).width;
+    
+    // Horizontal clamping
+    const padding = 20;
+    let currentX = n.x - totalWidth / 2;
+    if (currentX < padding) currentX = padding;
+    if (currentX + totalWidth > canvas.width - padding) currentX = canvas.width - padding - totalWidth;
+    
     const parts = text.split(/(\[\[\d+:.*?\]\])/g);
-    let currentX = n.x - ctx.measureText(text.replace(/\[\[\d+:(.*?)\]\]/g, '$1')).width / 2;
     
     parts.forEach(part => {
       const match = part.match(/\[\[(\d+):(.*?)\]\]/);

@@ -1,8 +1,8 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-const FIELD_WIDTH = 2000;
-const FIELD_HEIGHT = 2000;
+const FIELD_WIDTH = 2500;
+const FIELD_HEIGHT = 2500;
 const FRAME_SIZE = 32;
 const CURRENT_YEAR = 2025;
 
@@ -1098,20 +1098,16 @@ function updateTreeDiagram() {
     const layoutPositions = new Map();
     
     // First pass: Assign initial relative coordinates within each row
+    // Start with a wider initial spread to allow more room for convergence
     validGrps.forEach((ids, l) => {
       ids.forEach((id, i) => {
-        layoutPositions.set(id, { l, i, x: i }); // i is the column index
+        layoutPositions.set(id, { l, i, x: i * 2 }); 
       });
     });
 
     // Second pass: Adjust row X offsets to center parents/children
-    // We'll use the widest row as the anchor and nudge others
-    let maxWidth = 0;
-    validGrps.forEach(ids => maxWidth = Math.max(maxWidth, ids.length));
-
-    // Refined centering: Bidirectional spread to align parents and children
-    // We iterate a few times to allow the spread to propagate up and down the tree
-    for (let iter = 0; iter < 4; iter++) {
+    // Increase iterations to allow the "spread" to propagate through all 5 generations
+    for (let iter = 0; iter < 12; iter++) {
       // Top-down: Move children under parents
       validGrps.forEach((ids, l) => {
         if (l === 0) return;
@@ -1126,7 +1122,8 @@ function updateTreeDiagram() {
             if (pCount > 0) {
               const idealX = avgParentX / pCount;
               const currentPos = layoutPositions.get(id);
-              let minX = (i === 0) ? -Infinity : layoutPositions.get(ids[i-1]).x + 1.2;
+              // Maintain minimum gap from the sibling to the left (1.5 units for better visibility)
+              let minX = (i === 0) ? -Infinity : layoutPositions.get(ids[i-1]).x + 1.5;
               currentPos.x = Math.max(minX, idealX);
             }
           }
@@ -1136,7 +1133,7 @@ function updateTreeDiagram() {
       // Bottom-up: Move parents over children (Upward Pressure)
       for (let l = validGrps.length - 2; l >= 0; l--) {
         const ids = validGrps[l];
-        // Move towards ideal center based on children
+        // Right-to-left pass to allow spreading to the right
         for (let i = ids.length - 1; i >= 0; i--) {
           const id = ids[i];
           const cs = playerConnections.filter(c => c.parentId === id).map(c => c.childId);
@@ -1149,18 +1146,29 @@ function updateTreeDiagram() {
             if (cCount > 0) {
               const idealX = avgChildX / cCount;
               const currentPos = layoutPositions.get(id);
-              // Maintain minimum gap from the sibling to the right
-              let maxX = (i === ids.length - 1) ? Infinity : layoutPositions.get(ids[i+1]).x - 1.2;
+              let maxX = (i === ids.length - 1) ? Infinity : layoutPositions.get(ids[i+1]).x - 1.5;
               currentPos.x = Math.min(maxX, idealX);
             }
           }
         }
-        // Maintain minimum gap from the sibling to the left
+        // Left-to-right pass to maintain minimum gaps and allow spreading to the left
         for (let i = 0; i < ids.length; i++) {
           const id = ids[i];
           const currentPos = layoutPositions.get(id);
-          let minX = (i === 0) ? -Infinity : layoutPositions.get(ids[i-1]).x + 1.2;
-          currentPos.x = Math.max(minX, currentPos.x);
+          const cs = playerConnections.filter(c => c.parentId === id).map(c => c.childId);
+          
+          let idealX = currentPos.x;
+          if (cs.length > 0) {
+            let avgChildX = 0, cCount = 0;
+            cs.forEach(cid => {
+              const cPos = layoutPositions.get(cid);
+              if (cPos) { avgChildX += cPos.x; cCount++; }
+            });
+            idealX = avgChildX / cCount;
+          }
+
+          let minX = (i === 0) ? -Infinity : layoutPositions.get(ids[i-1]).x + 1.5;
+          currentPos.x = Math.max(minX, idealX);
         }
       }
     }
@@ -1179,21 +1187,20 @@ function updateTreeDiagram() {
     maxTreeHeight = Math.max(maxTreeHeight, validGrps.length);
   });
 
-  const availableW = FIELD_WIDTH - 300; // Increased padding to 150px on each side
+  const availableW = FIELD_WIDTH - 400; // Increased padding to 200px on each side
   const availableH = FIELD_HEIGHT - 200;
   
   // Calculate the total horizontal range in "column units" across all trees
-  // to ensure we don't exceed availableW when converted to pixels.
   let forestRawWidth = 0;
-  treeLayouts.forEach((layout, treeIdx) => {
+  treeLayouts.forEach((layout) => {
     let minX = Infinity, maxX = -Infinity;
     layout.layoutPositions.forEach(p => { minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x); });
-    const treeWidth = maxX - minX;
-    forestRawWidth += treeWidth + 1.5; // Include spacing between trees
+    forestRawWidth += (maxX - minX) + 2.0; // Spacing between trees
   });
 
-  // Calculate spx based on the actual physical spread of the layout columns
-  let spx = Math.max(minSpacingX * 1.2, Math.min(preferredSpacingX, availableW / Math.max(1, forestRawWidth)));
+  // Adaptive scaling: Remove the minSpacingX floor to ensure we NEVER run off the map.
+  // We'll allow the graph to squish as much as needed to fit.
+  let spx = Math.min(preferredSpacingX, availableW / Math.max(1, forestRawWidth));
   let spy = Math.max(minSpacingY * 1.2, Math.min(preferredSpacingY, availableH / Math.max(1, maxTreeHeight)));
 
   // Calculate vertical center of the field
@@ -1203,7 +1210,7 @@ function updateTreeDiagram() {
   let minTargetX = Infinity, maxTargetX = -Infinity;
   let currentTreeXOffset = 0;
 
-  treeLayouts.forEach((layout, treeIdx) => {
+  treeLayouts.forEach((layout) => {
     // Find the relative bounds of this specific tree
     let minTreeX = Infinity;
     layout.layoutPositions.forEach(p => { minTreeX = Math.min(minTreeX, p.x); });
@@ -1213,7 +1220,6 @@ function updateTreeDiagram() {
         const h = hares.find(ha => ha.rabbit.id === id);
         const pos = layout.layoutPositions.get(id);
         if (h && pos) {
-          // tx is now centered relative to currentTreeXOffset
           const tx = (currentTreeXOffset + (pos.x - minTreeX)) * spx;
           minTargetX = Math.min(minTargetX, tx);
           maxTargetX = Math.max(maxTargetX, tx);
@@ -1223,10 +1229,9 @@ function updateTreeDiagram() {
       });
     });
 
-    // Advance the offset for the next tree, using its actual column span
     let minX = Infinity, maxX = -Infinity;
     layout.layoutPositions.forEach(p => { minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x); });
-    currentTreeXOffset += (maxX - minX) + 1.5; // Gap between trees
+    currentTreeXOffset += (maxX - minX) + 2.0;
   });
 
   // Final Pass: Shift everything to be perfectly centered in FIELD_WIDTH
@@ -1237,6 +1242,9 @@ function updateTreeDiagram() {
     hares.forEach(h => {
       if (h.targetX !== null) {
         h.targetX += globalOffset;
+        // Final safety clamp to prevent physics-induced wall sticking
+        // 64px sprite + 40px buffer = ~100px safety margin
+        h.targetX = Math.max(100, Math.min(FIELD_WIDTH - 164, h.targetX));
       }
     });
   }
@@ -1668,7 +1676,7 @@ function init() {
   updateUI();
 
   // Initialize environment details (same for everyone today)
-  const detailCount = 500;
+  const detailCount = 800;
   for (let i = 0; i < detailCount; i++) {
     envDetails.push({
       x: random() * FIELD_WIDTH,

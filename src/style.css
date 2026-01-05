@@ -4,12 +4,44 @@ body, html {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background-color: #000; /* Black to match UI elements and prevent color bleed on mobile */
+  background-color: #000;
   touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 #gameCanvas {
   display: block;
-  image-rendering: pixelated; /* Keep the pixel art crisp */
-  touch-action: none; /* Prevent browser handling of touch gestures */
+  image-rendering: pixelated;
+  touch-action: none;
+}
+
+/* Mobile Safe Area Adjustments */
+#help-btn {
+  top: calc(20px + env(safe-area-inset-top)) !important;
+  left: calc(20px + env(safe-area-inset-left)) !important;
+}
+
+#stopwatch {
+  top: calc(20px + env(safe-area-inset-top)) !important;
+  left: calc(74px + env(safe-area-inset-left)) !important;
+}
+
+#ui-overlay {
+  top: calc(20px + env(safe-area-inset-top)) !important;
+  right: calc(20px + env(safe-area-inset-right)) !important;
+}
+
+#transcript-container {
+  padding-bottom: env(safe-area-inset-bottom) !important;
+  bottom: 0 !important;
+}
+
+#intro-modal, #game-over {
+  padding-top: calc(40px + env(safe-area-inset-top)) !important;
+  padding-bottom: calc(40px + env(safe-area-inset-bottom)) !important;
+  padding-left: calc(20px + env(safe-area-inset-left)) !important;
+  padding-right: calc(20px + env(safe-area-inset-right)) !important;
 }

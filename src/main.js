@@ -1,3 +1,5 @@
+import { Haptics, ImpactStyle } from '@capacitor/haptics';
+
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
@@ -1575,6 +1577,8 @@ function showGameOver(isWin) {
         if (headPhysics.vx === 0) {
           headPhysics = { x: bodyX, y: bodyY, vx: 5 + Math.random() * 3, vy: -10 - Math.random() * 4, rot: 0, vrot: 0.2 };
           impactTime = gameOverAnimTimer;
+          // Trigger haptic feedback on mobile
+          try { Haptics.impact({ style: ImpactStyle.Heavy }); } catch(e) {}
         }
         
         headPhysics.x += headPhysics.vx;

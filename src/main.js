@@ -658,10 +658,17 @@ function runSimulation() {
         usedF.add(f.id);
         // Average 1.5-2 children per family to keep population stable ~50-60
         const children = (random() < 0.33) ? 3 : (random() < 0.5 ? 2 : 1);
+        
+        // Balanced sex ratio within families to prevent population collapse
+        let firstSex = random() < 0.5 ? 'M' : 'F';
+        
         for (let c = 0; c < children; c++) {
-          const sex = random() < 0.5 ? 'M' : 'F';
-          const pool = sex === 'M' ? mPool : fPool;
+          const pool = (c === 0) ? (firstSex === 'M' ? mPool : fPool) : 
+                       (c === 1) ? (firstSex === 'M' ? fPool : mPool) : // Guaranteed opposite for 2nd child
+                       (random() < 0.5 ? mPool : fPool);
+          
           if (pool.length === 0) continue;
+          const sex = (pool === mPool) ? 'M' : 'F';
           const name = pool.pop();
           usedNames.add(name);
           
@@ -1818,6 +1825,8 @@ function loop() {
     unions.get(key).children.push(cid);
   });
 
+  const xButtons = []; // Store X button positions to draw them last
+
   unions.forEach(u => {
     const ps = u.parents.map(id => hares.find(h => h.rabbit.id === id)).filter(Boolean);
     const cs = u.children.map(id => hares.find(h => h.rabbit.id === id)).filter(Boolean);
@@ -1853,14 +1862,9 @@ function loop() {
       parentXRange.min = Math.min(parentXRange.min, px);
       parentXRange.max = Math.max(parentXRange.max, px);
 
-      // Draw "X" on parent stem if selected
+      // Record "X" position if selected
       if (selectedHare === p || cs.some(c => selectedHare === c)) {
-        const xBtnY = (py + screenMidY) / 2;
-        ctx.save();
-        ctx.shadowBlur = 0; // Don't glow the X button itself
-        ctx.fillStyle = '#f44'; ctx.beginPath(); ctx.arc(px, xBtnY, 10 * camera.zoom, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#fff'; ctx.font = `bold ${Math.floor(12 * camera.zoom)}px Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('X', px, xBtnY);
-        ctx.restore();
+        xButtons.push({ x: px, y: (py + screenMidY) / 2 });
       }
     });
 
@@ -1882,6 +1886,14 @@ function loop() {
   ctx.restore();
 
   hares.sort((a, b) => a.y - b.y).forEach(h => { h.update(); h.draw(); });
+  
+  // 4. Draw recorded "X" buttons on TOP of animals/labels
+  xButtons.forEach(btn => {
+    ctx.save();
+    ctx.fillStyle = '#f44'; ctx.beginPath(); ctx.arc(btn.x, btn.y, 10 * camera.zoom, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.font = `bold ${Math.floor(12 * camera.zoom)}px Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('X', btn.x, btn.y);
+    ctx.restore();
+  });
   
   // Render notifications/rich text
   for (let i = notifications.length - 1; i >= 0; i--) {

@@ -33,6 +33,15 @@ function shuffle(arr) {
   return arr;
 }
 
+// --- Helpers ---
+function formatTime(ms) {
+  if (!ms && ms !== 0) return "00:00.0";
+  const mins = Math.floor(ms / 60000);
+  const secs = Math.floor((ms % 60000) / 1000);
+  const decs = Math.floor((ms % 1000) / 100);
+  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${decs}`;
+}
+
 function getHSL(r) {
   if (!r || !r.tint) return '#fff';
   return `hsl(${r.tint.hue}, ${r.tint.saturate}%, ${r.tint.brightness}%)`;
@@ -1050,36 +1059,186 @@ function updateTreeDiagram() {
     const grps = []; 
     lvls.forEach((l, id) => { if (!grps[l]) grps[l] = []; grps[l].push(id); });
     
-    let rawTreeWidth = 0;
-    grps.forEach(ids => rawTreeWidth = Math.max(rawTreeWidth, ids.length));
+    // Filter out any holes in grps to prevent crashes in the loops below
+    const validGrps = grps.filter(Boolean);
     
-    treeLayouts.push({ t, grps, rawWidth: rawTreeWidth, rawHeight: grps.length });
-    totalRawWidth += rawTreeWidth;
-    maxTreeHeight = Math.max(maxTreeHeight, grps.length);
-  });
+    // Minimize line crossings using the Barycentric method (Sugiyama-style)
+    // We iterate a few times top-down and bottom-up to find a stable horizontal order
+    for (let iter = 0; iter < 4; iter++) {
+      // Top-down: Sort children based on average parent position
+      for (let l = 1; l < validGrps.length; l++) {
+        const order = new Map(); validGrps[l-1].forEach((id, i) => order.set(id, i));
+        validGrps[l].sort((a, b) => {
+          const getAvg = (id) => {
+            const ps = playerConnections.filter(c => c.childId === id).map(c => c.parentId);
+            let s = 0, c = 0; ps.forEach(pid => { if (order.has(pid)) { s += order.get(pid); c++; } });
+            // If no parents, keep existing order to avoid bunching at the left
+            return c > 0 ? s / c : validGrps[l].indexOf(id);
+          };
+          return getAvg(a) - getAvg(b);
+        });
+      }
+      // Bottom-up: Sort parents based on average child position
+      for (let l = validGrps.length - 2; l >= 0; l--) {
+        const order = new Map(); validGrps[l+1].forEach((id, i) => order.set(id, i));
+        validGrps[l].sort((a, b) => {
+          const getAvg = (id) => {
+            const cs = playerConnections.filter(c => c.parentId === id).map(c => c.childId);
+            let s = 0, c = 0; cs.forEach(cid => { if (order.has(cid)) { s += order.get(cid); c++; } });
+            // If no children, keep existing order
+            return c > 0 ? s / c : validGrps[l].indexOf(id);
+          };
+          return getAvg(a) - getAvg(b);
+        });
+      }
+    }
 
-  const availableW = FIELD_WIDTH - 200;
-  const availableH = FIELD_HEIGHT - 200;
-  let spx = Math.max(minSpacingX, Math.min(preferredSpacingX, availableW / Math.max(1, totalRawWidth + trees.length)));
-  let spy = Math.max(minSpacingY, Math.min(preferredSpacingY, availableH / Math.max(1, maxTreeHeight)));
-
-  const finalTotalWidth = (totalRawWidth * spx) + ((trees.length - 1) * spx);
-  let currX = (FIELD_WIDTH - finalTotalWidth) / 2;
-  const startY = (FIELD_HEIGHT - (maxTreeHeight * spy)) / 2;
-
-  treeLayouts.forEach(layout => {
-    // Basic row-based layout but we'll try to center parents over kids
-    layout.grps.forEach((ids, l) => {
-      const rowWidth = (ids.length - 1) * spx;
-      const rowStartX = currX + (layout.rawWidth * spx - rowWidth) / 2;
+    // Now that we have the order, calculate actual X positions to center groups over each other
+    const layoutPositions = new Map();
+    
+    // First pass: Assign initial relative coordinates within each row
+    validGrps.forEach((ids, l) => {
       ids.forEach((id, i) => {
-        const h = hares.find(ha => ha.rabbit.id === id);
-        h.targetX = rowStartX + i * spx;
-        h.targetY = startY + l * spy;
+        layoutPositions.set(id, { l, i, x: i }); // i is the column index
       });
     });
-    currX += (layout.rawWidth + 1) * spx;
+
+    // Second pass: Adjust row X offsets to center parents/children
+    // We'll use the widest row as the anchor and nudge others
+    let maxWidth = 0;
+    validGrps.forEach(ids => maxWidth = Math.max(maxWidth, ids.length));
+
+    // Refined centering: Bidirectional spread to align parents and children
+    // We iterate a few times to allow the spread to propagate up and down the tree
+    for (let iter = 0; iter < 4; iter++) {
+      // Top-down: Move children under parents
+      validGrps.forEach((ids, l) => {
+        if (l === 0) return;
+        ids.forEach((id, i) => {
+          const ps = playerConnections.filter(c => c.childId === id).map(c => c.parentId);
+          if (ps.length > 0) {
+            let avgParentX = 0, pCount = 0;
+            ps.forEach(pid => {
+              const pPos = layoutPositions.get(pid);
+              if (pPos) { avgParentX += pPos.x; pCount++; }
+            });
+            if (pCount > 0) {
+              const idealX = avgParentX / pCount;
+              const currentPos = layoutPositions.get(id);
+              let minX = (i === 0) ? -Infinity : layoutPositions.get(ids[i-1]).x + 1.2;
+              currentPos.x = Math.max(minX, idealX);
+            }
+          }
+        });
+      });
+
+      // Bottom-up: Move parents over children (Upward Pressure)
+      for (let l = validGrps.length - 2; l >= 0; l--) {
+        const ids = validGrps[l];
+        // Move towards ideal center based on children
+        for (let i = ids.length - 1; i >= 0; i--) {
+          const id = ids[i];
+          const cs = playerConnections.filter(c => c.parentId === id).map(c => c.childId);
+          if (cs.length > 0) {
+            let avgChildX = 0, cCount = 0;
+            cs.forEach(cid => {
+              const cPos = layoutPositions.get(cid);
+              if (cPos) { avgChildX += cPos.x; cCount++; }
+            });
+            if (cCount > 0) {
+              const idealX = avgChildX / cCount;
+              const currentPos = layoutPositions.get(id);
+              // Maintain minimum gap from the sibling to the right
+              let maxX = (i === ids.length - 1) ? Infinity : layoutPositions.get(ids[i+1]).x - 1.2;
+              currentPos.x = Math.min(maxX, idealX);
+            }
+          }
+        }
+        // Maintain minimum gap from the sibling to the left
+        for (let i = 0; i < ids.length; i++) {
+          const id = ids[i];
+          const currentPos = layoutPositions.get(id);
+          let minX = (i === 0) ? -Infinity : layoutPositions.get(ids[i-1]).x + 1.2;
+          currentPos.x = Math.max(minX, currentPos.x);
+        }
+      }
+    }
+
+    // Final pass: Global centering of the whole tree structure
+    let minTreeX = Infinity, maxTreeX = -Infinity;
+    layoutPositions.forEach(p => {
+      minTreeX = Math.min(minTreeX, p.x);
+      maxTreeX = Math.max(maxTreeX, p.x);
+    });
+    const treeCenterOffset = (minTreeX + maxTreeX) / 2;
+    layoutPositions.forEach(p => p.x -= treeCenterOffset);
+
+    treeLayouts.push({ t, grps: validGrps, layoutPositions, rawWidth: maxTreeX - minTreeX + 1, rawHeight: validGrps.length });
+    totalRawWidth += (maxTreeX - minTreeX + 1);
+    maxTreeHeight = Math.max(maxTreeHeight, validGrps.length);
   });
+
+  const availableW = FIELD_WIDTH - 300; // Increased padding to 150px on each side
+  const availableH = FIELD_HEIGHT - 200;
+  
+  // Calculate the total horizontal range in "column units" across all trees
+  // to ensure we don't exceed availableW when converted to pixels.
+  let forestRawWidth = 0;
+  treeLayouts.forEach((layout, treeIdx) => {
+    let minX = Infinity, maxX = -Infinity;
+    layout.layoutPositions.forEach(p => { minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x); });
+    const treeWidth = maxX - minX;
+    forestRawWidth += treeWidth + 1.5; // Include spacing between trees
+  });
+
+  // Calculate spx based on the actual physical spread of the layout columns
+  let spx = Math.max(minSpacingX * 1.2, Math.min(preferredSpacingX, availableW / Math.max(1, forestRawWidth)));
+  let spy = Math.max(minSpacingY * 1.2, Math.min(preferredSpacingY, availableH / Math.max(1, maxTreeHeight)));
+
+  // Calculate vertical center of the field
+  const startY = (FIELD_HEIGHT - (maxTreeHeight * spy)) / 2;
+
+  // Track the actual bounds of all planned target positions across all trees
+  let minTargetX = Infinity, maxTargetX = -Infinity;
+  let currentTreeXOffset = 0;
+
+  treeLayouts.forEach((layout, treeIdx) => {
+    // Find the relative bounds of this specific tree
+    let minTreeX = Infinity;
+    layout.layoutPositions.forEach(p => { minTreeX = Math.min(minTreeX, p.x); });
+    
+    layout.grps.forEach((ids, l) => {
+      ids.forEach(id => {
+        const h = hares.find(ha => ha.rabbit.id === id);
+        const pos = layout.layoutPositions.get(id);
+        if (h && pos) {
+          // tx is now centered relative to currentTreeXOffset
+          const tx = (currentTreeXOffset + (pos.x - minTreeX)) * spx;
+          minTargetX = Math.min(minTargetX, tx);
+          maxTargetX = Math.max(maxTargetX, tx);
+          h.targetX = tx;
+          h.targetY = startY + l * spy;
+        }
+      });
+    });
+
+    // Advance the offset for the next tree, using its actual column span
+    let minX = Infinity, maxX = -Infinity;
+    layout.layoutPositions.forEach(p => { minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x); });
+    currentTreeXOffset += (maxX - minX) + 1.5; // Gap between trees
+  });
+
+  // Final Pass: Shift everything to be perfectly centered in FIELD_WIDTH
+  if (minTargetX !== Infinity) {
+    const actualWidth = maxTargetX - minTargetX;
+    const globalOffset = (FIELD_WIDTH - actualWidth) / 2 - minTargetX;
+    
+    hares.forEach(h => {
+      if (h.targetX !== null) {
+        h.targetX += globalOffset;
+      }
+    });
+  }
 }
 
 const sPanel = document.getElementById('selection-panel'), sName = document.getElementById('selected-name'), sSpec = document.getElementById('selected-species'), dnaBtn = document.getElementById('dna-test-btn'), tCount = document.getElementById('tests-count'), accBtn = document.getElementById('accuse-btn'), gOver = document.getElementById('game-over'), gTitle = document.getElementById('game-over-title'), gMsg = document.getElementById('game-over-msg');
@@ -1090,10 +1249,15 @@ function updateUI() {
     if (gameState.startTime) {
       const currentEnd = gameState.endTime || Date.now();
       const diff = currentEnd - gameState.startTime;
-      const mins = Math.floor(diff / 60000);
-      const secs = Math.floor((diff % 60000) / 1000);
-      const decs = Math.floor((diff % 1000) / 100);
-      stopwatch.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${decs}`;
+      stopwatch.textContent = formatTime(diff);
+      // Highlight the finished time
+      if (gameState.isFinished) {
+        stopwatch.style.color = '#fff';
+        stopwatch.style.borderColor = '#44ff44';
+      } else {
+        stopwatch.style.color = '#44ff44';
+        stopwatch.style.borderColor = 'rgba(255,255,255,0.3)';
+      }
     } else {
       stopwatch.textContent = "00:00.0";
     }
@@ -1203,11 +1367,13 @@ function showGameOver(isWin) {
   const gCanvas = document.getElementById('gameOverCanvas');
   const gCtx = gCanvas.getContext('2d');
   
-  // Save game state
-  gameState.isFinished = true;
-  gameState.wasSuccess = isWin;
-  gameState.endTime = Date.now();
-  saveGame();
+  // Only set endTime if not already finished (prevents overwriting on view-farm re-entry)
+  if (!gameState.isFinished) {
+    gameState.isFinished = true;
+    gameState.wasSuccess = isWin;
+    gameState.endTime = Date.now();
+    saveGame();
+  }
 
   modal.style.display = 'flex';
   if (gameOverHandle) cancelAnimationFrame(gameOverHandle);
@@ -1221,16 +1387,12 @@ function showGameOver(isWin) {
   const stats = calculateStreaks();
   let timeStr = "";
   if (gameState.startTime && gameState.endTime) {
-    const diff = gameState.endTime - gameState.startTime;
-    const mins = Math.floor(diff / 60000);
-    const secs = Math.floor((diff % 60000) / 1000);
-    const decs = Math.floor((diff % 1000) / 100);
-    timeStr = `<br>TIME: ${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${decs}`;
+    timeStr = `<br><span style="color: #44ff44; font-size: 24px; font-weight: bold;">TIME: ${formatTime(gameState.endTime - gameState.startTime)}</span>`;
   }
 
   const statsLine = `<br><br><div style="font-size: 14px; opacity: 0.8; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 15px;">
     WIN STREAK: ${stats.win} (MAX: ${stats.maxWin})<br>
-    ATTEMPT STREAK: ${stats.att} (MAX: ${stats.maxAtt})${timeStr}
+    ATTEMPT STREAK: ${stats.att} (MAX: ${stats.maxAtt})
   </div>`;
 
   viewFarmBtn.onclick = () => {
@@ -1249,7 +1411,7 @@ function showGameOver(isWin) {
       title.textContent = "WRONG SUSPECT!";
       title.style.color = "#ff4444";
       const innocent = selectedHare.rabbit;
-      msg.innerHTML = `<span style="color: ${getHSL(innocent)}; font-weight: bold;">${innocent.firstName}</span> was innocent. It was <span style="color: ${getHSL(killer)}; font-weight: bold;">${killer.firstName}</span>!${statsLine}`;
+      msg.innerHTML = `<span style="color: ${getHSL(innocent)}; font-weight: bold;">${innocent.firstName}</span> was innocent. It was <span style="color: ${getHSL(killer)}; font-weight: bold;">${killer.firstName}</span>!${timeStr}${statsLine}`;
       
       gameOverAnimTimer += 0.1;
       const frame = Math.floor(gameOverAnimTimer) % 6;
@@ -1266,7 +1428,7 @@ function showGameOver(isWin) {
     if (gameOverStep === 0) {
       title.textContent = "CASE SOLVED!";
       title.style.color = "#44ff44";
-      msg.innerHTML = `You found the killer! <span style="color: ${getHSL(killer)}; font-weight: bold;">${killer.firstName}</span> has been apprehended.`;
+      msg.innerHTML = `You found the killer! <span style="color: ${getHSL(killer)}; font-weight: bold;">${killer.firstName}</span> has been apprehended.${timeStr}`;
       
       gCtx.save();
       gCtx.filter = `hue-rotate(${killer.tint.hue}deg) saturate(${killer.tint.saturate}%) brightness(${killer.tint.brightness}%)`;
@@ -1276,7 +1438,7 @@ function showGameOver(isWin) {
       nextBtn.textContent = "NEXT";
     } else if (gameOverStep === 1) {
       title.textContent = "THE CONFESSION";
-      msg.innerHTML = `<span style="color: ${getHSL(killer)}; font-weight: bold;">${killer.firstName}</span>: "${killerQuote}"`;
+      msg.innerHTML = `<span style="color: ${getHSL(killer)}; font-weight: bold;">${killer.firstName}</span>: "${killerQuote}"${timeStr}`;
       
       gCtx.save();
       gCtx.filter = `hue-rotate(${killer.tint.hue}deg) saturate(${killer.tint.saturate}%) brightness(${killer.tint.brightness}%)`;
@@ -1284,7 +1446,7 @@ function showGameOver(isWin) {
       gCtx.restore();
     } else if (gameOverStep === 2) {
       title.textContent = "JUSTICE";
-      msg.textContent = "Now it's time to execute the killer.";
+      msg.innerHTML = `Now it's time to execute the killer.${timeStr}`;
       
       gameOverAnimTimer += 0.08;
       const frame = Math.min(5, Math.floor(gameOverAnimTimer));
@@ -1297,7 +1459,7 @@ function showGameOver(isWin) {
       if (frame === 5) nextBtn.textContent = "FINISH";
     } else {
       title.textContent = "HOORAY!";
-      msg.innerHTML = `Justice is served. The farm is safe once again.${statsLine}`;
+      msg.innerHTML = `Justice is served. The farm is safe once again.${timeStr}${statsLine}`;
       
       gCtx.font = "40px Arial";
       gCtx.textAlign = "center";
@@ -1937,9 +2099,36 @@ function loop() {
     unions.get(key).children.push(cid);
   });
 
+  // Assign distinct vertical offsets to unions within the same generation
+  const levels = new Map();
+  unions.forEach((u, key) => {
+    const ps = u.parents.map(id => hares.find(h => h.rabbit.id === id)).filter(Boolean);
+    if (ps.length === 0) return;
+    
+    // Use targetY for stable level detection, fallback to current y
+    const avgY = ps.reduce((sum, p) => sum + (p.targetY ?? p.y), 0) / ps.length;
+    const avgX = ps.reduce((sum, p) => sum + (p.targetX ?? p.x), 0) / ps.length;
+    const levelKey = Math.round(avgY / 50); // Group by approximate vertical level
+    
+    if (!levels.has(levelKey)) levels.set(levelKey, []);
+    levels.get(levelKey).push({ key, avgX });
+  });
+
+  const unionOffsets = new Map();
+  levels.forEach((units) => {
+    // Sort by horizontal position to keep offsets somewhat orderly
+    units.sort((a, b) => a.avgX - b.avgX);
+    units.forEach((unit, idx) => {
+      // Distribute offsets in a pattern: 0, 15, -15, 30, -30...
+      const magnitude = Math.ceil(idx / 2) * 15;
+      const sign = idx % 2 === 0 ? 1 : -1;
+      unionOffsets.set(unit.key, idx === 0 ? 0 : sign * magnitude);
+    });
+  });
+
   const xButtons = []; // Store X button positions to draw them last
 
-  unions.forEach(u => {
+  unions.forEach((u, key) => {
     const ps = u.parents.map(id => hares.find(h => h.rabbit.id === id)).filter(Boolean);
     const cs = u.children.map(id => hares.find(h => h.rabbit.id === id)).filter(Boolean);
     if (ps.length === 0 || cs.length === 0) return;
@@ -1960,7 +2149,10 @@ function loop() {
     // Calculate vertical mid-point for the union bar
     const avgPy = ps.reduce((sum, p) => sum + (p.y + FRAME_SIZE), 0) / ps.length;
     const avgCy = cs.reduce((sum, c) => sum + (c.y + FRAME_SIZE), 0) / cs.length;
-    const midY = (avgPy + avgCy) / 2;
+    
+    // Use the distinct pre-calculated offset for this level
+    const stagger = unionOffsets.get(key) || 0;
+    const midY = (avgPy + avgCy) / 2 + stagger;
 
     const screenMidY = (midY - camera.y) * camera.zoom;
     const parentXRange = { min: Infinity, max: -Infinity };
@@ -2059,3 +2251,4 @@ function loop() {
   }
   requestAnimationFrame(loop);
 }
+

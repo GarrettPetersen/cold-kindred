@@ -450,7 +450,9 @@ function generateCluePool(additive = false) {
 
   const allConns = [];
   rabbits.forEach(r => { if (r.fatherId) allConns.push({ parentId: r.fatherId, childId: r.id }); if (r.motherId) allConns.push({ parentId: r.motherId, childId: r.id }); });
-  const needed = Math.max(20, newClues.length) - newClues.filter(c => c.type === 'extra').length;
+  
+  // Guarantee a massive pool of flavor clues to prevent dry spells
+  const needed = Math.max(100, newClues.length + 40) - newClues.filter(c => c.type === 'extra').length;
   const availExtra = allConns.filter(c => !existing.has(JSON.stringify(c))).sort(() => random() - 0.5);
   for (let i = 0; i < Math.min(availExtra.length, needed); i++) {
     const conn = availExtra[i];
@@ -573,20 +575,28 @@ function runSimulation() {
     const next = [];
     let ms = shuffle(prev.filter(r => r.sex === 'M'));
     let fs = shuffle(prev.filter(r => r.sex === 'F'));
-    const pairs = Math.min(ms.length, fs.length);
-    for (let i = 0; i < pairs; i++) {
-      const children = 1 + Math.floor(random() * 3);
-      for (let c = 0; c < children; c++) {
-        const sex = random() < 0.5 ? 'M' : 'F';
-        const pool = sex === 'M' ? mPool : fPool;
-        if (pool.length === 0) continue;
-        const name = pool.pop();
-        usedNames.add(name);
-        
-        let bYear = fs[i].birthYear + 20 + Math.floor(random() * 20);
-        if (bYear >= CURRENT_YEAR) bYear = CURRENT_YEAR - 1 - Math.floor(random() * 5);
-        const child = new AnimalRecord(name, sex, bYear, gen, random() < 0.5 ? ms[i].species : fs[i].species, ms[i].id, fs[i].id);
-        next.push(child); rabbits.push(child);
+    
+    // Pairing logic to avoid siblings
+    const usedF = new Set();
+    for (const m of ms) {
+      // Find a female that is NOT a sibling (doesn't share both parents)
+      // Since founders don't have parents, we check fatherId/motherId
+      const f = fs.find(f => !usedF.has(f.id) && (m.fatherId === null || m.fatherId !== f.fatherId || m.motherId !== f.motherId));
+      if (f) {
+        usedF.add(f.id);
+        const children = 1 + Math.floor(random() * 3);
+        for (let c = 0; c < children; c++) {
+          const sex = random() < 0.5 ? 'M' : 'F';
+          const pool = sex === 'M' ? mPool : fPool;
+          if (pool.length === 0) continue;
+          const name = pool.pop();
+          usedNames.add(name);
+          
+          let bYear = f.birthYear + 20 + Math.floor(random() * 20);
+          if (bYear >= CURRENT_YEAR) bYear = CURRENT_YEAR - 1 - Math.floor(random() * 5);
+          const child = new AnimalRecord(name, sex, bYear, gen, random() < 0.5 ? m.species : f.species, m.id, f.id);
+          next.push(child); rabbits.push(child);
+        }
       }
     }
     prev = next;
@@ -1450,9 +1460,21 @@ function loop() {
       if (clueQueue.length === 0) {
         const avail = cluePool.filter(c => {
           if (issuedIds.has(c.id)) return false;
-          // Skip if parent-child is already linked
-          if (c.conn.parentId && c.conn.childId) {
-            if (playerConnections.some(pc => pc.parentId === c.conn.parentId && pc.childId === c.conn.childId)) return false;
+          
+          const conn = c.conn;
+          if (conn.parentId && conn.childId) {
+            if (playerConnections.some(pc => pc.parentId === conn.parentId && pc.childId === conn.childId)) return false;
+          } else if (conn.type === 'couple') {
+            const c1 = playerConnections.filter(pc => pc.parentId === conn.p1).map(pc => pc.childId);
+            const c2 = playerConnections.filter(pc => pc.parentId === conn.p2).map(pc => pc.childId);
+            if (c1.some(id => c2.includes(id))) return false;
+          } else if (conn.type === 'sibling') {
+            const p1 = playerConnections.filter(pc => pc.childId === conn.a).map(pc => pc.parentId);
+            const p2 = playerConnections.filter(pc => pc.childId === conn.b).map(pc => pc.parentId);
+            if (p1.some(id => p2.includes(id))) return false;
+          } else if (conn.type === 'grandparent') {
+            const parents = playerConnections.filter(pc => pc.childId === conn.gc).map(pc => pc.parentId);
+            if (parents.some(pid => playerConnections.some(pc => pc.parentId === conn.gp && pc.childId === pid))) return false;
           }
           return true;
         });

@@ -207,7 +207,8 @@ function saveGame() {
     }
     stats.history[currentDateStr] = { 
       status: gameState.wasSuccess ? 'success' : 'failure',
-      solveTime: solveTime
+      solveTime: solveTime,
+      dnaTestsUsed: 3 - dnaTestsRemaining
     };
     saveStats(stats);
   }
@@ -1392,7 +1393,8 @@ function showGameOver(isWin) {
 
   const statsLine = `<br><br><div style="font-size: 14px; opacity: 0.8; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 15px;">
     WIN STREAK: ${stats.win} (MAX: ${stats.maxWin})<br>
-    ATTEMPT STREAK: ${stats.att} (MAX: ${stats.maxAtt})
+    ATTEMPT STREAK: ${stats.att} (MAX: ${stats.maxAtt})<br>
+    DNA TESTS USED: ${3 - dnaTestsRemaining}
   </div>`;
 
   viewFarmBtn.onclick = () => {

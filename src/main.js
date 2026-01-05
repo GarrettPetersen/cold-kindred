@@ -739,21 +739,45 @@ class Animal {
       ctx.font = `bold ${Math.max(10, Math.floor(10 * camera.zoom))}px monospace`;
       ctx.fillText("SELECT RELATIVE", sx + sz / 2, sy - 40 * camera.zoom);
     }
-    const fontSize = Math.max(10, Math.floor(12 * camera.zoom));
-    ctx.font = `${fontSize}px monospace`; 
+    // Draw Name and Age with high-readability background
+    const fontSize = Math.max(11, Math.floor(13 * camera.zoom));
+    ctx.font = `bold ${fontSize}px Arial, sans-serif`; 
+    const label = `${this.rabbit.firstName} (${CURRENT_YEAR - this.rabbit.birthYear})`;
+    const metrics = ctx.measureText(label);
+    const padX = 6 * camera.zoom, padY = 2 * camera.zoom;
+    const bgW = metrics.width + padX * 2, bgH = fontSize + padY * 2;
+    const bgX = sx + sz / 2 - bgW / 2, bgY = sy + sz + 5 * camera.zoom;
+
+    // Background pill
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.beginPath();
+    ctx.roundRect(bgX, bgY, bgW, bgH, 4 * camera.zoom);
+    ctx.fill();
+
+    // Text
     ctx.fillStyle = getHSL(this.rabbit);
     ctx.textAlign = 'center'; 
-    ctx.shadowBlur = 2; 
-    ctx.shadowColor = 'black';
-    ctx.fillText(`${this.rabbit.firstName} (${CURRENT_YEAR - this.rabbit.birthYear})`, sx + sz / 2, sy + sz + 10 * camera.zoom);
+    ctx.textBaseline = 'top';
+    ctx.fillText(label, sx + sz / 2, bgY + padY);
+
     if (this.rabbit.dnaRelation) { 
-      ctx.font = `bold ${fontSize}px Arial`; ctx.fillStyle = '#44ff44'; 
-      const labelY = Math.max(fontSize + 5, sy - 10 * camera.zoom); // Clamp to screen top
-      ctx.fillText(`🧬 ${this.rabbit.dnaRelation}`, sx + sz / 2, labelY); 
+      ctx.font = `bold ${fontSize}px Arial`; 
+      const dnaLabel = `🧬 ${this.rabbit.dnaRelation}`;
+      const dnaMetrics = ctx.measureText(dnaLabel);
+      const dW = dnaMetrics.width + padX * 2, dH = fontSize + padY * 2;
+      const dX = sx + sz / 2 - dW / 2, dY = Math.max(5, sy - 15 * camera.zoom);
+
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+      ctx.beginPath();
+      ctx.roundRect(dX, dY, dW, dH, 4 * camera.zoom);
+      ctx.fill();
+
+      ctx.fillStyle = '#44ff44';
+      ctx.textBaseline = 'top';
+      ctx.fillText(dnaLabel, sx + sz / 2, dY + padY); 
     }
     const clue = activeClues.get(this.rabbit.id);
     if (clue) {
-      const isR = clue.isRead;
       // Partial scaling for bubbles: they stay larger when zoomed out
       const bubbleScale = camera.zoom * 0.4 + 0.6;
       
@@ -762,11 +786,16 @@ class Animal {
       
       const s = Math.max(0, Math.min(100, this.rabbit.tint.saturate)), l = Math.max(0, Math.min(100, this.rabbit.tint.brightness));
       ctx.fillStyle = `hsla(${this.rabbit.tint.hue}, ${s}%, ${l}%, 0.9)`;
-      ctx.beginPath(); ctx.moveTo(bx + r, by - bh); ctx.lineTo(bx + bw - r, by - bh); ctx.quadraticCurveTo(bx + bw, by - bh, bx + bw, by - bh + r); ctx.lineTo(bx + bw, by - r); ctx.quadraticCurveTo(bx + bw, by, bx + bw - r, by); ctx.lineTo(bx + r, by); ctx.quadraticCurveTo(bx, by, bx, by - r); ctx.lineTo(bx, by - bh + r); ctx.quadraticCurveTo(bx, by - bh, bx + r, by - bh); ctx.closePath(); ctx.fill();
+      ctx.beginPath();
+      ctx.roundRect(bx, by - bh, bw, bh, r);
+      ctx.fill();
+      
       ctx.beginPath(); ctx.moveTo(bx + 5 * bubbleScale, by); ctx.lineTo(bx + 15 * bubbleScale, by); ctx.lineTo(bx + 10 * bubbleScale, by + 5 * bubbleScale); ctx.fill();
       ctx.fillStyle = 'white'; 
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
       ctx.font = `bold ${Math.floor(14 * bubbleScale)}px Arial`; 
-      ctx.fillText('?', bx + bw / 2, by - bh / 2 + 5 * bubbleScale); 
+      ctx.fillText('?', bx + bw / 2, by - bh / 2); 
     }
     ctx.shadowBlur = 0;
   }

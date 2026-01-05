@@ -1738,10 +1738,10 @@ function loop() {
           }
 
           if (choice.groupId) {
-            const group = cluePool.filter(c => c.groupId === next.groupId && !issuedIds.has(c.id));
+            const group = cluePool.filter(c => c.groupId === choice.groupId && !issuedIds.has(c.id));
             clueQueue.push(...group);
           } else {
-            clueQueue.push(next);
+            clueQueue.push(choice);
           }
         }
       }

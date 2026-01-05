@@ -515,15 +515,12 @@ function generateCluePool(additive = false) {
   const allConns = [];
   rabbits.forEach(r => { if (r.fatherId) allConns.push({ parentId: r.fatherId, childId: r.id }); if (r.motherId) allConns.push({ parentId: r.motherId, childId: r.id }); });
   
-  // Guarantee a massive pool of flavor clues to prevent dry spells
-  const needed = Math.max(100, newClues.length + 40) - newClues.filter(c => c.type === 'extra').length;
-  const availExtra = allConns.filter(c => !existing.has(JSON.stringify(c))).sort(() => random() - 0.5);
-  for (let i = 0; i < Math.min(availExtra.length, needed); i++) {
-    const conn = availExtra[i];
+  // Include EVERY parent-child connection in the pool as flavor clues
+  allConns.forEach(conn => {
     // Extra clues also biased toward first-person
     const sid = random() < 0.7 ? (random() < 0.5 ? conn.parentId : conn.childId) : null;
     addRawClue(conn, 'extra', sid);
-  }
+  });
   
   cluePool = newClues;
 
@@ -1082,7 +1079,26 @@ const VILLAIN_QUOTES = [
   "I thought I cleaned that weapon thoroughly...",
   "Genealogy? In a clover field? Unthinkable!",
   "My family tree has always been a bit rotten.",
-  "I only did it for the prime clover patch!"
+  "I only did it for the prime clover patch!",
+  "I thought '2nd cousin twice removed' meant they were removed from the suspect list!",
+  "It was a crime of passion... and a very small amount of hay.",
+  "The DNA doesn't lie, but my mother certainly did!",
+  "I'm not a monster, I'm just biologically predisposed to mischief!",
+  "Does this execution mean I'm off the family tree? Finally!",
+  "You caught me, but you'll never find where I hid the good lettuce!",
+  "I regret nothing! Well, maybe the murder. And the choice of getaway hop.",
+  "Is it too late to ask for a DNA re-test? I have a very similar-looking twin!",
+  "I blame my recessive genes for this poor decision making.",
+  "I'd do it again for a single slice of apple!",
+  "So this is what happens when you don't prune your family tree...",
+  "Foiled by a bunch of amateur genealogists! How humiliating!",
+  "I should have stuck to stealing carrots, it was much lower stakes.",
+  "Let's be honest, {victim} had it coming.",
+  "I'd kill {victim} again for half a carrot!",
+  "{victim} always did have the most punchable face on the farm.",
+  "It was either me or {victim}. I chose me.",
+  "Don't look at me like that, {victim} stole my favorite clover patch first!",
+  "I didn't mean to do it! I just tripped and {victim} happened to be in the way. Multiple times."
 ];
 
 function showGameOver(isWin) {
@@ -1103,7 +1119,10 @@ function showGameOver(isWin) {
   if (gameOverHandle) cancelAnimationFrame(gameOverHandle);
   
   const killer = rabbits.find(r => r.id === killerId);
-  if (!killerQuote) killerQuote = pick(VILLAIN_QUOTES);
+  if (!killerQuote) {
+    const rawQuote = pick(VILLAIN_QUOTES);
+    killerQuote = rawQuote.replace(/{victim}/g, victim.name);
+  }
 
   const stats = calculateStreaks();
   const statsLine = `<br><br><div style="font-size: 14px; opacity: 0.8; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 15px;">
@@ -1613,6 +1632,20 @@ function init() {
       localStorage.removeItem('mysteryFarm_consent');
       location.reload(true);
     }
+
+    // "solve" - Erases current tree and builds the 100% correct one
+    if (cheatBuffer.endsWith("solve")) {
+      playerConnections = [];
+      rabbits.forEach(r => {
+        if (r.fatherId) playerConnections.push({ parentId: r.fatherId, childId: r.id });
+        if (r.motherId) playerConnections.push({ parentId: r.motherId, childId: r.id });
+      });
+      updateTreeDiagram();
+      saveGame();
+      updateUI();
+      notifications.push({ text: "GENEALOGY SYNCED", x: canvas.width/2, y: canvas.height/2, timer: 120, timerMax: 120, color: '#44ff44' });
+      cheatBuffer = "";
+    }
   });
 
   if (gameState.isFinished) {
@@ -1686,8 +1719,18 @@ function loop() {
         });
 
         if (avail.length > 0) {
-          const next = pick(avail);
-          if (next.groupId) {
+          // Prioritize necessary clues over extra clues (3:1 weight)
+          const necessary = avail.filter(c => c.type === 'necessary');
+          const extra = avail.filter(c => c.type === 'extra');
+          
+          let choice;
+          if (necessary.length > 0 && (extra.length === 0 || random() < 0.75)) {
+            choice = pick(necessary);
+          } else {
+            choice = pick(extra);
+          }
+
+          if (choice.groupId) {
             const group = cluePool.filter(c => c.groupId === next.groupId && !issuedIds.has(c.id));
             clueQueue.push(...group);
           } else {
@@ -1760,8 +1803,6 @@ function loop() {
   ctx.restore();
   
   ctx.save();
-  ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-  ctx.lineWidth = 2 * camera.zoom;
 
   // Group connections into "Family Units" (Unions)
   const unions = new Map(); // Key: sorted parent IDs string, Value: { parents: [], children: [] }
@@ -1781,6 +1822,19 @@ function loop() {
     const ps = u.parents.map(id => hares.find(h => h.rabbit.id === id)).filter(Boolean);
     const cs = u.children.map(id => hares.find(h => h.rabbit.id === id)).filter(Boolean);
     if (ps.length === 0 || cs.length === 0) return;
+
+    const isHighlighted = selectedHare && (ps.includes(selectedHare) || cs.includes(selectedHare));
+
+    ctx.save();
+    if (isHighlighted) {
+      ctx.strokeStyle = '#44ff44';
+      ctx.lineWidth = 3.5 * camera.zoom;
+      ctx.shadowBlur = 8 * camera.zoom;
+      ctx.shadowColor = 'rgba(68, 255, 68, 0.4)';
+    } else {
+      ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+      ctx.lineWidth = 2 * camera.zoom;
+    }
 
     // Calculate vertical mid-point for the union bar
     const avgPy = ps.reduce((sum, p) => sum + (p.y + FRAME_SIZE), 0) / ps.length;
@@ -1802,8 +1856,11 @@ function loop() {
       // Draw "X" on parent stem if selected
       if (selectedHare === p || cs.some(c => selectedHare === c)) {
         const xBtnY = (py + screenMidY) / 2;
+        ctx.save();
+        ctx.shadowBlur = 0; // Don't glow the X button itself
         ctx.fillStyle = '#f44'; ctx.beginPath(); ctx.arc(px, xBtnY, 10 * camera.zoom, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = '#fff'; ctx.font = `bold ${Math.floor(12 * camera.zoom)}px Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('X', px, xBtnY);
+        ctx.restore();
       }
     });
 
@@ -1820,6 +1877,7 @@ function loop() {
     const barMinX = Math.min(parentXRange.min, childXRange.min);
     const barMaxX = Math.max(parentXRange.max, childXRange.max);
     ctx.beginPath(); ctx.moveTo(barMinX, screenMidY); ctx.lineTo(barMaxX, screenMidY); ctx.stroke();
+    ctx.restore();
   });
   ctx.restore();
 

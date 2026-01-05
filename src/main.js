@@ -1338,6 +1338,10 @@ let gameOverStep = 0;
 let gameOverAnimTimer = 0;
 let gameOverHandle = null;
 let killerQuote = "";
+let bladeY = 0;
+let headPhysics = { x: 0, y: 0, vx: 0, vy: 0, rot: 0, vrot: 0 };
+let impactTime = 0; // Track when the blade hits the neck
+let bloodTrails = []; // Individual drippy trails
 
 const VILLAIN_QUOTES = [
   "I would have got away with it if it weren't for all the DNA evidence!",
@@ -1376,6 +1380,15 @@ function showGameOver(isWin) {
   const gCanvas = document.getElementById('gameOverCanvas');
   const gCtx = gCanvas.getContext('2d');
   
+  // Reset animation state
+  if (gameOverStep === 0) {
+    gameOverAnimTimer = 0;
+    bladeY = 0;
+    headPhysics = { x: 0, y: 0, vx: 0, vy: 0, rot: 0, vrot: 0 };
+    impactTime = 0;
+    bloodTrails = [];
+  }
+
   // Only set endTime if not already finished (prevents overwriting on view-farm re-entry)
   if (!gameState.isFinished) {
     gameState.isFinished = true;
@@ -1458,15 +1471,144 @@ function showGameOver(isWin) {
       title.textContent = "JUSTICE";
       msg.innerHTML = `Now it's time to execute the killer.${timeStr}`;
       
-      gameOverAnimTimer += 0.08;
-      const frame = Math.min(5, Math.floor(gameOverAnimTimer));
-      const spr = sprites[killer.species].death;
+      const spr = sprites[killer.species].idle;
+      const bodyX = centerX - 32;
+      
+      // Decouple animal height from guillotine height for better alignment
+      const neckY = centerY + 25; 
+      
+      // Species-specific vertical offsets to ensure their necks hit the hole perfectly
+      let speciesShift = 0;
+      if (killer.species === 'Deer') speciesShift = 14;
+      else if (killer.species === 'Black_grouse') speciesShift = 6;
+      else if (killer.species === 'Boar') speciesShift = 4;
+      
+      const bodyY = (neckY - 32) + speciesShift;
+      
+      // 1. Blade Logic (Update position)
+      if (gameOverAnimTimer < 30) {
+        bladeY = centerY - 140; // Waiting
+      } else {
+        // Fall all the way through the neck and stop below it
+        bladeY = Math.min(neckY - 5, bladeY + 15); 
+      }
+      const isCut = bladeY >= neckY - 25;
+
+      // 2. Draw Slow Dripping Blood (Behind the wood)
+      if (isCut) {
+        const timeSinceImpact = gameOverAnimTimer - impactTime;
+        if (bloodTrails.length === 0) {
+          // Initialize individual drippy trails with randomized offsets and clusters
+          for (let i = 0; i < 6; i++) {
+            bloodTrails.push({
+              x: centerX - 25 + Math.random() * 50,
+              y: neckY + 15,
+              length: 0,
+              speed: 0.15 + Math.random() * 0.35,
+              delay: Math.random() * 40,
+              width: 2 + Math.random() * 4
+            });
+          }
+        }
+
+        gCtx.fillStyle = '#b00'; // Darker "drippy" blood red
+        bloodTrails.forEach(trail => {
+          if (timeSinceImpact > trail.delay) {
+            trail.length = Math.min(140, trail.length + trail.speed);
+            gCtx.fillRect(trail.x, trail.y, trail.width, trail.length);
+            gCtx.beginPath();
+            gCtx.arc(trail.x + trail.width/2, trail.y + trail.length, (trail.width/2 + 1) + Math.sin(gameOverAnimTimer/15), 0, Math.PI * 2);
+            gCtx.fill();
+          }
+        });
+      }
+
+      // 3. Draw Animal Body (Bottom half) - ALWAYS BEHIND THE STOCKS
       gCtx.save();
       gCtx.filter = `hue-rotate(${killer.tint.hue}deg) saturate(${killer.tint.saturate}%) brightness(${killer.tint.brightness}%)`;
-      gCtx.drawImage(spr, frame * 32, 0, 32, 32, centerX - 32, centerY - 32, 64, 64);
+      // Draw source rect: (0, 16, 32, 16) - bottom half
+      gCtx.drawImage(spr, 0, 16, 32, 16, bodyX, bodyY + 32, 64, 32);
       gCtx.restore();
+
+      // 4. Draw the Slanted Blade (Inside the frame)
+      gCtx.fillStyle = '#aaa'; // Metal
+      gCtx.beginPath();
+      gCtx.moveTo(centerX - 40, bladeY);
+      gCtx.lineTo(centerX + 40, bladeY);
+      gCtx.lineTo(centerX + 40, bladeY + 10);
+      gCtx.lineTo(centerX - 40, bladeY + 30);
+      gCtx.closePath();
+      gCtx.fill();
       
-      if (frame === 5) nextBtn.textContent = "FINISH";
+      gCtx.strokeStyle = '#fff';
+      gCtx.lineWidth = 2;
+      gCtx.beginPath();
+      gCtx.moveTo(centerX + 40, bladeY + 10);
+      gCtx.lineTo(centerX - 40, bladeY + 30);
+      gCtx.stroke();
+
+      // 5. Draw THE STOCKS (Front face with cutout) - Covers the body and blade
+      gCtx.save();
+      gCtx.fillStyle = '#4a2c12';
+      gCtx.beginPath();
+      gCtx.rect(centerX - 40, neckY, 80, 30); 
+      gCtx.rect(centerX - 40, neckY - 20, 80, 20);
+      gCtx.arc(centerX, neckY, 15, 0, Math.PI * 2, true);
+      gCtx.fill();
+      
+      gCtx.strokeStyle = 'rgba(0,0,0,0.3)';
+      gCtx.lineWidth = 2;
+      gCtx.beginPath();
+      gCtx.arc(centerX, neckY, 15, 0, Math.PI * 2);
+      gCtx.stroke();
+      gCtx.restore();
+
+      // 6. Draw Animal Head (Top half) - ON TOP OF THE STOCKS
+      if (!isCut) {
+        gCtx.save();
+        gCtx.filter = `hue-rotate(${killer.tint.hue}deg) saturate(${killer.tint.saturate}%) brightness(${killer.tint.brightness}%)`;
+        // Draw source rect: (0, 0, 32, 16) - top half
+        gCtx.drawImage(spr, 0, 0, 32, 16, bodyX, bodyY, 64, 32);
+        gCtx.restore();
+      } else {
+        // Flying head physics
+        if (headPhysics.vx === 0) {
+          headPhysics = { x: bodyX, y: bodyY, vx: 5 + Math.random() * 3, vy: -10 - Math.random() * 4, rot: 0, vrot: 0.2 };
+          impactTime = gameOverAnimTimer;
+        }
+        
+        headPhysics.x += headPhysics.vx;
+        headPhysics.y += headPhysics.vy;
+        headPhysics.vy += 0.7; // Gravity
+        headPhysics.rot += headPhysics.vrot;
+        
+        gCtx.save();
+        gCtx.filter = `hue-rotate(${killer.tint.hue}deg) saturate(${killer.tint.saturate}%) brightness(${killer.tint.brightness}%)`;
+        gCtx.translate(headPhysics.x + 32, headPhysics.y + 16);
+        gCtx.rotate(headPhysics.rot);
+        gCtx.drawImage(spr, 0, 0, 32, 16, -32, -16, 64, 32);
+        gCtx.restore();
+
+        // 7. Draw Blood Splatter (Front layer)
+        const timeSinceImpact = gameOverAnimTimer - impactTime;
+        if (timeSinceImpact < 60) {
+          gCtx.fillStyle = '#ff0000';
+          for(let i=0; i<8; i++) {
+            const bx = bodyX + 20 + Math.random() * 25;
+            const by = neckY + Math.random() * 5;
+            gCtx.fillRect(bx, by, 3, 3);
+          }
+        }
+      }
+
+      // 8. Draw Guillotine Frame (Posts and Top) - Drip trails go behind posts
+      gCtx.fillStyle = '#5d3a1a'; // Dark wood
+      gCtx.fillRect(centerX - 50, centerY - 80, 10, 160); // Left post
+      gCtx.fillRect(centerX + 40, centerY - 80, 10, 160); // Right post
+      gCtx.fillRect(centerX - 50, centerY - 90, 100, 15); // Top crossbar
+
+      gameOverAnimTimer += 1;
+      if (headPhysics.y > centerY + 250) nextBtn.textContent = "FINISH";
     } else {
       title.textContent = "HOORAY!";
       msg.innerHTML = `Justice is served. The farm is safe once again.${timeStr}${statsLine}`;
@@ -1935,6 +2077,15 @@ function init() {
       saveGame();
       updateUI();
       notifications.push({ text: "GENEALOGY SYNCED", x: canvas.width/2, y: canvas.height/2, timer: 120, timerMax: 120, color: '#44ff44' });
+      cheatBuffer = "";
+    }
+
+    // "species" - Cycles the killer's species for observation
+    if (cheatBuffer.endsWith("species")) {
+      const k = rabbits.find(r => r.id === killerId);
+      const currIdx = SPECIES.indexOf(k.species);
+      k.species = SPECIES[(currIdx + 1) % SPECIES.length];
+      notifications.push({ text: `KILLER SPECIES: ${k.species}`, x: canvas.width/2, y: canvas.height/2, timer: 120, timerMax: 120, color: '#44ff44' });
       cheatBuffer = "";
     }
   });

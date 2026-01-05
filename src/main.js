@@ -404,45 +404,47 @@ function generateCluePool(additive = false) {
     if (!p || !c) return;
 
     const r = random();
-    if (r < 0.2) {
-      // Strategy 1: Direct Clue
-      const sid = random() < 0.6 ? (random() < 0.5 ? p.id : c.id) : null;
+    if (r < 0.5) {
+      // Strategy 1: Direct Clue (Highly biased toward first-person)
+      const sid = random() < 0.8 ? (random() < 0.5 ? p.id : c.id) : null;
       addRawClue(conn, 'necessary', sid);
-    } else if (r < 0.6) {
-      // Strategy 2: Spouse/Couple Inference
+    } else if (r < 0.75) {
+      // Strategy 2: Spouse/Couple Inference (Speaker is often the child)
       const spouseId = p.sex === 'M' ? c.motherId : c.fatherId;
       const spouse = rabbits.find(r => r.id === spouseId);
       if (spouse) {
         const gid = Math.random().toString(36).substring(2, 7);
-        addRawClue({ parentId: spouse.id, childId: c.id }, 'necessary', null, gid);
+        const sid = random() < 0.7 ? c.id : null;
+        addRawClue({ parentId: spouse.id, childId: c.id }, 'necessary', sid, gid);
         addRawClue({ type: 'couple', p1: p.id, p2: spouse.id }, 'necessary', null, gid);
       } else {
         addRawClue(conn, 'necessary', c.id);
       }
-    } else if (r < 0.85) {
-      // Strategy 3: Sibling Inference
+    } else if (r < 0.9) {
+      // Strategy 3: Sibling Inference (Speaker is often one of the siblings)
       const siblings = rabbits.filter(r => (r.fatherId === p.id || r.motherId === p.id) && r.id !== c.id);
       if (siblings.length > 0) {
         const sib = pick(siblings);
         const gid = Math.random().toString(36).substring(2, 7);
-        addRawClue({ parentId: p.id, childId: sib.id }, 'necessary', null, gid);
-        addRawClue({ type: 'sibling', a: c.id, b: sib.id }, 'necessary', c.id, gid);
+        const sid = random() < 0.7 ? (random() < 0.5 ? c.id : sib.id) : null;
+        addRawClue({ parentId: p.id, childId: sib.id }, 'necessary', sid, gid);
+        addRawClue({ type: 'sibling', a: c.id, b: sib.id }, 'necessary', sid, gid);
       } else {
         addRawClue(conn, 'necessary', c.id);
       }
     } else {
-      // Strategy 4: Grandparent Inference
+      // Strategy 4: Grandparent Inference (Speaker is often the grandchild)
       const gpId = p.fatherId || p.motherId;
       const gp = rabbits.find(r => r.id === gpId);
       if (gp) {
         const gid = Math.random().toString(36).substring(2, 7);
+        const sid = random() < 0.7 ? c.id : null;
         addRawClue({ parentId: gp.id, childId: p.id }, 'necessary', null, gid);
-        addRawClue({ type: 'grandparent', gp: gp.id, gc: c.id }, 'necessary', c.id, gid);
+        addRawClue({ type: 'grandparent', gp: gp.id, gc: c.id }, 'necessary', sid, gid);
       } else {
         addRawClue(conn, 'necessary', p.id);
       }
     }
-    // Final fallback to ensure the actual connection is added if strategies skipped it or it was unique
     addRawClue(conn, 'necessary');
   });
 
@@ -451,7 +453,10 @@ function generateCluePool(additive = false) {
   const needed = Math.max(20, newClues.length) - newClues.filter(c => c.type === 'extra').length;
   const availExtra = allConns.filter(c => !existing.has(JSON.stringify(c))).sort(() => random() - 0.5);
   for (let i = 0; i < Math.min(availExtra.length, needed); i++) {
-    addRawClue(availExtra[i], 'extra');
+    const conn = availExtra[i];
+    // Extra clues also biased toward first-person
+    const sid = random() < 0.7 ? (random() < 0.5 ? conn.parentId : conn.childId) : null;
+    addRawClue(conn, 'extra', sid);
   }
   
   cluePool = newClues;
@@ -739,22 +744,19 @@ class Animal {
     const clue = activeClues.get(this.rabbit.id);
     if (clue) {
       const isR = clue.isRead;
-      // Partial scaling for unread bubbles: they stay larger when zoomed out
-      const bubbleScale = isR ? camera.zoom : (camera.zoom * 0.4 + 0.6);
+      // Partial scaling for bubbles: they stay larger when zoomed out
+      const bubbleScale = camera.zoom * 0.4 + 0.6;
       
-      const m = isR ? 0.6 : 1.0;
-      const bw = 30 * bubbleScale * m, bh = 25 * bubbleScale * m, r = 5 * bubbleScale * m;
+      const bw = 30 * bubbleScale, bh = 25 * bubbleScale, r = 5 * bubbleScale;
       const bx = sx + sz * 0.8, by = sy - 15 * camera.zoom;
       
       const s = Math.max(0, Math.min(100, this.rabbit.tint.saturate)), l = Math.max(0, Math.min(100, this.rabbit.tint.brightness));
-      ctx.fillStyle = isR ? 'rgba(150, 150, 150, 0.6)' : `hsla(${this.rabbit.tint.hue}, ${s}%, ${l}%, 0.9)`;
+      ctx.fillStyle = `hsla(${this.rabbit.tint.hue}, ${s}%, ${l}%, 0.9)`;
       ctx.beginPath(); ctx.moveTo(bx + r, by - bh); ctx.lineTo(bx + bw - r, by - bh); ctx.quadraticCurveTo(bx + bw, by - bh, bx + bw, by - bh + r); ctx.lineTo(bx + bw, by - r); ctx.quadraticCurveTo(bx + bw, by, bx + bw - r, by); ctx.lineTo(bx + r, by); ctx.quadraticCurveTo(bx, by, bx, by - r); ctx.lineTo(bx, by - bh + r); ctx.quadraticCurveTo(bx, by - bh, bx + r, by - bh); ctx.closePath(); ctx.fill();
-      ctx.beginPath(); ctx.moveTo(bx + 5 * bubbleScale * m, by); ctx.lineTo(bx + 15 * bubbleScale * m, by); ctx.lineTo(bx + 10 * bubbleScale * m, by + 5 * bubbleScale * m); ctx.fill();
-      if (!isR) { 
-        ctx.fillStyle = 'white'; 
-        ctx.font = `bold ${Math.floor(14 * bubbleScale)}px Arial`; 
-        ctx.fillText('?', bx + bw / 2, by - bh / 2 + 5 * bubbleScale); 
-      }
+      ctx.beginPath(); ctx.moveTo(bx + 5 * bubbleScale, by); ctx.lineTo(bx + 15 * bubbleScale, by); ctx.lineTo(bx + 10 * bubbleScale, by + 5 * bubbleScale); ctx.fill();
+      ctx.fillStyle = 'white'; 
+      ctx.font = `bold ${Math.floor(14 * bubbleScale)}px Arial`; 
+      ctx.fillText('?', bx + bw / 2, by - bh / 2 + 5 * bubbleScale); 
     }
     ctx.shadowBlur = 0;
   }
@@ -1230,6 +1232,8 @@ function init() {
             saveGame();
           }
           notifications.push({ text: clue.generatedText, x: cx, y: cy - 20, timer: 360, timerMax: 360, color: '#fff' }); 
+          // Disappear after click
+          activeClues.delete(h.rabbit.id);
           return true; 
         }
       }
@@ -1439,11 +1443,19 @@ function loop() {
   if (++lastClueTime >= CLUE_INTERVAL) {
     lastClueTime = 0;
     if (Array.from(activeClues.values()).filter(c => !c.isRead).length < 3) {
+      // Clean pool of already known connections
       const issuedIds = new Set(Array.from(activeClues.values()).map(c => c.id));
       
       // If queue is empty, pick a new clue/group from pool
       if (clueQueue.length === 0) {
-        const avail = cluePool.filter(c => !issuedIds.has(c.id));
+        const avail = cluePool.filter(c => {
+          if (issuedIds.has(c.id)) return false;
+          // Skip if parent-child is already linked
+          if (c.conn.parentId && c.conn.childId) {
+            if (playerConnections.some(pc => pc.parentId === c.conn.parentId && pc.childId === c.conn.childId)) return false;
+          }
+          return true;
+        });
         if (avail.length > 0) {
           const next = pick(avail);
           if (next.groupId) {
@@ -1458,14 +1470,28 @@ function loop() {
 
       // Issue from queue
       if (clueQueue.length > 0) {
-        const c = clueQueue.shift();
-        let tid = c.speakerId;
-        // Find a speaker if original is taken or not specified
-        if (!tid || activeClues.has(tid)) {
-          const free = hares.filter(h => !activeClues.has(h.rabbit.id));
-          if (free.length > 0) tid = pick(free).rabbit.id; else tid = null;
+        // Skip clues already in family tree
+        while (clueQueue.length > 0) {
+          const check = clueQueue[0];
+          if (check.conn.parentId && check.conn.childId) {
+            if (playerConnections.some(pc => pc.parentId === check.conn.parentId && pc.childId === check.conn.childId)) {
+              clueQueue.shift();
+              continue;
+            }
+          }
+          break;
         }
-        if (tid) activeClues.set(tid, c);
+
+        if (clueQueue.length > 0) {
+          const c = clueQueue.shift();
+          let tid = c.speakerId;
+          // Find a speaker if original is taken or not specified
+          if (!tid || activeClues.has(tid)) {
+            const free = hares.filter(h => !activeClues.has(h.rabbit.id));
+            if (free.length > 0) tid = pick(free).rabbit.id; else tid = null;
+          }
+          if (tid) activeClues.set(tid, c);
+        }
       }
     }
   }

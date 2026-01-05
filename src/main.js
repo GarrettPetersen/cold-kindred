@@ -86,6 +86,7 @@ let selectedHare = null;
 let killerId = null;
 let victim = { name: '', species: '', sex: '', tint: null };
 let dnaTestsRemaining = 3;
+let highlightedAnimalIds = new Set(); // Animals to highlight with glow effect
 const notifications = [];
 let necessaryConnections = [];
 let cluePool = [];
@@ -182,7 +183,8 @@ function saveGame() {
     wasSuccess: gameState.wasSuccess,
     globallyIssuedClueIds: Array.from(globallyIssuedClueIds),
     clueQueueIds: clueQueue.map(c => c.id),
-    activeClueIds: Array.from(activeClues.values()).map(c => ({ id: c.id, speakerId: Array.from(activeClues.keys()).find(k => activeClues.get(k) === c), isRead: c.isRead, generatedText: c.generatedText }))
+    activeClueIds: Array.from(activeClues.values()).map(c => ({ id: c.id, speakerId: Array.from(activeClues.keys()).find(k => activeClues.get(k) === c), isRead: c.isRead, generatedText: c.generatedText })),
+    highlightedAnimalIds: Array.from(highlightedAnimalIds)
   };
   localStorage.setItem('mysteryFarm_current', JSON.stringify(data));
   
@@ -234,6 +236,8 @@ function loadGame() {
       }
     });
   }
+
+  highlightedAnimalIds = new Set(data.highlightedAnimalIds || []);
   
   caseLog.forEach(entry => {
     const splitIdx = entry.indexOf(': ');
@@ -548,6 +552,16 @@ function generateCluePool(additive = false) {
       }
     }
   }
+}
+
+// Parse animal IDs from clue text
+function extractAnimalIdsFromText(text) {
+  const ids = new Set();
+  const matches = text.matchAll(/\[\[(\d+):.*?\]\]/g);
+  for (const match of matches) {
+    ids.add(parseInt(match[1]));
+  }
+  return ids;
 }
 
 function generateClueText(clue, speakerId) {
@@ -880,7 +894,30 @@ class Animal {
     const sx = (this.x - camera.x) * camera.zoom, sy = (this.y - camera.y) * camera.zoom, sz = FRAME_SIZE * 2 * camera.zoom;
     // Account for labels and speech bubbles in culling
     if (sx < -sz * 4 || sx > canvas.width + sz * 4 || sy < -sz * 4 || sy > canvas.height + sz * 4) return;
+
+    // Check if this animal should be highlighted
+    const isHighlighted = highlightedAnimalIds.has(this.rabbit.id);
     let d = this.direction; if (this.rabbit.species === 'Fox' && this.state === 'run') { if (d === 2) d = 3; else if (d === 3) d = 2; }
+
+    // Draw highlight glow effect for mentioned animals
+    if (isHighlighted) {
+      const pulse = Math.sin(Date.now() / 300) * 0.3 + 0.7; // Pulsing effect
+      const glowRadius = sz * (0.6 + pulse * 0.2);
+
+      ctx.save();
+      ctx.shadowBlur = glowRadius;
+      ctx.shadowColor = `hsl(${this.rabbit.tint.hue}, 100%, 70%)`;
+      ctx.globalAlpha = 0.8;
+
+      // Draw a glowing circle behind the animal
+      ctx.beginPath();
+      ctx.arc(sx + sz / 2, sy + sz / 2, glowRadius, 0, Math.PI * 2);
+      ctx.fillStyle = `hsla(${this.rabbit.tint.hue}, 100%, 70%, 0.3)`;
+      ctx.fill();
+
+      ctx.restore();
+    }
+
     ctx.save();
     ctx.filter = `hue-rotate(${this.rabbit.tint.hue}deg) saturate(${this.rabbit.tint.saturate}%) brightness(${this.rabbit.tint.brightness}%)`;
     ctx.drawImage(sprites[this.rabbit.species][this.state], this.frame * FRAME_SIZE, d * FRAME_SIZE, FRAME_SIZE, FRAME_SIZE, Math.floor(sx), Math.floor(sy), sz, sz);
@@ -1477,8 +1514,18 @@ function init() {
         
         if (cx >= sbx - 5 && cx <= sbx + bw + 5 && cy >= sby - bh - 5 && cy <= sby + 5) { 
           if (!isR) {
-            clue.isRead = true; 
+            clue.isRead = true;
             clue.generatedText = generateClueText(clue, h.rabbit.id);
+
+            // Clear previous highlights and set new ones
+            highlightedAnimalIds.clear();
+            const mentionedIds = extractAnimalIdsFromText(clue.generatedText);
+            mentionedIds.forEach(id => highlightedAnimalIds.add(id));
+            // Also highlight the speaker if they're mentioned in first-person clues
+            if (mentionedIds.has(h.rabbit.id)) {
+              highlightedAnimalIds.add(h.rabbit.id);
+            }
+
             caseLog.push(`${h.rabbit.firstName}: ${clue.generatedText}`);
             updateTranscriptUI(clue.generatedText, h.rabbit.id);
             saveGame();
@@ -1510,11 +1557,13 @@ function init() {
       if (selectedHare && selectedHare !== clicked) {
         const p = selectedHare.rabbit.birthYear <= clicked.rabbit.birthYear ? selectedHare : clicked, c = p === selectedHare ? clicked : selectedHare;
         if (playerConnections.some(conn => conn.childId === c.rabbit.id && rabbits.find(r => r.id === conn.parentId).sex === p.rabbit.sex)) notifications.push({ text: `${c.rabbit.firstName} already has a ${p.rabbit.sex === 'M' ? 'father' : 'mother'}!`, x: cx, y: cy, timer: 120, timerMax: 120 });
-        else if (!playerConnections.some(conn => conn.parentId === p.rabbit.id && conn.childId === c.rabbit.id)) { 
-          playerConnections.push({ parentId: p.rabbit.id, childId: c.rabbit.id }); 
-          updateTreeDiagram(); 
+        else         if (!playerConnections.some(conn => conn.parentId === p.rabbit.id && conn.childId === c.rabbit.id)) {
+          playerConnections.push({ parentId: p.rabbit.id, childId: c.rabbit.id });
+          updateTreeDiagram();
           saveGame();
-          notifications.push({ text: "Linked!", x: cx, y: cy - 20, timer: 60, timerMax: 60, color: '#44ff44' }); 
+          notifications.push({ text: "Linked!", x: cx, y: cy - 20, timer: 60, timerMax: 60, color: '#44ff44' });
+          // Clear highlights when relationships are added
+          highlightedAnimalIds.clear();
         }
         selectedHare = null;
       } else selectedHare = clicked;

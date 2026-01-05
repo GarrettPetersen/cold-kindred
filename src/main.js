@@ -314,12 +314,51 @@ function getCommonAncestors(id1, id2) {
 
 function getRelationshipLabel(common, id1, id2) {
   if (!common || common.length === 0) return null;
-  const closest = common.reduce((min, c) => (c.dist1 + c.dist2 < min.dist1 + min.dist2 ? c : min), common[0]);
+  
+  // 1. SAFETY OVERRIDE: Check for absolute direct parentage first
+  const r1 = rabbits.find(r => r.id === id1);
+  const r2 = rabbits.find(r => r.id === id2);
+  if (r1 && r2) {
+    if (r1.fatherId === r2.id || r1.motherId === r2.id) return "parent";
+    if (r2.fatherId === r1.id || r2.motherId === r1.id) return "child";
+    if (r1.id === r2.id) return "self";
+  }
+
+  // 2. Complex path logic
+  const closest = common.reduce((min, c) => {
+    const n_min = Math.min(min.dist1, min.dist2) - 1;
+    const n_c = Math.min(c.dist1, c.dist2) - 1;
+    
+    if (n_c < n_min) return c; // -1 (Direct) beats 0 (Uncle)
+    if (n_c > n_min) return min;
+    
+    const rem_min = Math.abs(min.dist1 - min.dist2);
+    const rem_c = Math.abs(c.dist1 - c.dist2);
+    if (rem_c < rem_min) return c;
+    return min;
+  }, common[0]);
+
   const dist1 = closest.dist1;
   const dist2 = closest.dist2;
   const n = Math.min(dist1, dist2) - 1;
   const removed = Math.abs(dist1 - dist2);
   
+  if (n === -1) {
+    if (dist1 === 0 && dist2 === 0) return "self";
+    if (dist1 === 0) { // Killer is the ancestor
+      if (dist2 === 1) return "child";
+      if (dist2 === 2) return "grandchild";
+      if (dist2 === 3) return "gr-grandchild";
+      return "descendant";
+    }
+    if (dist2 === 0) { // Relative is the ancestor
+      if (dist1 === 1) return "parent";
+      if (dist1 === 2) return "grandparent";
+      if (dist1 === 3) return "gr-grandparent";
+      return "ancestor";
+    }
+    return "direct relative";
+  }
   if (n < 0) return null; 
   if (n === 0) {
     if (dist1 === 1 && dist2 === 1) return "sibling";
@@ -348,6 +387,7 @@ function getRelationshipLabel(common, id1, id2) {
 }
 
 function getPath(startId, targetId) {
+  if (startId === targetId) return [];
   const path = [];
   let currId = startId;
   const visited = new Set();
@@ -356,13 +396,28 @@ function getPath(startId, targetId) {
     visited.add(currId);
     const curr = rabbits.find(r => r.id === currId);
     if (!curr) break;
-    const fAnc = getAncestors(curr.fatherId);
-    if (curr.fatherId === targetId || fAnc.has(targetId)) {
+    
+    // Explicitly check if the target is one of the parents
+    if (curr.fatherId === targetId) {
       path.push({ parentId: curr.fatherId, childId: currId });
       currId = curr.fatherId;
-    } else {
+      break;
+    }
+    if (curr.motherId === targetId) {
       path.push({ parentId: curr.motherId, childId: currId });
       currId = curr.motherId;
+      break;
+    }
+
+    const fAnc = getAncestors(curr.fatherId);
+    if (curr.fatherId && (curr.fatherId === targetId || fAnc.has(targetId))) {
+      path.push({ parentId: curr.fatherId, childId: currId });
+      currId = curr.fatherId;
+    } else if (curr.motherId && (curr.motherId === targetId || getAncestors(curr.motherId).has(targetId))) {
+      path.push({ parentId: curr.motherId, childId: currId });
+      currId = curr.motherId;
+    } else {
+      break;
     }
   }
   return path;
@@ -569,9 +624,9 @@ function runSimulation() {
   };
   
   const g0 = [];
-  // Founders
-  for (let i = 0; i < 10; i++) {
-    const sex = i < 5 ? 'M' : 'F';
+  // Founders - 12 (6 pairs) is the sweet spot for 5 generations
+  for (let i = 0; i < 12; i++) {
+    const sex = i < 6 ? 'M' : 'F';
     const pool = sex === 'M' ? mPool : fPool;
     if (pool.length === 0) break;
     const name = pool.pop();
@@ -585,19 +640,27 @@ function runSimulation() {
     let ms = shuffle(prev.filter(r => r.sex === 'M'));
     let fs = shuffle(prev.filter(r => r.sex === 'F'));
     
-    // Pairing logic to avoid ALL shared parents (full and half siblings)
+    // Pairing logic to avoid ALL shared parents (full and half siblings) and parent/child
     const usedF = new Set();
     for (const m of ms) {
       const f = fs.find(f => {
         if (usedF.has(f.id)) return false;
-        // No shared parents (if they have parents)
-        if (m.fatherId !== null && (m.fatherId === f.fatherId || m.motherId === f.motherId || m.fatherId === f.motherId || m.motherId === f.fatherId)) return false;
+        
+        // No shared parents (if they have parents) - prevents full and half siblings
+        const mP = [m.fatherId, m.motherId].filter(id => id !== null);
+        const fP = [f.fatherId, f.motherId].filter(id => id !== null);
+        if (mP.some(id => fP.includes(id))) return false;
+        
+        // No parent-child pairing
+        if (m.id === f.fatherId || m.id === f.motherId || f.id === m.fatherId || f.id === m.motherId) return false;
+        
         return true;
       });
       
       if (f) {
         usedF.add(f.id);
-        const children = 1 + Math.floor(random() * 3);
+        // Average 1.5-2 children per family to keep population stable ~50-60
+        const children = (random() < 0.33) ? 3 : (random() < 0.5 ? 2 : 1);
         for (let c = 0; c < children; c++) {
           const sex = random() < 0.5 ? 'M' : 'F';
           const pool = sex === 'M' ? mPool : fPool;
@@ -617,25 +680,49 @@ function runSimulation() {
 
   const cands = shuffle(rabbits.filter(r => r.generation >= 3));
   let found = false;
+  
+  // Try to find a killer who has at least 2 cousins
   for (const cand of cands) {
     const killer = cand;
-    const relatives = rabbits.filter(r => r.id !== killer.id)
+    const allRel = rabbits.filter(r => r.id !== killer.id)
       .map(r => {
         const common = getCommonAncestors(killer.id, r.id);
         const label = getRelationshipLabel(common, killer.id, r.id);
-        const n = (common.length > 0) ? (Math.min(common[0].dist1, common[0].dist2) - 1) : -1;
+        
+        let n = -1;
+        if (common.length > 0) {
+          const closest = common.reduce((min, c) => {
+            const n_min = Math.min(min.dist1, min.dist2) - 1;
+            const n_c = Math.min(c.dist1, c.dist2) - 1;
+            if (n_c < n_min) return c;
+            if (n_c > n_min) return min;
+            return (Math.abs(c.dist1 - c.dist2) < Math.abs(min.dist1 - min.dist2)) ? c : min;
+          }, common[0]);
+          n = Math.min(closest.dist1, closest.dist2) - 1;
+        }
+        
+        // Safety override: exclude only direct parent/child (n=-1)
+        if (killer.fatherId === r.id || killer.motherId === r.id || r.fatherId === killer.id || r.motherId === killer.id) n = -1;
+        
         return { r, common, label, n };
       })
-      // We want cousins (n >= 1). 1st cousins (n=1) are okay but 2nd+ (n>=2) are better.
-      .filter(e => e.label && e.label.includes("cousin") && e.n >= 1);
+      .filter(e => e.label && e.n >= 0); // Include uncles/grandparents (n=0)
 
-    if (relatives.length >= 2) {
-      // Find two relatives that are the MOST distantly related to EACH OTHER
+    if (allRel.length >= 2) {
+      // Progressive filtering:
+      // 1. Try n >= 2 (2nd cousin+)
+      let relatives = allRel.filter(e => e.n >= 2);
+      // 2. Fallback to n >= 1 (1st cousin+)
+      if (relatives.length < 2) relatives = allRel.filter(e => e.n >= 1);
+      // 3. Final fallback to n >= 0 (Uncles, Grandparents)
+      if (relatives.length < 2) relatives = allRel; 
+
+      // Sort relatives by distance to killer (highest n first)
+      relatives.sort((a, b) => b.n - a.n);
+      
+      const sample = relatives.slice(0, 15);
       let bestPair = null;
       let maxDist = -1;
-      
-      // Sample a subset if there are too many to avoid O(N^2) performance issues
-      const sample = shuffle([...relatives]).slice(0, 20);
       
       for (let i = 0; i < sample.length; i++) {
         for (let j = i + 1; j < sample.length; j++) {
@@ -658,16 +745,31 @@ function runSimulation() {
     }
   }
 
+  // Final fallback if the generation is somehow extremely sparse
   if (!found) {
-    killerId = (cands[0] || rabbits[rabbits.length - 1]).id;
-    const others = shuffle(rabbits.filter(r => r.id !== killerId)
-      .map(r => ({ r, common: getCommonAncestors(killerId, r.id) }))
-      .filter(e => e.common.length > 0))
-      .sort((a, b) => (b.common[0].dist1 + b.common[0].dist2) - (a.common[0].dist1 + a.common[0].dist2));
+    const killer = cands[0] || rabbits[rabbits.length - 1];
+    killerId = killer.id;
+    
+    // Find the two most distant non-parent relatives, strictly n >= 0
+    const others = rabbits.filter(r => r.id !== killerId)
+      .map(r => {
+        const common = getCommonAncestors(killerId, r.id);
+        const label = getRelationshipLabel(common, killerId, r.id);
+        const killerObj = rabbits.find(k => k.id === killerId);
+        let n = common.length > 0 ? (Math.min(common[0].dist1, common[0].dist2) - 1) : -1;
+        if (killerObj.fatherId === r.id || killerObj.motherId === r.id || r.fatherId === killerId || r.motherId === killerId) n = -1;
+        return { r, common, label, n };
+      })
+      .filter(e => e.n >= 0) // Allow Uncles/Grandparents
+      .sort((a, b) => b.n - a.n);
     
     if (others.length >= 2) {
-      others[0].r.dnaRelation = getRelationshipLabel(others[0].common, killerId, others[0].r.id) || "distant relative";
-      others[1].r.dnaRelation = getRelationshipLabel(others[1].common, killerId, others[1].r.id) || "distant relative";
+      others[0].r.dnaRelation = others[0].label;
+      others[1].r.dnaRelation = others[1].label;
+    } else {
+      // Last resort fallback
+      const lastResort = shuffle(rabbits.filter(r => r.id !== killerId && r.id !== killer.fatherId && r.id !== killer.motherId)).slice(0, 2);
+      lastResort.forEach(lr => lr.dnaRelation = "distant relative");
     }
   }
   updateNecessaryConnections();
@@ -712,20 +814,39 @@ class Animal {
       const dx = this.targetX - this.x, dy = this.targetY - this.y, d = Math.sqrt(dx * dx + dy * dy);
       if (d > 5) { this.state = 'run'; this.vx = (dx / d) * 2.5; this.vy = (dy / d) * 2.5; this.updateDir(); }
       else { this.state = 'idle'; this.vx = this.vy = 0; this.x = this.targetX; this.y = this.targetY; }
-    } else {
+    } else if (!gameState.isFinished) {
       hares.forEach(o => { if (o === this || o.targetX !== null) return; const dx = this.x - o.x, dy = this.y - o.y, d2 = dx * dx + dy * dy; if (d2 < 1600 && d2 > 0) { const d = Math.sqrt(d2); this.vx += (dx / d) * 0.2; this.vy += (dy / d) * 0.2; } });
       if (this.state !== 'idle') { const s = this.state === 'walk' ? 1 : 2.5, curr = Math.sqrt(this.vx * this.vx + this.vy * this.vy); if (curr > s) { this.vx = (this.vx / curr) * s; this.vy = (this.vy / curr) * s; } }
       if (--this.moveTimer <= 0) this.setRandomBehavior();
+    } else {
+      this.vx = 0; this.vy = 0; this.state = 'idle';
     }
-    if (this.state !== 'idle') this.updateDir();
+
+    if (this.state !== 'idle' && this.state !== 'death') this.updateDir();
     this.x += this.vx; this.y += this.vy;
     if (this.x < 0) { this.x = 0; this.vx *= -1; } else if (this.x > FIELD_WIDTH) { this.x = FIELD_WIDTH; this.vx *= -1; }
     if (this.y < 0) { this.y = 0; this.vy *= -1; } else if (this.y > FIELD_HEIGHT) { this.y = FIELD_HEIGHT; this.vy *= -1; }
-    this.frameTimer += this.frameSpeed;
-    const spr = sprites[this.rabbit.species][this.state];
-    const max = Math.floor((spr.width || 32) / FRAME_SIZE);
-    if (this.frameTimer >= max) this.frameTimer = 0;
-    this.frame = Math.floor(this.frameTimer);
+    
+    // Post-game override for killer death state
+    if (gameState.isFinished && this.rabbit.id === killerId && gameState.wasSuccess) {
+      // Only show as dead if we've reached our target (or have no target)
+      const atTarget = this.targetX === null || (Math.abs(this.x - this.targetX) < 10 && Math.abs(this.y - this.targetY) < 10);
+      if (atTarget) {
+        this.state = 'death';
+        this.frameTimer = 5;
+        this.frame = 5;
+        this.vx = 0;
+        this.vy = 0;
+      }
+    }
+
+    if (this.state !== 'death') {
+      this.frameTimer += this.frameSpeed;
+      const spr = sprites[this.rabbit.species][this.state];
+      const max = Math.floor((spr.width || 32) / FRAME_SIZE);
+      if (this.frameTimer >= max) this.frameTimer = 0;
+      this.frame = Math.floor(this.frameTimer);
+    }
   }
   draw() {
     const sx = (this.x - camera.x) * camera.zoom, sy = (this.y - camera.y) * camera.zoom, sz = FRAME_SIZE * 2 * camera.zoom;
@@ -888,6 +1009,21 @@ function updateTreeDiagram() {
 const sPanel = document.getElementById('selection-panel'), sName = document.getElementById('selected-name'), sSpec = document.getElementById('selected-species'), dnaBtn = document.getElementById('dna-test-btn'), tCount = document.getElementById('tests-count'), accBtn = document.getElementById('accuse-btn'), gOver = document.getElementById('game-over'), gTitle = document.getElementById('game-over-title'), gMsg = document.getElementById('game-over-msg');
 
 function updateUI() {
+  const playAgainUi = document.getElementById('play-again-ui');
+  if (gameState.isFinished) {
+    if (playAgainUi) playAgainUi.style.display = 'block';
+    if (selectedHare) {
+      sPanel.style.display = 'block'; 
+      sName.textContent = `${selectedHare.rabbit.firstName} (${CURRENT_YEAR - selectedHare.rabbit.birthYear})`; 
+      sSpec.textContent = selectedHare.rabbit.species;
+      dnaBtn.style.display = 'none';
+      accBtn.style.display = 'none';
+      const hint = document.getElementById('selection-hint'); if (hint) hint.style.display = 'none';
+    } else sPanel.style.display = 'none';
+    return;
+  }
+  if (playAgainUi) playAgainUi.style.display = 'none';
+
   if (selectedHare) {
     sPanel.style.display = 'block'; sName.textContent = `${selectedHare.rabbit.firstName} (${CURRENT_YEAR - selectedHare.rabbit.birthYear})`; sSpec.textContent = selectedHare.rabbit.species;
     const hint = document.getElementById('selection-hint'); if (hint) hint.style.display = 'block';
@@ -954,7 +1090,7 @@ function showGameOver(isWin) {
   const title = document.getElementById('game-over-title');
   const msg = document.getElementById('game-over-msg');
   const nextBtn = document.getElementById('game-over-next');
-  const restartBtn = document.getElementById('game-over-restart');
+  const viewFarmBtn = document.getElementById('game-over-view-farm');
   const gCanvas = document.getElementById('gameOverCanvas');
   const gCtx = gCanvas.getContext('2d');
   
@@ -974,6 +1110,11 @@ function showGameOver(isWin) {
     WIN STREAK: ${stats.win} (MAX: ${stats.maxWin})<br>
     ATTEMPT STREAK: ${stats.att} (MAX: ${stats.maxAtt})
   </div>`;
+
+  viewFarmBtn.onclick = () => {
+    modal.style.display = 'none';
+    updateUI(); // Refresh UI to show "Play Again" button
+  };
 
   function gLoop() {
     gCtx.fillStyle = '#3e8948';
@@ -996,7 +1137,7 @@ function showGameOver(isWin) {
       gCtx.restore();
       
       nextBtn.style.display = "none";
-      restartBtn.style.display = "block";
+      viewFarmBtn.style.display = "block";
       return;
     }
 
@@ -1041,7 +1182,7 @@ function showGameOver(isWin) {
       gCtx.fillText("🏆", centerX, centerY);
       
       nextBtn.style.display = "none";
-      restartBtn.style.display = "block";
+      viewFarmBtn.style.display = "block";
       return;
     }
     
@@ -1234,6 +1375,7 @@ function init() {
   
   // Try loading saved game for today
   const wasLoaded = loadGame();
+  updateUI();
 
   // Initialize environment details (same for everyone today)
   const detailCount = 500;
@@ -1257,7 +1399,15 @@ function init() {
   };
 
   const handleAct = (wx, wy, cx, cy) => {
-    if (gameState.isFinished) return false;
+    if (gameState.isFinished) {
+      const hit = hares.find(h => {
+        const sz = FRAME_SIZE * 2;
+        return wx > h.x && wx < h.x + sz && wy > h.y && wy < h.y + sz;
+      });
+      selectedHare = hit || null;
+      updateUI();
+      return true;
+    }
 
     for (const h of hares) {
       const clue = activeClues.get(h.rabbit.id);
@@ -1410,7 +1560,7 @@ function init() {
   });
   dnaBtn.addEventListener('pointerdown', e => e.stopPropagation());
   dnaBtn.addEventListener('click', e => {
-    e.preventDefault(); if (!selectedHare || dnaTestsRemaining <= 0 || selectedHare.rabbit.isTested) return;
+    e.preventDefault(); if (gameState.isFinished || !selectedHare || dnaTestsRemaining <= 0 || selectedHare.rabbit.isTested) return;
     if (selectedHare.rabbit.id === killerId) { showGameOver(true); return; }
     const rel = getRelationshipLabel(getCommonAncestors(killerId, selectedHare.rabbit.id), killerId, selectedHare.rabbit.id);
     selectedHare.rabbit.dnaRelation = rel || "no relation"; selectedHare.rabbit.isTested = true; dnaTestsRemaining--; tCount.textContent = dnaTestsRemaining;
@@ -1420,7 +1570,7 @@ function init() {
   });
   accBtn.addEventListener('pointerdown', e => e.stopPropagation());
   accBtn.addEventListener('click', e => {
-    e.preventDefault(); if (!selectedHare || dnaTestsRemaining > 0) return;
+    e.preventDefault(); if (gameState.isFinished || !selectedHare || dnaTestsRemaining > 0) return;
     showGameOver(selectedHare.rabbit.id === killerId);
   });
 
@@ -1443,15 +1593,25 @@ function init() {
 
   document.getElementById('transcript-header').addEventListener('click', toggleTranscript);
 
-  // Cheat code: type "killer" to reveal the killer in the transcript
+  // Cheat codes
   let cheatBuffer = "";
   window.addEventListener('keyup', e => {
-    cheatBuffer = (cheatBuffer + e.key.toLowerCase()).slice(-6);
-    if (cheatBuffer === "killer") {
+    cheatBuffer = (cheatBuffer + e.key.toLowerCase()).slice(-10);
+    
+    // "killer" - Reveals the culprit in the log
+    if (cheatBuffer.endsWith("killer")) {
       const k = rabbits.find(r => r.id === killerId);
       const msg = `DEBUG: The killer is [[${k.id}:${k.firstName}]] (a ${k.sex === 'M' ? 'male' : 'female'} ${k.species})`;
       updateTranscriptUI(msg, k.id);
       cheatBuffer = "";
+    }
+    
+    // "reset" - Wipes EVERYTHING and reloads
+    if (cheatBuffer.endsWith("reset")) {
+      localStorage.removeItem('mysteryFarm_current');
+      localStorage.removeItem('mysteryFarm_stats');
+      localStorage.removeItem('mysteryFarm_consent');
+      location.reload(true);
     }
   });
 
@@ -1492,7 +1652,7 @@ function constrainCamera() {
 }
 
 function loop() {
-  if (++lastClueTime >= CLUE_INTERVAL) {
+  if (!gameState.isFinished && ++lastClueTime >= CLUE_INTERVAL) {
     lastClueTime = 0;
     if (activeClues.size < 3) {
       // Clean pool of already known connections

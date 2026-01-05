@@ -682,7 +682,31 @@ function runSimulation() {
     prev = next;
   }
 
-  const cands = shuffle(rabbits.filter(r => r.generation >= 3));
+  // Determine generation weights based on population size (favoring larger ones)
+  const genCounts = {};
+  rabbits.forEach(r => genCounts[r.generation] = (genCounts[r.generation] || 0) + 1);
+  
+  const weightedGens = [];
+  // Use generations 2, 3, and 4 as candidates
+  for (let g = 2; g <= 4; g++) {
+    const count = genCounts[g] || 0;
+    // Add the generation ID to the lottery 'count' number of times
+    for (let i = 0; i < count; i++) weightedGens.push(g);
+  }
+  
+  // Pick a generation from the lottery (probabilistic, not deterministic)
+  const selectedGen = weightedGens.length > 0 ? pick(weightedGens) : 3;
+
+  // Find candidates in the chosen generation, prioritizing those with many species-mates
+  const potentialCands = rabbits.filter(r => r.generation === selectedGen);
+  const speciesCamouflage = {};
+  potentialCands.forEach(r => speciesCamouflage[r.species] = (speciesCamouflage[r.species] || 0) + 1);
+  
+  const cands = shuffle(potentialCands).sort((a, b) => {
+    // 80% chance to prioritize species camouflage, 20% total chaos
+    if (random() < 0.8) return (speciesCamouflage[b.species] || 0) - (speciesCamouflage[a.species] || 0);
+    return 0;
+  });
   let found = false;
   
   // Try to find a killer who has at least 2 cousins

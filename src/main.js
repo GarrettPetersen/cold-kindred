@@ -94,7 +94,8 @@ let lastClueTime = 0;
 const CLUE_INTERVAL = 120;
 const hares = [];
 const envDetails = [];
-const clueQueue = [];
+let clueQueue = [];
+let globallyIssuedClueIds = new Set();
 let caseLog = []; // Stores strings like "Name: Clue text"
 let gameState = { isFinished: false, wasSuccess: false };
 
@@ -179,6 +180,8 @@ function saveGame() {
     caseLog,
     isFinished: gameState.isFinished,
     wasSuccess: gameState.wasSuccess,
+    globallyIssuedClueIds: Array.from(globallyIssuedClueIds),
+    clueQueueIds: clueQueue.map(c => c.id),
     activeClueIds: Array.from(activeClues.values()).map(c => ({ id: c.id, speakerId: Array.from(activeClues.keys()).find(k => activeClues.get(k) === c), isRead: c.isRead, generatedText: c.generatedText }))
   };
   localStorage.setItem('mysteryFarm_current', JSON.stringify(data));
@@ -215,7 +218,12 @@ function loadGame() {
   caseLog = data.caseLog || [];
   gameState.isFinished = data.isFinished || false;
   gameState.wasSuccess = data.wasSuccess || false;
+  globallyIssuedClueIds = new Set(data.globallyIssuedClueIds || []);
   
+  if (data.clueQueueIds) {
+    clueQueue = data.clueQueueIds.map(id => cluePool.find(c => c.id === id)).filter(Boolean);
+  }
+
   if (data.activeClueIds) {
     data.activeClueIds.forEach(cData => {
       const clue = cluePool.find(cp => cp.id === cData.id);
@@ -391,7 +399,8 @@ function generateCluePool(additive = false) {
     if (existing.has(connStr)) return;
     if (newClues.length >= rabbits.length * 0.9) return;
     
-    newClues.push({ id: Math.random().toString(36).substring(2, 11), conn, type, speakerId, groupId, isRead: false });
+    const stableId = `clue_${newClues.length}`;
+    newClues.push({ id: stableId, conn, type, speakerId, groupId, isRead: false });
     existing.add(connStr);
   }
 
@@ -576,12 +585,16 @@ function runSimulation() {
     let ms = shuffle(prev.filter(r => r.sex === 'M'));
     let fs = shuffle(prev.filter(r => r.sex === 'F'));
     
-    // Pairing logic to avoid siblings
+    // Pairing logic to avoid ALL shared parents (full and half siblings)
     const usedF = new Set();
     for (const m of ms) {
-      // Find a female that is NOT a sibling (doesn't share both parents)
-      // Since founders don't have parents, we check fatherId/motherId
-      const f = fs.find(f => !usedF.has(f.id) && (m.fatherId === null || m.fatherId !== f.fatherId || m.motherId !== f.motherId));
+      const f = fs.find(f => {
+        if (usedF.has(f.id)) return false;
+        // No shared parents (if they have parents)
+        if (m.fatherId !== null && (m.fatherId === f.fatherId || m.motherId === f.motherId || m.fatherId === f.motherId || m.motherId === f.fatherId)) return false;
+        return true;
+      });
+      
       if (f) {
         usedF.add(f.id);
         const children = 1 + Math.floor(random() * 3);
@@ -1481,9 +1494,13 @@ function constrainCamera() {
 function loop() {
   if (++lastClueTime >= CLUE_INTERVAL) {
     lastClueTime = 0;
-    if (Array.from(activeClues.values()).filter(c => !c.isRead).length < 3) {
+    if (activeClues.size < 3) {
       // Clean pool of already known connections
-      const issuedIds = new Set(Array.from(activeClues.values()).map(c => c.id));
+      const issuedIds = new Set([
+        ...Array.from(activeClues.values()).map(c => c.id),
+        ...clueQueue.map(c => c.id),
+        ...globallyIssuedClueIds
+      ]);
       
       // If queue is empty, pick a new clue/group from pool
       if (clueQueue.length === 0) {
@@ -1507,10 +1524,10 @@ function loop() {
           }
           return true;
         });
+
         if (avail.length > 0) {
           const next = pick(avail);
           if (next.groupId) {
-            // Add entire group to queue
             const group = cluePool.filter(c => c.groupId === next.groupId && !issuedIds.has(c.id));
             clueQueue.push(...group);
           } else {
@@ -1521,27 +1538,28 @@ function loop() {
 
       // Issue from queue
       if (clueQueue.length > 0) {
-        // Skip clues already in family tree
         while (clueQueue.length > 0) {
           const check = clueQueue[0];
-          if (check.conn.parentId && check.conn.childId) {
-            if (playerConnections.some(pc => pc.parentId === check.conn.parentId && pc.childId === check.conn.childId)) {
-              clueQueue.shift();
-              continue;
-            }
+          let redundant = globallyIssuedClueIds.has(check.id);
+          if (!redundant && check.conn.parentId && check.conn.childId) {
+            if (playerConnections.some(pc => pc.parentId === check.conn.parentId && pc.childId === check.conn.childId)) redundant = true;
           }
+          if (redundant) { clueQueue.shift(); continue; }
           break;
         }
 
         if (clueQueue.length > 0) {
           const c = clueQueue.shift();
           let tid = c.speakerId;
-          // Find a speaker if original is taken or not specified
           if (!tid || activeClues.has(tid)) {
             const free = hares.filter(h => !activeClues.has(h.rabbit.id));
             if (free.length > 0) tid = pick(free).rabbit.id; else tid = null;
           }
-          if (tid) activeClues.set(tid, c);
+          if (tid) {
+            activeClues.set(tid, c);
+            globallyIssuedClueIds.add(c.id);
+            saveGame();
+          }
         }
       }
     }

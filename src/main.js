@@ -1797,7 +1797,7 @@ function showIntro() {
 
   // Check for cookie consent
   const hasConsent = localStorage.getItem('mysteryFarm_consent');
-  const consentText = !hasConsent ? "<br><br><span style='font-size: 12px; opacity: 0.6;'>By continuing, you agree to the use of local storage to save your game progress and stats.</span>" : "";
+  const consentText = !hasConsent ? "<br><br><span style='font-size: 12px; opacity: 0.6;'>By continuing, you agree to the <a href='/privacy.html' style='color: white; text-decoration: underline;'>Privacy Policy</a> and the use of local storage to save your game progress and stats.</span>" : "";
 
   function introLoop() {
     iCtx.fillStyle = '#3e8948';

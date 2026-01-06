@@ -1,5 +1,5 @@
 {
-  "appId": "farm.mystery.kindred",
-  "appName": "Mystery Farm",
+  "appId": "farm.mystery.app",
+  "appName": "mystery.farm",
   "webDir": "dist"
 }

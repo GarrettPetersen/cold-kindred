@@ -87,6 +87,14 @@ a {
   pointer-events: auto !important;
   user-select: auto !important;
   -webkit-user-select: auto !important;
+  touch-action: auto !important;
+  cursor: pointer;
+  position: relative;
+  z-index: 210;
+}
+
+#intro-modal, #game-over {
+  touch-action: auto !important;
 }
 
 #gameCanvas {

@@ -13,6 +13,13 @@ This project has been restarted. Previous progress has been moved to the `archiv
 ## iOS Development
 This project uses [Capacitor](https://capacitorjs.com/) to run as a native iOS app.
 
+### Quick Build & Sync
+Run the following command to build the web assets and sync with the iOS project in one step:
+```bash
+make
+```
+
+### Manual Steps
 1. **Build the web project**:
    ```bash
    npm run build

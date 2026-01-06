@@ -710,6 +710,7 @@ function generateClueText(clue, speakerId) {
 
 // --- Simulation ---
 function runSimulation() {
+  tintCache.clear(); // Clear sprite cache for the new game
   rabbits.length = 0;
   nextRabbitId = 1;
   const usedNames = new Set();
@@ -729,9 +730,9 @@ function runSimulation() {
   };
   
   const g0 = [];
-  // Founders - 12 (6 pairs) is the sweet spot for 5 generations
-  for (let i = 0; i < 12; i++) {
-    const sex = i < 6 ? 'M' : 'F';
+  // Founders - 14 (7 pairs) to ensure a more robust population tree
+  for (let i = 0; i < 14; i++) {
+    const sex = i < 7 ? 'M' : 'F';
     const pool = sex === 'M' ? mPool : fPool;
     if (pool.length === 0) break;
     const name = pool.pop();
@@ -747,46 +748,65 @@ function runSimulation() {
     
     // Pairing logic to avoid ALL shared parents (full and half siblings) and parent/child
     const usedF = new Set();
+    const pairs = [];
     for (const m of ms) {
       const f = fs.find(f => {
         if (usedF.has(f.id)) return false;
-        
-        // No shared parents (if they have parents) - prevents full and half siblings
         const mP = [m.fatherId, m.motherId].filter(id => id !== null);
         const fP = [f.fatherId, f.motherId].filter(id => id !== null);
         if (mP.some(id => fP.includes(id))) return false;
-        
-        // No parent-child pairing
         if (m.id === f.fatherId || m.id === f.motherId || f.id === m.fatherId || f.id === m.motherId) return false;
-        
         return true;
       });
-      
       if (f) {
         usedF.add(f.id);
-        // Average 1.5-2 children per family to keep population stable ~50-60
-        const children = (random() < 0.33) ? 3 : (random() < 0.5 ? 2 : 1);
-        
-        // Balanced sex ratio within families to prevent population collapse
-        let firstSex = random() < 0.5 ? 'M' : 'F';
-        
-        for (let c = 0; c < children; c++) {
-          const pool = (c === 0) ? (firstSex === 'M' ? mPool : fPool) : 
-                       (c === 1) ? (firstSex === 'M' ? fPool : mPool) : // Guaranteed opposite for 2nd child
-                       (random() < 0.5 ? mPool : fPool);
-          
-          if (pool.length === 0) continue;
-          const sex = (pool === mPool) ? 'M' : 'F';
-          const name = pool.pop();
-          usedNames.add(name);
-          
-          let bYear = f.birthYear + 20 + Math.floor(random() * 20);
-          if (bYear >= CURRENT_YEAR) bYear = CURRENT_YEAR - 1 - Math.floor(random() * 5);
-          const child = new AnimalRecord(name, sex, bYear, gen, random() < 0.5 ? m.species : f.species, m.id, f.id);
-          next.push(child); rabbits.push(child);
-        }
+        pairs.push({ m, f });
       }
     }
+
+    // Initial pass: standard children
+    pairs.forEach(pair => {
+      const { m, f } = pair;
+      // Slightly higher average children (1.8 -> 2.1)
+      const children = (random() < 0.4) ? 3 : (random() < 0.7 ? 2 : 1);
+      let firstSex = random() < 0.5 ? 'M' : 'F';
+      
+      for (let c = 0; c < children; c++) {
+        const pool = (c === 0) ? (firstSex === 'M' ? mPool : fPool) : 
+                     (c === 1) ? (firstSex === 'M' ? fPool : mPool) :
+                     (random() < 0.5 ? mPool : fPool);
+        
+        if (pool.length === 0) continue;
+        const sex = (pool === mPool) ? 'M' : 'F';
+        const name = pool.pop();
+        usedNames.add(name);
+        
+        let bYear = f.birthYear + 20 + Math.floor(random() * 20);
+        if (bYear >= CURRENT_YEAR) bYear = CURRENT_YEAR - 1 - Math.floor(random() * 5);
+        const child = new AnimalRecord(name, sex, bYear, gen, random() < 0.5 ? m.species : f.species, m.id, f.id);
+        next.push(child); rabbits.push(child);
+      }
+    });
+
+    // Population Stabilizer: If a generation is too small, have some pairs have "surprise" extra children
+    // This prevents the population from dying out in later generations
+    const minGenSize = 14 - gen; // Tapering minimum (13, 12, 11, 10)
+    if (next.length < minGenSize && pairs.length > 0) {
+      const needed = minGenSize - next.length;
+      for (let i = 0; i < needed; i++) {
+        const pair = pick(pairs);
+        const pool = random() < 0.5 ? mPool : fPool;
+        if (pool.length === 0) break;
+        const sex = (pool === mPool) ? 'M' : 'F';
+        const name = pool.pop();
+        usedNames.add(name);
+        let bYear = pair.f.birthYear + 25 + Math.floor(random() * 15);
+        if (bYear >= CURRENT_YEAR) bYear = CURRENT_YEAR - 1;
+        const bonusChild = new AnimalRecord(name, sex, bYear, gen, random() < 0.5 ? pair.m.species : pair.f.species, pair.m.id, pair.f.id);
+        next.push(bonusChild); rabbits.push(bonusChild);
+      }
+    }
+
     prev = next;
   }
 
@@ -921,6 +941,28 @@ function runSimulation() {
   updateTranscriptUI(initialEntry.replace("Case File: ", ""), null);
 }
 
+// --- Sprite Tinting Cache ---
+const tintCache = new Map(); // Key: animalId, Value: { idle: canvas, walk: canvas, run: canvas, death: canvas }
+
+function getTintedSprite(animal, state) {
+  if (!tintCache.has(animal.id)) tintCache.set(animal.id, {});
+  const cache = tintCache.get(animal.id);
+  
+  if (!cache[state]) {
+    const baseSpr = sprites[animal.species][state];
+    if (!baseSpr || !baseSpr.complete || baseSpr.width === 0) return null;
+    
+    const canvas = document.createElement('canvas');
+    canvas.width = baseSpr.width;
+    canvas.height = baseSpr.height;
+    const tCtx = canvas.getContext('2d');
+    tCtx.filter = `hue-rotate(${animal.tint.hue}deg) saturate(${animal.tint.saturate}%) brightness(${animal.tint.brightness}%)`;
+    tCtx.drawImage(baseSpr, 0, 0);
+    cache[state] = canvas;
+  }
+  return cache[state];
+}
+
 // --- Animal Sprite ---
 class Animal {
   constructor(record) {
@@ -931,6 +973,12 @@ class Animal {
     this.frame = 0; this.frameTimer = 0; this.frameSpeed = 0.1;
     this.moveTimer = 0; this.vx = 0; this.vy = 0;
     this.setRandomBehavior();
+    
+    // Cache text metrics once
+    const tempCtx = document.createElement('canvas').getContext('2d');
+    tempCtx.font = "bold 13px Arial, sans-serif";
+    this.nameLabel = `${this.rabbit.firstName} (${CURRENT_YEAR - this.rabbit.birthYear})`;
+    this.nameWidth = tempCtx.measureText(this.nameLabel).width;
   }
   setRandomBehavior() {
     const r = random();
@@ -951,7 +999,20 @@ class Animal {
       if (d > 5) { this.state = 'run'; this.vx = (dx / d) * 2.5; this.vy = (dy / d) * 2.5; this.updateDir(); }
       else { this.state = 'idle'; this.vx = this.vy = 0; this.x = this.targetX; this.y = this.targetY; }
     } else if (!gameState.isFinished) {
-      hares.forEach(o => { if (o === this || o.targetX !== null) return; const dx = this.x - o.x, dy = this.y - o.y, d2 = dx * dx + dy * dy; if (d2 < 1600 && d2 > 0) { const d = Math.sqrt(d2); this.vx += (dx / d) * 0.2; this.vy += (dy / d) * 0.2; } });
+      // Optimization: only check nearby animals or skip frames
+      if (Date.now() % 3 === 0) { // Check every ~3 frames
+        hares.forEach(o => { 
+          if (o === this || o.targetX !== null) return; 
+          const dx = this.x - o.x, dy = this.y - o.y;
+          if (Math.abs(dx) > 40 || Math.abs(dy) > 40) return; // Fast broad-phase
+          const d2 = dx * dx + dy * dy; 
+          if (d2 < 1600 && d2 > 0) { 
+            const d = Math.sqrt(d2); 
+            this.vx += (dx / d) * 0.2; 
+            this.vy += (dy / d) * 0.2; 
+          } 
+        });
+      }
       if (this.state !== 'idle') { const s = this.state === 'walk' ? 1 : 2.5, curr = Math.sqrt(this.vx * this.vx + this.vy * this.vy); if (curr > s) { this.vx = (this.vx / curr) * s; this.vy = (this.vy / curr) * s; } }
       if (--this.moveTimer <= 0) this.setRandomBehavior();
     } else {
@@ -999,23 +1060,20 @@ class Animal {
       const glowRadius = sz * (0.6 + pulse * 0.2);
 
       ctx.save();
-      ctx.shadowBlur = glowRadius;
-      ctx.shadowColor = `hsl(${this.rabbit.tint.hue}, 100%, 70%)`;
-      ctx.globalAlpha = 0.8;
-
-      // Draw a glowing circle behind the animal
+      // Using a simpler arc fill instead of shadowBlur for better performance
+      ctx.globalAlpha = 0.3 * pulse;
       ctx.beginPath();
       ctx.arc(sx + sz / 2, sy + sz / 2, glowRadius, 0, Math.PI * 2);
-      ctx.fillStyle = `hsla(${this.rabbit.tint.hue}, 100%, 70%, 0.3)`;
+      ctx.fillStyle = `hsl(${this.rabbit.tint.hue}, 100%, 70%)`;
       ctx.fill();
-
       ctx.restore();
     }
 
-    ctx.save();
-    ctx.filter = `hue-rotate(${this.rabbit.tint.hue}deg) saturate(${this.rabbit.tint.saturate}%) brightness(${this.rabbit.tint.brightness}%)`;
-    ctx.drawImage(sprites[this.rabbit.species][this.state], this.frame * FRAME_SIZE, d * FRAME_SIZE, FRAME_SIZE, FRAME_SIZE, Math.floor(sx), Math.floor(sy), sz, sz);
-    ctx.restore();
+    const tintedSpr = getTintedSprite(this.rabbit, this.state);
+    if (tintedSpr) {
+      ctx.drawImage(tintedSpr, this.frame * FRAME_SIZE, d * FRAME_SIZE, FRAME_SIZE, FRAME_SIZE, Math.floor(sx), Math.floor(sy), sz, sz);
+    }
+
     if (selectedHare === this) {
       const pulse = Math.sin(Date.now() / 200) * 0.1 + 0.9;
       ctx.beginPath();
@@ -1023,22 +1081,21 @@ class Animal {
       ctx.strokeStyle = '#44ff44';
       ctx.lineWidth = 3 * camera.zoom;
       ctx.stroke();
-      ctx.shadowBlur = 10 * camera.zoom;
-      ctx.shadowColor = '#44ff44';
-      ctx.stroke();
-      ctx.shadowBlur = 0;
+      
       const textAlpha = Math.sin(Date.now() / 200) * 0.3 + 0.7;
       ctx.fillStyle = `rgba(68, 255, 68, ${textAlpha})`;
       ctx.font = `bold ${Math.max(10, Math.floor(10 * camera.zoom))}px monospace`;
+      ctx.textAlign = 'center';
       ctx.fillText("SELECT RELATIVE", sx + sz / 2, sy - 40 * camera.zoom);
     }
     // Draw Name and Age with high-readability background
     const fontSize = Math.max(11, Math.floor(13 * camera.zoom));
     ctx.font = `bold ${fontSize}px Arial, sans-serif`; 
-    const label = `${this.rabbit.firstName} (${CURRENT_YEAR - this.rabbit.birthYear})`;
-    const metrics = ctx.measureText(label);
+    const label = this.nameLabel;
+    // Scale the cached width based on the actual font size being used (accounts for the 11px floor)
+    const labelWidth = this.nameWidth * (fontSize / 13);
     const padX = 6 * camera.zoom, padY = 2 * camera.zoom;
-    const bgW = metrics.width + padX * 2, bgH = fontSize + padY * 2;
+    const bgW = labelWidth + padX * 2, bgH = fontSize + padY * 2;
     const bgX = sx + sz / 2 - bgW / 2, bgY = sy + sz + 5 * camera.zoom;
 
     // Background pill
@@ -1056,6 +1113,7 @@ class Animal {
     if (this.rabbit.dnaRelation) { 
       ctx.font = `bold ${fontSize}px Arial`; 
       const dnaLabel = `🧬 ${this.rabbit.dnaRelation}`;
+      // DNA labels are rare, measuring them is okay or we could cache them too
       const dnaMetrics = ctx.measureText(dnaLabel);
       const dW = dnaMetrics.width + padX * 2, dH = fontSize + padY * 2;
       const dX = sx + sz / 2 - dW / 2, dY = Math.max(5, sy - 15 * camera.zoom);
@@ -1799,7 +1857,7 @@ function showIntro() {
 
   // Check for cookie consent
   const hasConsent = localStorage.getItem('mysteryFarm_consent');
-  const consentText = !hasConsent ? "<br><br><span style='font-size: 12px; opacity: 0.6;'>By continuing, you agree to the <a href='/privacy.html' style='color: white; text-decoration: underline;'>Privacy Policy</a> and the use of local storage to save your game progress and stats.</span>" : "";
+  const consentText = !hasConsent ? "<br><br><span style='font-size: 12px; opacity: 0.6;'>By continuing, you agree to our privacy terms and the use of local storage.</span>" : "";
 
   function introLoop() {
     iCtx.fillStyle = '#3e8948';
@@ -2457,8 +2515,12 @@ function loop() {
 
   // Assign distinct vertical offsets to unions within the same generation
   const levels = new Map();
+  // Create a quick lookup map for animals to avoid repeated hares.find()
+  const idToAnimal = new Map();
+  hares.forEach(h => idToAnimal.set(h.rabbit.id, h));
+
   unions.forEach((u, key) => {
-    const ps = u.parents.map(id => hares.find(h => h.rabbit.id === id)).filter(Boolean);
+    const ps = u.parents.map(id => idToAnimal.get(id)).filter(Boolean);
     if (ps.length === 0) return;
     
     // Use targetY for stable level detection, fallback to current y
@@ -2485,8 +2547,8 @@ function loop() {
   const xButtons = []; // Store X button positions to draw them last
 
   unions.forEach((u, key) => {
-    const ps = u.parents.map(id => hares.find(h => h.rabbit.id === id)).filter(Boolean);
-    const cs = u.children.map(id => hares.find(h => h.rabbit.id === id)).filter(Boolean);
+    const ps = u.parents.map(id => idToAnimal.get(id)).filter(Boolean);
+    const cs = u.children.map(id => idToAnimal.get(id)).filter(Boolean);
     if (ps.length === 0 || cs.length === 0) return;
 
     const isHighlighted = selectedHare && (ps.includes(selectedHare) || cs.includes(selectedHare));
@@ -2609,4 +2671,5 @@ function loop() {
   drawPortrait();
   requestAnimationFrame(loop);
 }
+
 

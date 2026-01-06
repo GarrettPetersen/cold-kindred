@@ -1553,12 +1553,30 @@ const VILLAIN_QUOTES = [
 
 function showGameOver(isWin) {
   const modal = document.getElementById('game-over');
+  const scrollContainer = document.getElementById('game-over-scroll-container');
+  const scrollHint = document.getElementById('game-over-scroll-hint');
   const title = document.getElementById('game-over-title');
   const msg = document.getElementById('game-over-msg');
   const nextBtn = document.getElementById('game-over-next');
   const viewFarmBtn = document.getElementById('game-over-view-farm');
   const gCanvas = document.getElementById('gameOverCanvas');
   const gCtx = gCanvas.getContext('2d');
+
+  // Function to check if scrolling is needed and show/hide hint
+  function updateScrollHint() {
+    setTimeout(() => {
+      if (!scrollContainer) return;
+      const isScrollable = scrollContainer.scrollHeight > scrollContainer.clientHeight;
+      const isAtBottom = scrollContainer.scrollHeight - scrollContainer.scrollTop <= scrollContainer.clientHeight + 20;
+      scrollHint.style.display = (isScrollable && !isAtBottom) ? 'block' : 'none';
+    }, 100);
+  }
+
+  // Attach scroll listener once
+  if (scrollContainer && !scrollContainer.dataset.listenerAttached) {
+    scrollContainer.addEventListener('scroll', updateScrollHint);
+    scrollContainer.dataset.listenerAttached = 'true';
+  }
 
   // Reset animation state
   if (gameOverStep === 0) {
@@ -1624,16 +1642,25 @@ function showGameOver(isWin) {
   };
 
   function gLoop() {
-    gCtx.fillStyle = '#3e8948';
+    // Dark Noir background instead of grass green
+    gCtx.fillStyle = '#151515';
     gCtx.fillRect(0, 0, gCanvas.width, gCanvas.height);
     gCtx.imageSmoothingEnabled = false;
+
     const centerX = gCanvas.width / 2;
     const centerY = gCanvas.height / 2;
+
+    // Draw a subtle vignette
+    const vignette = gCtx.createRadialGradient(centerX, centerY, 50, centerX, centerY, 150);
+    vignette.addColorStop(0, 'rgba(0,0,0,0)');
+    vignette.addColorStop(1, 'rgba(0,0,0,0.6)');
+    gCtx.fillStyle = vignette;
+    gCtx.fillRect(0, 0, gCanvas.width, gCanvas.height);
 
     if (!isWin) {
       title.textContent = "WRONG SUSPECT!";
       title.style.color = "#ff4444";
-      const innocent = selectedHare.rabbit;
+      const innocent = selectedHare ? selectedHare.rabbit : { firstName: "The suspect", species: "animal", tint: { hue: 0, saturate: 0, brightness: 50 } };
       msg.innerHTML = `<span style="color: ${getHSL(innocent)}; font-weight: bold;">${innocent.firstName}</span> was innocent. It was <span style="color: ${getHSL(killer)}; font-weight: bold;">${killer.firstName}</span>!${timeStr}${statsLine}`;
 
       gameOverAnimTimer += 0.1;
@@ -1645,13 +1672,15 @@ function showGameOver(isWin) {
 
       nextBtn.style.display = "none";
       viewFarmBtn.style.display = "block";
+      updateScrollHint();
+      gameOverHandle = requestAnimationFrame(gLoop);
       return;
     }
 
     if (gameOverStep === 0) {
       title.textContent = "CASE SOLVED!";
       title.style.color = "#44ff44";
-      msg.innerHTML = `You found the killer! <span style="color: ${getHSL(killer)}; font-weight: bold;">${killer.firstName}</span> has been apprehended.${timeStr}`;
+      msg.innerHTML = `You found the killer! <span style="color: ${getHSL(killer)}; font-weight: bold;">${killer.firstName}</span> has been apprehended.${timeStr}${statsLine}`;
 
       gCtx.save();
       gCtx.filter = `hue-rotate(${killer.tint.hue}deg) saturate(${killer.tint.saturate}%) brightness(${killer.tint.brightness}%)`;
@@ -1659,17 +1688,28 @@ function showGameOver(isWin) {
       gCtx.restore();
 
       nextBtn.textContent = "NEXT";
+      nextBtn.style.display = "block";
+      viewFarmBtn.style.display = "none";
+      updateScrollHint();
     } else if (gameOverStep === 1) {
       title.textContent = "THE CONFESSION";
-      msg.innerHTML = `<span style="color: ${getHSL(killer)}; font-weight: bold;">${killer.firstName}</span>: "${killerQuote}"${timeStr}`;
+      msg.innerHTML = `<span style="color: ${getHSL(killer)}; font-weight: bold;">${killer.firstName}</span>: "${killerQuote}"${timeStr}${statsLine}`;
 
       gCtx.save();
       gCtx.filter = `hue-rotate(${killer.tint.hue}deg) saturate(${killer.tint.saturate}%) brightness(${killer.tint.brightness}%)`;
       gCtx.drawImage(sprites[killer.species].idle, 0, 0, 32, 32, centerX - 32, centerY - 32, 64, 64);
       gCtx.restore();
+
+      nextBtn.style.display = "block";
+      viewFarmBtn.style.display = "none";
+      updateScrollHint();
     } else if (gameOverStep === 2) {
       title.textContent = "JUSTICE";
-      msg.innerHTML = `Now it's time to execute the killer.${timeStr}`;
+      msg.innerHTML = `Now it's time to execute the killer.${timeStr}${statsLine}`;
+
+      nextBtn.style.display = "block";
+      viewFarmBtn.style.display = "none";
+      updateScrollHint();
 
       const spr = sprites[killer.species].idle;
       const bodyX = centerX - 32;
@@ -1861,6 +1901,7 @@ function showGameOver(isWin) {
       gameOverAnimTimer += 1;
       nextBtn.style.display = "none";
       viewFarmBtn.style.display = "block";
+      updateScrollHint();
     }
 
     gameOverHandle = requestAnimationFrame(gLoop);
@@ -1934,12 +1975,20 @@ function showIntro(isMidGameChange = false) {
   const consentText = !hasConsent ? "<br><br><span style='font-size: 12px; opacity: 0.6;'>By continuing, you agree to our privacy terms and the use of local storage.</span>" : "";
 
   function introLoop() {
-    iCtx.fillStyle = '#3e8948';
+    // Dark Noir background instead of grass green
+    iCtx.fillStyle = '#151515';
     iCtx.fillRect(0, 0, iCanvas.width, iCanvas.height);
     iCtx.imageSmoothingEnabled = false;
 
     const centerX = iCanvas.width / 2;
     const centerY = iCanvas.height / 2;
+
+    // Draw a subtle vignette
+    const vignette = iCtx.createRadialGradient(centerX, centerY, 50, centerX, centerY, 150);
+    vignette.addColorStop(0, 'rgba(0,0,0,0)');
+    vignette.addColorStop(1, 'rgba(0,0,0,0.6)');
+    iCtx.fillStyle = vignette;
+    iCtx.fillRect(0, 0, iCanvas.width, iCanvas.height);
 
     // Handle character selection state
     const needsSelection = !gameState.detective;
@@ -2122,7 +2171,12 @@ function init() {
 
   window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; constrainCamera(); });
   canvas.width = window.innerWidth; canvas.height = window.innerHeight;
-  camera.zoom = Math.min(canvas.width / FIELD_WIDTH, canvas.height / FIELD_HEIGHT); constrainCamera();
+
+  // Start somewhat zoomed in (1.0 zoom) instead of showing the whole field
+  camera.zoom = 1.0;
+  camera.x = FIELD_WIDTH / 2 - (canvas.width / camera.zoom) / 2;
+  camera.y = FIELD_HEIGHT / 2 - (canvas.height / camera.zoom) / 2;
+  constrainCamera();
 
   const getPos = (e) => {
     const rect = canvas.getBoundingClientRect();
@@ -2366,8 +2420,9 @@ function init() {
   document.getElementById('game-over-next').addEventListener('click', () => {
     gameOverStep++;
     gameOverAnimTimer = 0;
-    const killer = rabbits.find(r => r.id === killerId);
-    showGameOver(true);
+    const scrollContainer = document.getElementById('game-over-scroll-container');
+    if (scrollContainer) scrollContainer.scrollTop = 0;
+    showGameOver(gameState.wasSuccess);
   });
 
   document.getElementById('help-btn').addEventListener('click', () => {

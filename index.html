@@ -35,7 +35,7 @@
       <div id="intro-scroll-container" style="flex: 1; overflow-y: auto; padding: 60px 20px 20px 20px; display: flex; flex-direction: column; align-items: center; text-align: center;">
         <div id="intro-content" style="max-width: 800px; width: 100%; margin-top: auto; margin-bottom: auto;">
           <div id="intro-visual" style="margin-bottom: 20px; display: flex; justify-content: center;">
-            <canvas id="introCanvas" width="400" height="200" style="image-rendering: pixelated; width: 600px; height: 300px; max-width: 100%; height: auto; background: #3e8948; border-radius: 8px;"></canvas>
+            <canvas id="introCanvas" width="400" height="200" style="image-rendering: pixelated; width: 600px; height: 300px; max-width: 100%; height: auto; background: #000; border: 2px solid rgba(255,255,255,0.1); border-radius: 8px; box-shadow: inset 0 0 50px rgba(0,0,0,1), 0 4px 20px rgba(0,0,0,0.5);"></canvas>
           </div>
           <h2 id="intro-title" style="color: #ff4444; font-size: 28px; margin-bottom: 20px; text-transform: uppercase; letter-spacing: 2px;"></h2>
           <div id="intro-text" style="font-size: 18px; line-height: 1.6; margin-bottom: 40px; min-height: 120px; color: #ccc; white-space: pre-line;"></div>
@@ -107,18 +107,27 @@
         <!-- Log entries go here -->
       </div>
     </div>
-    <div id="game-over" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); color: white; z-index: 300; font-family: monospace; flex-direction: column; align-items: center; text-align: center; padding: 40px 20px; box-sizing: border-box; pointer-events: auto; overflow-y: auto;">
-      <div style="position: absolute; top: 20px; left: 20px; font-size: 18px; font-weight: bold; opacity: 0.3; pointer-events: none;">mystery.farm</div>
-      <div id="game-over-content" style="max-width: 600px; margin-top: auto; margin-bottom: auto;">
-        <div id="game-over-visual" style="margin-bottom: 20px; display: flex; justify-content: center;">
-          <canvas id="gameOverCanvas" width="400" height="200" style="image-rendering: pixelated; width: 600px; height: 300px; max-width: 100%; height: auto; background: #3e8948; border-radius: 8px;"></canvas>
+    <div id="game-over" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); color: white; z-index: 300; font-family: monospace; flex-direction: column; pointer-events: auto;">
+      <div style="position: absolute; top: 20px; left: 20px; font-size: 18px; font-weight: bold; opacity: 0.3; pointer-events: none; z-index: 10;">mystery.farm</div>
+      
+      <!-- Scrollable Content -->
+      <div id="game-over-scroll-container" style="flex: 1; overflow-y: auto; padding: 60px 20px 20px 20px; display: flex; flex-direction: column; align-items: center; text-align: center;">
+        <div id="game-over-content" style="max-width: 800px; width: 100%; margin-top: auto; margin-bottom: auto;">
+          <div id="game-over-visual" style="margin-bottom: 20px; display: flex; justify-content: center;">
+            <canvas id="gameOverCanvas" width="400" height="200" style="image-rendering: pixelated; width: 600px; height: 300px; max-width: 100%; height: auto; background: #000; border: 2px solid rgba(255,255,255,0.1); border-radius: 8px; box-shadow: inset 0 0 50px rgba(0,0,0,1), 0 4px 20px rgba(0,0,0,0.5);"></canvas>
+          </div>
+          <h1 id="game-over-title" style="color: #44ff44; font-size: 32px; margin-bottom: 20px; text-transform: uppercase; letter-spacing: 2px;"></h1>
+          <p id="game-over-msg" style="font-size: 18px; line-height: 1.6; margin-bottom: 40px; min-height: 100px; color: #ccc;"></p>
         </div>
-        <h1 id="game-over-title" style="color: #44ff44; font-size: 32px; margin-bottom: 20px; text-transform: uppercase; letter-spacing: 2px;"></h1>
-        <p id="game-over-msg" style="font-size: 18px; line-height: 1.6; margin-bottom: 40px; min-height: 100px; color: #ccc;"></p>
-        <div id="game-over-buttons" style="display: flex; gap: 20px; justify-content: center;">
-          <button id="game-over-next" style="background: white; color: black; border: none; padding: 12px 40px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 16px; letter-spacing: 1px;">NEXT</button>
-          <button id="game-over-view-farm" style="display: none; background: #44ff44; color: black; border: none; padding: 12px 40px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 16px; letter-spacing: 1px;">VIEW THE FARM</button>
-        </div>
+      </div>
+
+      <!-- Scroll Hint Arrow -->
+      <div id="game-over-scroll-hint" style="display: none; position: absolute; bottom: 100px; left: 50%; transform: translateX(-50%); color: #44ff44; font-size: 24px; animation: bounce 2s infinite; pointer-events: none; z-index: 15;">▼</div>
+
+      <!-- Fixed Footer for Buttons -->
+      <div id="game-over-footer" style="padding: 20px; display: flex; justify-content: center; gap: 20px; background: linear-gradient(to top, rgba(0,0,0,1) 70%, transparent); z-index: 20;">
+        <button id="game-over-next" style="background: white; color: black; border: none; padding: 12px 40px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 16px; letter-spacing: 1px;">NEXT</button>
+        <button id="game-over-view-farm" style="display: none; background: #44ff44; color: black; border: none; padding: 12px 40px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 16px; letter-spacing: 1px;">VIEW THE FARM</button>
       </div>
     </div>
     <script type="module" src="/src/main.js"></script>

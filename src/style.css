@@ -112,16 +112,16 @@ a {
 /* Mobile Safe Area Adjustments */
 #help-btn {
   position: absolute;
-  top: calc(20px + env(safe-area-inset-top)) !important;
-  left: calc(20px + env(safe-area-inset-left)) !important;
-  width: 44px;
-  height: 44px;
+  top: calc(15px + env(safe-area-inset-top)) !important;
+  left: calc(15px + env(safe-area-inset-left)) !important;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   background: #fff9e6;
   border: 2px solid #5d3a1a;
   color: #2c3e50;
   font-weight: bold;
-  font-size: 24px;
+  font-size: 20px;
   cursor: pointer;
   pointer-events: auto;
   display: flex;
@@ -139,16 +139,16 @@ a {
 
 #stopwatch {
   position: absolute;
-  top: calc(20px + env(safe-area-inset-top)) !important;
-  left: calc(74px + env(safe-area-inset-left)) !important;
-  height: 44px;
-  padding: 0 15px;
-  border-radius: 22px;
+  top: calc(15px + env(safe-area-inset-top)) !important;
+  left: calc(65px + env(safe-area-inset-left)) !important;
+  height: 40px;
+  padding: 0 12px;
+  border-radius: 20px;
   background: #fff9e6;
   border: 2px solid #5d3a1a;
   color: #2c3e50;
   font-weight: bold;
-  font-size: 18px;
+  font-size: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -160,19 +160,19 @@ a {
 
 #ui-overlay {
   position: absolute;
-  top: calc(20px + env(safe-area-inset-top)) !important;
-  right: calc(20px + env(safe-area-inset-right)) !important;
+  top: calc(15px + env(safe-area-inset-top)) !important;
+  right: calc(15px + env(safe-area-inset-right)) !important;
   pointer-events: none;
   font-family: 'Courier New', Courier, monospace;
 }
 
 #status-panel {
   background: #fff9e6;
-  padding: 10px 15px;
+  padding: 8px 12px;
   border-radius: 8px;
   border: 2px solid #5d3a1a;
   margin-bottom: 10px;
-  width: 200px;
+  width: 160px;
   box-sizing: border-box;
   color: #2c3e50;
   font-weight: bold;
@@ -184,14 +184,50 @@ a {
 
 #selection-panel {
   background: #fff9e6;
-  padding: 15px;
+  padding: 12px;
   border-radius: 8px;
   border: 2px solid #5d3a1a;
   pointer-events: auto;
-  width: 200px;
+  width: 160px;
   box-sizing: border-box;
   color: #2c3e50;
   box-shadow: 2px 4px 12px rgba(0,0,0,0.3);
+}
+
+@media (max-width: 450px) {
+  #stopwatch {
+    font-size: 14px;
+    padding: 0 8px;
+    left: calc(60px + env(safe-area-inset-left)) !important;
+  }
+  #help-btn {
+    width: 36px;
+    height: 36px;
+    left: calc(10px + env(safe-area-inset-left)) !important;
+  }
+  #stopwatch {
+    top: calc(10px + env(safe-area-inset-top)) !important;
+    left: calc(56px + env(safe-area-inset-left)) !important;
+    height: 36px;
+  }
+  #help-btn {
+    top: calc(10px + env(safe-area-inset-top)) !important;
+  }
+  #ui-overlay {
+    top: calc(10px + env(safe-area-inset-top)) !important;
+    right: calc(10px + env(safe-area-inset-right)) !important;
+  }
+  #status-panel, #selection-panel {
+    width: 110px;
+    font-size: 12px;
+    padding: 6px 10px;
+  }
+  .dna-label {
+    display: none;
+  }
+  .dna-label-short {
+    display: inline !important;
+  }
 }
 
 #selection-panel h2 {

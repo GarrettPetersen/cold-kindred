@@ -70,7 +70,8 @@ const sprites = {};
 const grassSprites = [];
 const detectiveSprites = {
   fox: new Image(),
-  hare: new Image()
+  hare: new Image(),
+  boarot: new Image()
 };
 SPECIES.forEach(s => { sprites[s] = { idle: new Image(), walk: new Image(), run: new Image(), death: new Image() }; });
 for (let i = 1; i <= 6; i++) {
@@ -80,7 +81,7 @@ for (let i = 1; i <= 6; i++) {
 }
 
 let assetsLoaded = 0;
-const TOTAL_ASSETS = SPECIES.length * 4 + 6 + 2; // +2 for detective sprites
+const TOTAL_ASSETS = SPECIES.length * 4 + 6 + 3; // +3 for detective sprites
 function onAssetLoad() { 
   if (++assetsLoaded === TOTAL_ASSETS) init(); 
 }
@@ -93,8 +94,10 @@ for (let i = 1; i <= 6; i++) {
 // Detective sprites
 detectiveSprites.fox.onload = detectiveSprites.fox.onerror = onAssetLoad;
 detectiveSprites.hare.onload = detectiveSprites.hare.onerror = onAssetLoad;
+detectiveSprites.boarot.onload = detectiveSprites.boarot.onerror = onAssetLoad;
 detectiveSprites.fox.src = '/assets/detectives/film_noir_fox.png';
 detectiveSprites.hare.src = '/assets/detectives/sherlock_hare.png';
+detectiveSprites.boarot.src = '/assets/detectives/hercule_boarot.png';
 
 SPECIES.forEach(s => {
   const walkFile = s === 'Fox' ? 'Fox_walk_with_shadow.png' : `${s}_Walk_with_shadow.png`;
@@ -1329,11 +1332,11 @@ function updateUI() {
       stopwatch.textContent = formatTime(diff);
       // Highlight the finished time
       if (gameState.isFinished) {
-        stopwatch.style.color = '#fff';
-        stopwatch.style.borderColor = '#44ff44';
+        stopwatch.style.color = '#2d8a2d'; // Finished green
+        stopwatch.style.borderColor = '#2d8a2d';
       } else {
-        stopwatch.style.color = '#44ff44';
-        stopwatch.style.borderColor = 'rgba(255,255,255,0.3)';
+        stopwatch.style.color = '#2c3e50'; // Standard notebook text
+        stopwatch.style.borderColor = '#5d3a1a';
       }
     } else {
       stopwatch.textContent = "00:00.0";
@@ -1374,34 +1377,69 @@ function updateTranscriptUI(newEntry, speakerId) {
   function parseText(txt) {
     return txt.replace(/\[\[(\d+):(.*?)\]\]/g, (match, id, name) => {
       const r = rabbits.find(rb => rb.id == id);
-      return `<span style="color: ${getHSL(r)}; font-weight: bold;">${name}</span>`;
+      return `<span class="animal-mention" data-id="${id}" style="color: ${getHSL(r)}; cursor: pointer;">${name}</span>`;
     });
   }
 
   if (newEntry) {
     const speaker = rabbits.find(r => r.id === speakerId);
-    const speakerPart = speaker ? `<span style="color: ${getHSL(speaker)}; font-weight: bold;">${speaker.firstName}</span>: ` : "";
+    const speakerPart = speaker ? `<span class="animal-mention" data-id="${speaker.id}" style="color: ${getHSL(speaker)}; cursor: pointer;">${speaker.firstName}</span>: ` : "";
     const parsedText = parseText(newEntry);
     
     latest.innerHTML = speaker ? `Case Log: ${speakerPart}${parsedText}` : `Case Log: ${parsedText}`;
+    
+    // Make mentions in the "latest clue" header clickable too
+    latest.querySelectorAll('.animal-mention').forEach(span => {
+      span.addEventListener('click', e => {
+        e.stopPropagation(); // Don't toggle transcript
+        const id = parseInt(span.getAttribute('data-id'));
+        const hare = hares.find(h => h.rabbit.id === id);
+        if (hare) {
+          camera.x = hare.x + FRAME_SIZE - (canvas.width / camera.zoom) / 2;
+          camera.y = hare.y + FRAME_SIZE - (canvas.height / camera.zoom) / 2;
+          constrainCamera();
+          
+          highlightedAnimalIds.clear();
+          highlightedAnimalIds.add(id);
+          updateUI();
+        }
+      });
+    });
     
     // Trigger portrait animation
     portraitAnim.active = true;
     portraitAnim.timer = 0;
     
     const entryEl = document.createElement('div');
-    entryEl.style.marginBottom = '10px';
+    entryEl.className = 'transcript-entry';
     if (speaker) {
-      entryEl.style.borderLeft = `3px solid ${getHSL(speaker)}`;
-      entryEl.style.paddingLeft = '10px';
+      entryEl.style.borderLeft = `4px solid ${getHSL(speaker)}`;
     } else {
-      entryEl.style.borderLeft = `3px solid #ff4444`;
-      entryEl.style.paddingLeft = '10px';
-      entryEl.style.fontStyle = 'italic';
-      entryEl.style.opacity = '0.9';
+      entryEl.classList.add('system-message');
     }
     entryEl.innerHTML = `${speakerPart}${parsedText}`;
     list.appendChild(entryEl);
+    
+    // Add click listeners for animal mentions
+    entryEl.querySelectorAll('.animal-mention').forEach(span => {
+      span.addEventListener('click', e => {
+        e.stopPropagation();
+        const id = parseInt(span.getAttribute('data-id'));
+        const hare = hares.find(h => h.rabbit.id === id);
+        if (hare) {
+          // Center camera on the animal
+          camera.x = hare.x + FRAME_SIZE - (canvas.width / camera.zoom) / 2;
+          camera.y = hare.y + FRAME_SIZE - (canvas.height / camera.zoom) / 2;
+          constrainCamera();
+          
+          // Don't auto-select, just highlight them briefly
+          highlightedAnimalIds.clear();
+          highlightedAnimalIds.add(id);
+          updateUI();
+        }
+      });
+    });
+
     list.scrollTop = list.scrollHeight;
   }
 }
@@ -1686,7 +1724,11 @@ function showGameOver(isWin) {
     } else {
       title.textContent = "HOORAY!";
       const det = gameState.detective;
-      const detName = det === 'fox' ? "FILM NOIR FOX" : "SHERLOCK HARE";
+      let detName = "THE DETECTIVE";
+      if (det === 'fox') detName = "FILM NOIR FOX";
+      else if (det === 'hare') detName = "SHERLOCK HARE";
+      else if (det === 'boarot') detName = "HERCULE BOAROT";
+      
       msg.innerHTML = `Justice is served. The farm is safe once again.<br><br><b>${detName}</b> has cracked the case!${timeStr}${statsLine}`;
       
       const spr = detectiveSprites[det];
@@ -1775,7 +1817,7 @@ function showIntro() {
       btn.style.display = 'none'; // Hide next button until character is picked
 
       // Draw the idle frames on the character canvases
-      ['fox', 'hare'].forEach(char => {
+      ['fox', 'hare', 'boarot'].forEach(char => {
         const c = document.getElementById(char + 'Canvas');
         if (c) {
           const ctx = c.getContext('2d');

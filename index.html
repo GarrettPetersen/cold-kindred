@@ -44,6 +44,10 @@
             <canvas id="hareCanvas" width="64" height="64" style="image-rendering: pixelated; width: 128px; height: 128px; margin-bottom: 10px;"></canvas>
             <div style="font-weight: bold; color: #44aaff;">SHERLOCK HARE</div>
           </div>
+          <div class="char-card" data-char="boarot" style="cursor: pointer; background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.2); padding: 20px; border-radius: 12px; transition: all 0.2s;">
+            <canvas id="boarotCanvas" width="64" height="64" style="image-rendering: pixelated; width: 128px; height: 128px; margin-bottom: 10px;"></canvas>
+            <div style="font-weight: bold; color: #88ff88;">HERCULE BOAROT</div>
+          </div>
         </div>
 
         <button id="intro-next" style="background: white; color: black; border: none; padding: 12px 40px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 16px; letter-spacing: 1px;">NEXT</button>
@@ -51,37 +55,37 @@
     </div>
 
     <!-- Help Button -->
-    <button id="help-btn" style="position: absolute; top: 20px; left: 20px; width: 44px; height: 44px; border-radius: 50%; background: rgba(0,0,0,0.7); border: 1px solid rgba(255,255,255,0.3); color: white; font-weight: bold; font-size: 24px; cursor: pointer; pointer-events: auto; display: flex; align-items: center; justify-content: center; font-family: monospace; z-index: 150; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">?</button>
+    <button id="help-btn">?</button>
 
     <!-- Speedrun Stopwatch -->
-    <div id="stopwatch" style="position: absolute; top: 20px; left: 74px; height: 44px; padding: 0 15px; border-radius: 22px; background: rgba(0,0,0,0.7); border: 1px solid rgba(255,255,255,0.3); color: #44ff44; font-weight: bold; font-size: 18px; display: flex; align-items: center; justify-content: center; font-family: monospace; z-index: 150; box-shadow: 0 4px 12px rgba(0,0,0,0.5); pointer-events: none;">00:00.0</div>
+    <div id="stopwatch">00:00.0</div>
 
-    <div id="ui-overlay" style="position: absolute; top: 20px; right: 20px; pointer-events: none; font-family: monospace; color: white;">
-      <div id="status-panel" style="background: rgba(0,0,0,0.7); padding: 10px 15px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); margin-bottom: 10px; text-align: right; width: 200px; box-sizing: border-box;">
-        DNA TESTS: <span id="tests-count" style="color: #44ff44; font-weight: bold;">3</span>
+    <div id="ui-overlay">
+      <div id="status-panel">
+        DNA TESTS: <span id="tests-count" style="color: #2d8a2d; font-weight: bold;">3</span>
       </div>
-      <div id="selection-panel" style="display: none; background: rgba(0,0,0,0.7); padding: 15px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); pointer-events: auto; width: 200px; box-sizing: border-box;">
-        <h2 id="selected-name" style="margin: 0 0 10px 0; font-size: 18px; word-wrap: break-word;"></h2>
-        <p id="selected-species" style="margin: 0 0 15px 0; font-size: 14px; opacity: 0.8;"></p>
-        <div id="selection-hint" style="background: rgba(255,255,255,0.1); padding: 8px; border-radius: 4px; font-size: 12px; color: #ccc; margin-bottom: 15px; border-left: 3px solid #44ff44; line-height: 1.4;">
+      <div id="selection-panel" style="display: none;">
+        <h2 id="selected-name"></h2>
+        <p id="selected-species"></p>
+        <div id="selection-hint">
           Click another animal to link them as parent & child.
         </div>
-        <button id="dna-test-btn" style="background: #44ff44; color: black; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: bold; width: 100%; margin-bottom: 8px;">DNA TEST</button>
-        <button id="accuse-btn" style="background: #ff4444; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: bold; width: 100%; opacity: 0.5;">ACCUSE</button>
+        <button id="dna-test-btn">DNA TEST</button>
+        <button id="accuse-btn">ACCUSE</button>
       </div>
-      <button id="play-again-ui" style="display: none; pointer-events: auto; background: #44ff44; color: black; border: none; padding: 12px 20px; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 14px; width: 200px; margin-top: 10px; font-family: monospace; box-shadow: 0 4px 12px rgba(0,0,0,0.5);" onclick="location.reload()">PLAY AGAIN TOMORROW</button>
+      <button id="play-again-ui" style="display: none;" onclick="location.reload()">PLAY AGAIN TOMORROW</button>
     </div>
 
     <!-- Transcript UI -->
-    <div id="transcript-container" style="position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 600px; background: #000; border-top: 2px solid rgba(255,255,255,0.2); border-radius: 12px 12px 0 0; color: white; font-family: monospace; z-index: 100; transition: height 0.3s ease; height: 40px; display: flex; flex-direction: column;">
+    <div id="transcript-container">
       <div id="portrait-box" style="display: none; position: absolute; top: -70px; left: 10px; width: 64px; height: 64px; background: #000; border: 2px solid rgba(255,255,255,0.3); border-radius: 8px; overflow: hidden; image-rendering: pixelated; box-shadow: 0 4px 12px rgba(0,0,0,0.5); cursor: pointer;">
         <canvas id="portraitCanvas" width="64" height="64" style="width: 100%; height: 100%;"></canvas>
       </div>
-      <div id="transcript-header" style="padding: 10px 20px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1);">
-        <div id="latest-clue" style="overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex-grow: 1; font-size: 14px; color: #44ff44;">Case Log: No clues yet...</div>
-        <span id="transcript-toggle" style="margin-left: 15px; font-size: 12px;">▲ OPEN</span>
+      <div id="transcript-header">
+        <div id="latest-clue">Case Log: No clues yet...</div>
+        <span id="transcript-toggle">▲ OPEN</span>
       </div>
-      <div id="transcript-list" style="flex-grow: 1; overflow-y: auto; padding: 15px 20px; display: none; font-size: 14px; line-height: 1.6;">
+      <div id="transcript-list">
         <!-- Log entries go here -->
       </div>
     </div>

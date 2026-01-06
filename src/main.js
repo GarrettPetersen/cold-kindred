@@ -1967,7 +1967,8 @@ let introAnimTimer = 0;
 let introHandle = null;
 let isMidGameChange = false;
 
-function showIntro(isMidGameChange = false) {
+  function showIntro(isMidGameChangeParam = false) {
+  isMidGameChange = isMidGameChangeParam;
   const modal = document.getElementById('intro-modal');
   const scrollContainer = document.getElementById('intro-scroll-container');
   const scrollHint = document.getElementById('intro-scroll-hint');
@@ -1982,6 +1983,7 @@ function showIntro(isMidGameChange = false) {
 
   // Function to check if scrolling is needed and show/hide hint
   function updateScrollHint() {
+    if (modal.style.display === 'none') return;
     // Small delay to allow DOM to layout
     setTimeout(() => {
       const isScrollable = scrollContainer.scrollHeight > scrollContainer.clientHeight;
@@ -2009,6 +2011,7 @@ function showIntro(isMidGameChange = false) {
   const consentText = !hasConsent ? "<br><br><span style='font-size: 12px; opacity: 0.6;'>By continuing, you agree to our privacy terms and the use of local storage.</span>" : "";
 
   function introLoop() {
+    if (modal.style.display === 'none') return;
     // Dark Noir background instead of grass green
     iCtx.fillStyle = '#151515';
     iCtx.fillRect(0, 0, iCanvas.width, iCanvas.height);

@@ -1732,6 +1732,7 @@ let introStep = 0;
 let introAnimFrame = 0;
 let introAnimTimer = 0;
 let introHandle = null;
+let isMidGameChange = false;
 
 function showIntro() {
   const modal = document.getElementById('intro-modal');
@@ -1766,7 +1767,7 @@ function showIntro() {
 
     // Handle character selection state
     const needsSelection = !gameState.detective;
-    if (needsSelection && introStep === 0) {
+    if ((needsSelection || isMidGameChange) && introStep === 0) {
       title.textContent = "CHOOSE YOUR CHARACTER";
       textContainer.textContent = "Select your detective to begin the investigation.";
       iCanvas.style.display = 'none';
@@ -2138,6 +2139,16 @@ function init() {
     showGameOver(selectedHare.rabbit.id === killerId);
   });
 
+  // Portrait click to change character
+  document.getElementById('portrait-box').addEventListener('click', () => {
+    if (gameState.isFinished) return;
+    gameState.detective = null;
+    isMidGameChange = true;
+    introStep = 0;
+    showIntro();
+    saveGame();
+  });
+
   // Character selection
   document.querySelectorAll('.char-card').forEach(card => {
     card.addEventListener('click', () => {
@@ -2148,7 +2159,16 @@ function init() {
       
       // Auto-advance after selection
       setTimeout(() => {
-        showIntro();
+        if (isMidGameChange) {
+          const modal = document.getElementById('intro-modal');
+          modal.style.display = 'none';
+          if (introHandle) cancelAnimationFrame(introHandle);
+          isMidGameChange = false;
+          introStep = 0;
+          introAnimTimer = 0;
+        } else {
+          showIntro();
+        }
         saveGame();
       }, 500);
     });
@@ -2167,6 +2187,7 @@ function init() {
   });
 
   document.getElementById('help-btn').addEventListener('click', () => {
+    isMidGameChange = false;
     introStep = 0;
     showIntro();
   });

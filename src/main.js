@@ -156,6 +156,7 @@ function drawPortrait() {
   const pCanvas = document.getElementById('portraitCanvas');
   if (!pCanvas) return;
   const pCtx = pCanvas.getContext('2d');
+  pCtx.imageSmoothingEnabled = false;
   const det = gameState.detective;
   if (!det) {
     document.getElementById('portrait-box').style.display = 'none';
@@ -163,7 +164,11 @@ function drawPortrait() {
   }
 
   document.getElementById('portrait-box').style.display = 'block';
-  const spr = detectiveSprites[det];
+
+  // Use celebration sprite if the case is solved successfully
+  const isWin = gameState.isFinished && gameState.wasSuccess;
+  const spr = isWin ? detectiveSprites[det + '_celebration'] : detectiveSprites[det];
+
   if (!spr || !spr.complete) return;
 
   pCtx.clearRect(0, 0, 64, 64);
@@ -175,8 +180,12 @@ function drawPortrait() {
     if (frame >= portraitAnim.frames) {
       portraitAnim.active = false;
       portraitAnim.timer = 0;
-      frame = 0;
+      // If we're celebrating, stay on the last frame
+      frame = isWin ? portraitAnim.frames - 1 : 0;
     }
+  } else if (isWin) {
+    // Hold the last frame of celebration when the game is won
+    frame = portraitAnim.frames - 1;
   }
 
   const sx = (frame % 4) * 64;
@@ -966,6 +975,7 @@ function getTintedSprite(animal, state) {
     canvas.width = baseSpr.width;
     canvas.height = baseSpr.height;
     const tCtx = canvas.getContext('2d');
+    tCtx.imageSmoothingEnabled = false;
     tCtx.filter = `hue-rotate(${animal.tint.hue}deg) saturate(${animal.tint.saturate}%) brightness(${animal.tint.brightness}%)`;
     tCtx.drawImage(baseSpr, 0, 0);
     cache[state] = canvas;
@@ -1707,7 +1717,7 @@ function showGameOver(isWin) {
       title.textContent = "JUSTICE";
       msg.innerHTML = `Now it's time to execute the killer.${timeStr}${statsLine}`;
 
-      nextBtn.style.display = "block";
+      // Show view-farm button instead of next until execution is finished
       viewFarmBtn.style.display = "none";
       updateScrollHint();
 
@@ -1727,8 +1737,9 @@ function showGameOver(isWin) {
       const bodyY = neckY - (spriteNeckY * 2);
 
       // 1. Blade Logic (Update position)
-      if (gameOverAnimTimer < 30) {
-        bladeY = centerY - 140; // Waiting
+      if (gameOverAnimTimer < 60) {
+        bladeY = centerY - 70; // Tucked just below the top crossbar
+        nextBtn.style.display = "none"; // Hide button until blade drops
       } else {
         // Fall all the way through the neck and stop below it
         bladeY = Math.min(neckY - 5, bladeY + 15);
@@ -1812,8 +1823,8 @@ function showGameOver(isWin) {
         gCtx.drawImage(spr, 0, 0, 32, spriteNeckY, bodyX, bodyY, 64, spriteNeckY * 2);
         gCtx.restore();
       } else {
-        // Flying head physics
-        if (headPhysics.vx === 0) {
+        // Flying head physics with ground bounce and roll
+        if (impactTime === 0) {
           headPhysics = { x: bodyX, y: bodyY, vx: 5 + Math.random() * 3, vy: -10 - Math.random() * 4, rot: 0, vrot: 0.2 };
           impactTime = gameOverAnimTimer;
           // Trigger haptic feedback on mobile
@@ -1823,6 +1834,26 @@ function showGameOver(isWin) {
         headPhysics.x += headPhysics.vx;
         headPhysics.y += headPhysics.vy;
         headPhysics.vy += 0.7; // Gravity
+
+        // Ground collision (posts end at centerY + 80)
+        const groundY = centerY + 80;
+        const headHeight = spriteNeckY * 2;
+        if (headPhysics.y + headHeight > groundY) {
+          headPhysics.y = groundY - headHeight;
+          headPhysics.vy *= -0.4; // Bounce damping
+          headPhysics.vx *= 0.8; // Rolling friction
+
+          // Stop rolling/bouncing if velocity is very low
+          if (Math.abs(headPhysics.vy) < 1) headPhysics.vy = 0;
+          if (Math.abs(headPhysics.vx) < 0.2) {
+            headPhysics.vx = 0;
+            headPhysics.vrot = 0;
+          } else {
+            // Roll rotation proportional to horizontal speed
+            headPhysics.vrot = headPhysics.vx * 0.15;
+          }
+        }
+
         headPhysics.rot += headPhysics.vrot;
 
         gCtx.save();
@@ -1851,7 +1882,10 @@ function showGameOver(isWin) {
       gCtx.fillRect(centerX - 50, centerY - 90, 100, 15); // Top crossbar
 
       gameOverAnimTimer += 1;
-      if (headPhysics.y > centerY + 250) nextBtn.textContent = "FINISH";
+      if (isCut && headPhysics.vx === 0) {
+        nextBtn.style.display = "block";
+        nextBtn.textContent = "FINISH";
+      }
     } else {
       title.textContent = "HOORAY!";
       const det = gameState.detective;
@@ -2372,9 +2406,16 @@ function init() {
     showGameOver(selectedHare.rabbit.id === killerId);
   });
 
-  // Portrait click to change character
+  // Portrait click to change character or replay celebration
   document.getElementById('portrait-box').addEventListener('click', () => {
-    if (gameState.isFinished) return;
+    if (gameState.isFinished) {
+      if (gameState.wasSuccess) {
+        // Replay celebration animation
+        portraitAnim.active = true;
+        portraitAnim.timer = 0;
+      }
+      return;
+    }
     gameState.detective = null;
     isMidGameChange = true;
     introStep = 0;
@@ -2602,6 +2643,7 @@ function loop() {
   }
   ctx.fillStyle = '#3e8948';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.imageSmoothingEnabled = false;
 
   ctx.strokeStyle = 'rgba(255,255,255,0.05)'; const sp = 100 * camera.zoom;
   for (let x = (-camera.x * camera.zoom) % sp; x < canvas.width; x += sp) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); }

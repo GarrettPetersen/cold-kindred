@@ -68,6 +68,10 @@ const FEMALE_NAMES = ['Mary', 'Patricia', 'Jennifer', 'Linda', 'Elizabeth', 'Bar
 const SPECIES = ['Hare', 'Boar', 'Deer', 'Fox', 'Black_grouse'];
 const sprites = {};
 const grassSprites = [];
+const detectiveSprites = {
+  fox: new Image(),
+  hare: new Image()
+};
 SPECIES.forEach(s => { sprites[s] = { idle: new Image(), walk: new Image(), run: new Image(), death: new Image() }; });
 for (let i = 1; i <= 6; i++) {
   const img = new Image();
@@ -76,7 +80,7 @@ for (let i = 1; i <= 6; i++) {
 }
 
 let assetsLoaded = 0;
-const TOTAL_ASSETS = SPECIES.length * 4 + 6;
+const TOTAL_ASSETS = SPECIES.length * 4 + 6 + 2; // +2 for detective sprites
 function onAssetLoad() { 
   if (++assetsLoaded === TOTAL_ASSETS) init(); 
 }
@@ -85,6 +89,12 @@ grassSprites.forEach(img => { img.onload = onAssetLoad; img.onerror = onAssetLoa
 for (let i = 1; i <= 6; i++) {
   grassSprites[i-1].src = `/assets/environment/5 Grass/${i}.png`;
 }
+
+// Detective sprites
+detectiveSprites.fox.onload = detectiveSprites.fox.onerror = onAssetLoad;
+detectiveSprites.hare.onload = detectiveSprites.hare.onerror = onAssetLoad;
+detectiveSprites.fox.src = '/assets/detectives/film_noir_fox.png';
+detectiveSprites.hare.src = '/assets/detectives/sherlock_hare.png';
 
 SPECIES.forEach(s => {
   const walkFile = s === 'Fox' ? 'Fox_walk_with_shadow.png' : `${s}_Walk_with_shadow.png`;
@@ -120,7 +130,46 @@ const envDetails = [];
 let clueQueue = [];
 let globallyIssuedClueIds = new Set();
 let caseLog = []; // Stores strings like "Name: Clue text"
-let gameState = { isFinished: false, wasSuccess: false, startTime: null, endTime: null };
+let gameState = { isFinished: false, wasSuccess: false, startTime: null, endTime: null, detective: null };
+
+let portraitAnim = {
+  active: false,
+  timer: 0,
+  frames: 16,
+  fps: 12
+};
+
+function drawPortrait() {
+  const pCanvas = document.getElementById('portraitCanvas');
+  if (!pCanvas) return;
+  const pCtx = pCanvas.getContext('2d');
+  const det = gameState.detective;
+  if (!det) {
+    document.getElementById('portrait-box').style.display = 'none';
+    return;
+  }
+
+  document.getElementById('portrait-box').style.display = 'block';
+  const spr = detectiveSprites[det];
+  if (!spr || !spr.complete) return;
+
+  pCtx.clearRect(0, 0, 64, 64);
+  
+  let frame = 0;
+  if (portraitAnim.active) {
+    portraitAnim.timer += 0.2; // roughly 12fps if loop is 60fps
+    frame = Math.floor(portraitAnim.timer);
+    if (frame >= portraitAnim.frames) {
+      portraitAnim.active = false;
+      portraitAnim.timer = 0;
+      frame = 0;
+    }
+  }
+
+  const sx = (frame % 4) * 64;
+  const sy = Math.floor(frame / 4) * 64;
+  pCtx.drawImage(spr, sx, sy, 64, 64, 0, 0, 64, 64);
+}
 
 // --- Persistence & Stats ---
 function getStats() {
@@ -201,6 +250,7 @@ function saveGame() {
     dnaTestsRemaining,
     playerConnections,
     caseLog,
+    detective: gameState.detective,
     isFinished: gameState.isFinished,
     wasSuccess: gameState.wasSuccess,
     startTime: gameState.startTime,
@@ -211,6 +261,7 @@ function saveGame() {
     highlightedAnimalIds: Array.from(highlightedAnimalIds)
   };
   localStorage.setItem('mysteryFarm_current', JSON.stringify(data));
+  localStorage.setItem('mysteryFarm_detective', gameState.detective); // Global preference
   
   if (gameState.isFinished) {
     const stats = getStats();
@@ -228,6 +279,9 @@ function saveGame() {
 }
 
 function loadGame() {
+  const savedDet = localStorage.getItem('mysteryFarm_detective');
+  if (savedDet) gameState.detective = savedDet;
+
   const saved = localStorage.getItem('mysteryFarm_current');
   if (!saved) return false;
   
@@ -250,6 +304,7 @@ function loadGame() {
   dnaTestsRemaining = data.dnaTestsRemaining ?? 3;
   playerConnections = data.playerConnections || [];
   caseLog = data.caseLog || [];
+  gameState.detective = data.detective || savedDet || null;
   gameState.isFinished = data.isFinished || false;
   gameState.wasSuccess = data.wasSuccess || false;
   gameState.startTime = data.startTime || null;
@@ -1330,6 +1385,10 @@ function updateTranscriptUI(newEntry, speakerId) {
     
     latest.innerHTML = speaker ? `Case Log: ${speakerPart}${parsedText}` : `Case Log: ${parsedText}`;
     
+    // Trigger portrait animation
+    portraitAnim.active = true;
+    portraitAnim.timer = 0;
+    
     const entryEl = document.createElement('div');
     entryEl.style.marginBottom = '10px';
     if (speaker) {
@@ -1626,11 +1685,20 @@ function showGameOver(isWin) {
       if (headPhysics.y > centerY + 250) nextBtn.textContent = "FINISH";
     } else {
       title.textContent = "HOORAY!";
-      msg.innerHTML = `Justice is served. The farm is safe once again.${timeStr}${statsLine}`;
+      const det = gameState.detective;
+      const detName = det === 'fox' ? "FILM NOIR FOX" : "SHERLOCK HARE";
+      msg.innerHTML = `Justice is served. The farm is safe once again.<br><br><b>${detName}</b> has cracked the case!${timeStr}${statsLine}`;
       
-      gCtx.font = "40px Arial";
-      gCtx.textAlign = "center";
-      gCtx.fillText("🏆", centerX, centerY);
+      const spr = detectiveSprites[det];
+      if (spr && spr.complete) {
+        gCtx.save();
+        gCtx.drawImage(spr, 0, 0, 64, 64, centerX - 48, centerY - 48, 96, 96);
+        gCtx.restore();
+      } else {
+        gCtx.font = "40px Arial";
+        gCtx.textAlign = "center";
+        gCtx.fillText("🏆", centerX, centerY);
+      }
       
       nextBtn.style.display = "none";
       viewFarmBtn.style.display = "block";
@@ -1672,6 +1740,7 @@ function showIntro() {
   const btn = document.getElementById('intro-next');
   const iCanvas = document.getElementById('introCanvas');
   const iCtx = iCanvas.getContext('2d');
+  const charSelection = document.getElementById('character-selection');
   
   modal.style.display = 'flex';
   
@@ -1695,127 +1764,155 @@ function showIntro() {
     const centerX = iCanvas.width / 2;
     const centerY = iCanvas.height / 2;
 
-    if (introStep === 0) {
-      title.textContent = "A HEINOUS CRIME";
-      textContainer.innerHTML = `<span style="color: ${getHSL(victim)}; font-weight: bold;">${victim.name}</span> the ${victim.species.replace('_', ' ')} was found dead in the clover field.${consentText}`;
-      
-      // Animate victim death (play once and stay)
-      introAnimTimer += 0.08;
-      const frame = Math.min(5, Math.floor(introAnimTimer));
-      const spr = sprites[victim.species].death;
-      // Draw at 2x size on the higher res canvas
-      iCtx.save();
-      iCtx.filter = `hue-rotate(${victim.tint.hue}deg) saturate(${victim.tint.saturate}%) brightness(${victim.tint.brightness}%)`;
-      iCtx.drawImage(spr, frame * 32, 0, 32, 32, centerX - 32, centerY - 32, 64, 64);
-      iCtx.restore();
-      btn.textContent = "NEXT";
-    } else if (introStep === 1) {
-      title.textContent = "MURDER MOST FOUL!";
-      textContainer.textContent = `DNA testing on the murder weapon reveals that the killer is a ${killer.sex === 'M' ? 'male' : 'female'} ${killer.species.replace('_', ' ')}.`;
-      
-      // Silhouette of killer
-      const spr = sprites[killer.species].idle;
-      iCtx.save();
-      // Light background circle for silhouette
-      iCtx.fillStyle = 'rgba(255,255,255,0.1)';
-      iCtx.beginPath();
-      iCtx.arc(centerX, centerY, 60, 0, Math.PI * 2);
-      iCtx.fill();
-      
-      iCtx.filter = 'brightness(0)';
-      iCtx.drawImage(spr, 0, 0, 32, 32, centerX - 32, centerY - 32, 64, 64);
-      iCtx.restore();
-      
-      // Red question mark
-      iCtx.fillStyle = '#ff4444';
-      iCtx.font = 'bold 48px Arial';
-      iCtx.textAlign = 'center';
-      iCtx.textBaseline = 'middle';
-      iCtx.fillText('?', centerX, centerY - 5);
-      btn.textContent = "NEXT";
-    } else if (introStep === 2) {
-      title.textContent = "DNA EVIDENCE";
-      textContainer.textContent = "The killer has two distant relatives in the DNA database.";
-      
-      // Draw two relatives side-by-side
-      relatives.forEach((rel, idx) => {
-        const rx = idx === 0 ? centerX - 110 : centerX + 45; // Spread them slightly more
-        const ry = centerY - 10;
-        
-        // DNA text ABOVE (matching game UI) - with wrapping
-        iCtx.fillStyle = '#44ff44';
-        iCtx.font = 'bold 11px Arial';
-        iCtx.textAlign = 'center';
-        
-        const label = `🧬 ${rel.dnaRelation}`;
-        const words = label.split(' ');
-        let line = '';
-        const lines = [];
-        const maxWidth = 100; // Max width for label before wrapping
-        
-        for (let n = 0; n < words.length; n++) {
-          const testLine = line + words[n] + ' ';
-          const metrics = iCtx.measureText(testLine);
-          if (metrics.width > maxWidth && n > 0) {
-            lines.push(line);
-            line = words[n] + ' ';
-          } else {
-            line = testLine;
-          }
+    // Handle character selection state
+    const needsSelection = !gameState.detective;
+    if (needsSelection && introStep === 0) {
+      title.textContent = "CHOOSE YOUR CHARACTER";
+      textContainer.textContent = "Select your detective to begin the investigation.";
+      iCanvas.style.display = 'none';
+      charSelection.style.display = 'flex';
+      btn.style.display = 'none'; // Hide next button until character is picked
+
+      // Draw the idle frames on the character canvases
+      ['fox', 'hare'].forEach(char => {
+        const c = document.getElementById(char + 'Canvas');
+        if (c) {
+          const ctx = c.getContext('2d');
+          ctx.imageSmoothingEnabled = false;
+          ctx.clearRect(0, 0, 64, 64);
+          ctx.drawImage(detectiveSprites[char], 0, 0, 64, 64, 0, 0, 64, 64);
         }
-        lines.push(line);
+      });
+    } else {
+      iCanvas.style.display = 'block';
+      charSelection.style.display = 'none';
+      btn.style.display = 'inline-block';
 
-        lines.forEach((l, i) => {
-          iCtx.fillText(l.trim(), rx + 32, ry - 15 - (lines.length - 1 - i) * 14);
-        });
+      // If we started with selection, offset the following steps
+      const step = needsSelection ? introStep - 1 : introStep;
 
-        // Sprite at 2x
+      if (step === 0) {
+        title.textContent = "A HEINOUS CRIME";
+        textContainer.innerHTML = `<span style="color: ${getHSL(victim)}; font-weight: bold;">${victim.name}</span> the ${victim.species.replace('_', ' ')} was found dead in the clover field.${consentText}`;
+        
+        // Animate victim death (play once and stay)
+        introAnimTimer += 0.08;
+        const frame = Math.min(5, Math.floor(introAnimTimer));
+        const spr = sprites[victim.species].death;
+        // Draw at 2x size on the higher res canvas
         iCtx.save();
-        iCtx.filter = `hue-rotate(${rel.tint.hue}deg) saturate(${rel.tint.saturate}%) brightness(${rel.tint.brightness}%)`;
-        iCtx.drawImage(sprites[rel.species].idle, 0, 0, 32, 32, rx, ry, 64, 64);
+        iCtx.filter = `hue-rotate(${victim.tint.hue}deg) saturate(${victim.tint.saturate}%) brightness(${victim.tint.brightness}%)`;
+        iCtx.drawImage(spr, frame * 32, 0, 32, 32, centerX - 32, centerY - 32, 64, 64);
+        iCtx.restore();
+        btn.textContent = "NEXT";
+      } else if (step === 1) {
+        title.textContent = "MURDER MOST FOUL!";
+        textContainer.textContent = `DNA testing on the murder weapon reveals that the killer is a ${killer.sex === 'M' ? 'male' : 'female'} ${killer.species.replace('_', ' ')}.`;
+        
+        // Silhouette of killer
+        const spr = sprites[killer.species].idle;
+        iCtx.save();
+        // Light background circle for silhouette
+        iCtx.fillStyle = 'rgba(255,255,255,0.1)';
+        iCtx.beginPath();
+        iCtx.arc(centerX, centerY, 60, 0, Math.PI * 2);
+        iCtx.fill();
+        
+        iCtx.filter = 'brightness(0)';
+        iCtx.drawImage(spr, 0, 0, 32, 32, centerX - 32, centerY - 32, 64, 64);
         iCtx.restore();
         
-        // Name BELOW
-        iCtx.fillStyle = getHSL(rel);
-        iCtx.font = 'bold 14px monospace';
+        // Red question mark
+        iCtx.fillStyle = '#ff4444';
+        iCtx.font = 'bold 48px Arial';
         iCtx.textAlign = 'center';
-        iCtx.fillText(rel.firstName, rx + 32, ry + 80);
-      });
-      btn.textContent = "NEXT";
-    } else if (introStep === 3) {
-      title.textContent = "SOLVE THE CASE";
-      textContainer.innerHTML = "Click the speech bubbles to talk to animals for clues. Use your 3 DNA tests wisely.<br><br>Click one animal and then another to record a parent/child relationship and build your family tree.";
-      
-      // Draw a sample animal with a speech bubble
-      const sample = rabbits.find(r => r.id !== killerId) || rabbits[0];
-      const rx = centerX - 32;
-      const ry = centerY - 20;
+        iCtx.textBaseline = 'middle';
+        iCtx.fillText('?', centerX, centerY - 5);
+        btn.textContent = "NEXT";
+      } else if (step === 2) {
+        title.textContent = "DNA EVIDENCE";
+        textContainer.textContent = "The killer has two distant relatives in the DNA database.";
+        
+        // Draw two relatives side-by-side
+        relatives.forEach((rel, idx) => {
+          const rx = idx === 0 ? centerX - 110 : centerX + 45; // Spread them slightly more
+          const ry = centerY - 10;
+          
+          // DNA text ABOVE (matching game UI) - with wrapping
+          iCtx.fillStyle = '#44ff44';
+          iCtx.font = 'bold 11px Arial';
+          iCtx.textAlign = 'center';
+          
+          const label = `🧬 ${rel.dnaRelation}`;
+          const words = label.split(' ');
+          let line = '';
+          const lines = [];
+          const maxWidth = 100; // Max width for label before wrapping
+          
+          for (let n = 0; n < words.length; n++) {
+            const testLine = line + words[n] + ' ';
+            const metrics = iCtx.measureText(testLine);
+            if (metrics.width > maxWidth && n > 0) {
+              lines.push(line);
+              line = words[n] + ' ';
+            } else {
+              line = testLine;
+            }
+          }
+          lines.push(line);
 
-      iCtx.save();
-      iCtx.filter = `hue-rotate(${sample.tint.hue}deg) saturate(${sample.tint.saturate}%) brightness(${sample.tint.brightness}%)`;
-      iCtx.drawImage(sprites[sample.species].idle, 0, 0, 32, 32, rx, ry, 64, 64);
-      iCtx.restore();
+          lines.forEach((l, i) => {
+            iCtx.fillText(l.trim(), rx + 32, ry - 15 - (lines.length - 1 - i) * 14);
+          });
 
-      // Speech bubble
-      const bx = rx + 50, by = ry - 10, bw = 30, bh = 25, r = 5;
-      const s = Math.max(0, Math.min(100, sample.tint.saturate)), l = Math.max(0, Math.min(100, sample.tint.brightness));
-      iCtx.fillStyle = `hsla(${sample.tint.hue}, ${s}%, ${l}%, 0.9)`;
-      iCtx.beginPath(); iCtx.moveTo(bx + r, by - bh); iCtx.lineTo(bx + bw - r, by - bh); iCtx.quadraticCurveTo(bx + bw, by - bh, bx + bw, by - bh + r); iCtx.lineTo(bx + bw, by - r); iCtx.quadraticCurveTo(bx + bw, by, bx + bw - r, by); iCtx.lineTo(bx + r, by); iCtx.quadraticCurveTo(bx, by, bx, by - r); iCtx.lineTo(bx, by - bh + r); iCtx.quadraticCurveTo(bx, by - bh, bx + r, by - bh); iCtx.closePath(); iCtx.fill();
-      iCtx.beginPath(); iCtx.moveTo(bx + 5, by); iCtx.lineTo(bx + 15, by); iCtx.lineTo(bx + 10, by + 5); iCtx.fill();
-      iCtx.fillStyle = 'white'; iCtx.font = "bold 14px Arial"; iCtx.textAlign = "center";
-      iCtx.fillText('?', bx + bw / 2, by - bh / 2 + 5);
+          // Sprite at 2x
+          iCtx.save();
+          iCtx.filter = `hue-rotate(${rel.tint.hue}deg) saturate(${rel.tint.saturate}%) brightness(${rel.tint.brightness}%)`;
+          iCtx.drawImage(sprites[rel.species].idle, 0, 0, 32, 32, rx, ry, 64, 64);
+          iCtx.restore();
+          
+          // Name BELOW
+          iCtx.fillStyle = getHSL(rel);
+          iCtx.font = 'bold 14px monospace';
+          iCtx.textAlign = 'center';
+          iCtx.fillText(rel.firstName, rx + 32, ry + 80);
+        });
+        btn.textContent = "NEXT";
+      } else if (step === 3) {
+        title.textContent = "SOLVE THE CASE";
+        textContainer.innerHTML = "Click the speech bubbles to talk to animals for clues. Use your 3 DNA tests wisely.<br><br>Click one animal and then another to record a parent/child relationship and build your family tree.";
+        
+        // Draw a sample animal with a speech bubble
+        const sample = rabbits.find(r => r.id !== killerId) || rabbits[0];
+        const rx = centerX - 32;
+        const ry = centerY - 20;
 
-      btn.textContent = "START INVESTIGATION";
-    } else {
-      modal.style.display = 'none';
-      localStorage.setItem('mysteryFarm_consent', 'true'); // Save consent when they finish the intro
-      if (!gameState.startTime) {
-        gameState.startTime = Date.now();
-        saveGame();
+        iCtx.save();
+        iCtx.filter = `hue-rotate(${sample.tint.hue}deg) saturate(${sample.tint.saturate}%) brightness(${sample.tint.brightness}%)`;
+        iCtx.drawImage(sprites[sample.species].idle, 0, 0, 32, 32, rx, ry, 64, 64);
+        iCtx.restore();
+
+        // Speech bubble
+        const bx = rx + 50, by = ry - 10, bw = 30, bh = 25, r = 5;
+        const s = Math.max(0, Math.min(100, sample.tint.saturate)), l = Math.max(0, Math.min(100, sample.tint.brightness));
+        iCtx.fillStyle = `hsla(${sample.tint.hue}, ${s}%, ${l}%, 0.9)`;
+        iCtx.beginPath(); iCtx.moveTo(bx + r, by - bh); iCtx.lineTo(bx + bw - r, by - bh); iCtx.quadraticCurveTo(bx + bw, by - bh, bx + bw, by - bh + r); iCtx.lineTo(bx + bw, by - r); iCtx.quadraticCurveTo(bx + bw, by, bx + bw - r, by); iCtx.lineTo(bx + r, by); iCtx.quadraticCurveTo(bx, by, bx, by - r); iCtx.lineTo(bx, by - bh + r); iCtx.quadraticCurveTo(bx, by - bh, bx + r, by - bh); iCtx.closePath(); iCtx.fill();
+        iCtx.beginPath(); iCtx.moveTo(bx + 5, by); iCtx.lineTo(bx + 15, by); iCtx.lineTo(bx + 10, by + 5); iCtx.fill();
+        iCtx.fillStyle = 'white'; iCtx.font = "bold 14px Arial"; iCtx.textAlign = "center";
+        iCtx.fillText('?', bx + bw / 2, by - bh / 2 + 5);
+
+        btn.textContent = "START INVESTIGATION";
+      } else {
+        modal.style.display = 'none';
+        localStorage.setItem('mysteryFarm_consent', 'true'); // Save consent when they finish the intro
+        if (!gameState.startTime) {
+          gameState.startTime = Date.now();
+          saveGame();
+        }
+        introStep = 0;
+        introAnimTimer = 0;
+        return;
       }
-      introStep = 0;
-      introAnimTimer = 0;
-      return;
     }
     
     introHandle = requestAnimationFrame(introLoop);
@@ -2041,6 +2138,22 @@ function init() {
     showGameOver(selectedHare.rabbit.id === killerId);
   });
 
+  // Character selection
+  document.querySelectorAll('.char-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const char = card.getAttribute('data-char');
+      gameState.detective = char;
+      document.querySelectorAll('.char-card').forEach(c => c.classList.remove('selected'));
+      card.classList.add('selected');
+      
+      // Auto-advance after selection
+      setTimeout(() => {
+        showIntro();
+        saveGame();
+      }, 500);
+    });
+  });
+
   document.getElementById('intro-next').addEventListener('click', () => {
     introStep++;
     showIntro();
@@ -2078,6 +2191,7 @@ function init() {
       localStorage.removeItem('mysteryFarm_current');
       localStorage.removeItem('mysteryFarm_stats');
       localStorage.removeItem('mysteryFarm_consent');
+      localStorage.removeItem('mysteryFarm_detective');
       location.reload(true);
     }
 
@@ -2425,6 +2539,8 @@ function loop() {
 
     ctx.shadowBlur = 0; ctx.globalAlpha = 1; if (--n.timer <= 0) notifications.splice(i, 1);
   }
+
+  drawPortrait();
   requestAnimationFrame(loop);
 }
 

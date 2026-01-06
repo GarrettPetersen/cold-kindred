@@ -45,3 +45,24 @@ body, html {
   padding-left: calc(20px + env(safe-area-inset-left)) !important;
   padding-right: calc(20px + env(safe-area-inset-right)) !important;
 }
+
+.char-card:hover {
+  background: rgba(255,255,255,0.15) !important;
+  border-color: rgba(255,255,255,0.5) !important;
+  transform: translateY(-5px);
+}
+
+.char-card.selected {
+  background: rgba(255,255,255,0.2) !important;
+  border-color: #44ff44 !important;
+  box-shadow: 0 0 20px rgba(68, 255, 68, 0.3);
+}
+
+#portrait-box {
+  transition: top 0.3s ease;
+}
+
+#transcript-container:not([style*="height: 40px"]) #portrait-box {
+  top: 10px; /* Inside the transcript when expanded */
+}
+

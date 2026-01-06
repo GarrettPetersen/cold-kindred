@@ -194,42 +194,6 @@ a {
   box-shadow: 2px 4px 12px rgba(0,0,0,0.3);
 }
 
-@media (max-width: 450px) {
-  #stopwatch {
-    font-size: 14px;
-    padding: 0 8px;
-    left: calc(60px + env(safe-area-inset-left)) !important;
-  }
-  #help-btn {
-    width: 36px;
-    height: 36px;
-    left: calc(10px + env(safe-area-inset-left)) !important;
-  }
-  #stopwatch {
-    top: calc(10px + env(safe-area-inset-top)) !important;
-    left: calc(56px + env(safe-area-inset-left)) !important;
-    height: 36px;
-  }
-  #help-btn {
-    top: calc(10px + env(safe-area-inset-top)) !important;
-  }
-  #ui-overlay {
-    top: calc(10px + env(safe-area-inset-top)) !important;
-    right: calc(10px + env(safe-area-inset-right)) !important;
-  }
-  #status-panel, #selection-panel {
-    width: 110px;
-    font-size: 12px;
-    padding: 6px 10px;
-  }
-  .dna-label {
-    display: none;
-  }
-  .dna-label-short {
-    display: inline !important;
-  }
-}
-
 #selection-panel h2 {
   margin: 0 0 5px 0;
   font-size: 18px;
@@ -289,7 +253,8 @@ a {
   cursor: pointer;
   font-weight: bold;
   font-size: 14px;
-  width: 200px;
+  width: 160px;
+  box-sizing: border-box;
   margin-top: 10px;
   font-family: 'Courier New', Courier, monospace;
   box-shadow: 2px 4px 12px rgba(0,0,0,0.3);
@@ -399,5 +364,46 @@ a {
 
 #transcript-container:not([style*="height: 40px"]) #portrait-box {
   top: 10px; /* Inside the transcript when expanded */
+}
+
+@media (max-width: 450px) {
+  #stopwatch {
+    font-size: 14px;
+    padding: 0 8px;
+    left: calc(60px + env(safe-area-inset-left)) !important;
+  }
+  #help-btn {
+    width: 36px;
+    height: 36px;
+    left: calc(10px + env(safe-area-inset-left)) !important;
+  }
+  #stopwatch {
+    top: calc(10px + env(safe-area-inset-top)) !important;
+    left: calc(56px + env(safe-area-inset-left)) !important;
+    height: 36px;
+  }
+  #help-btn {
+    top: calc(10px + env(safe-area-inset-top)) !important;
+  }
+  #ui-overlay {
+    top: calc(10px + env(safe-area-inset-top)) !important;
+    right: calc(10px + env(safe-area-inset-right)) !important;
+  }
+  #status-panel, #selection-panel {
+    width: 110px;
+    font-size: 12px;
+    padding: 6px 10px;
+  }
+  #play-again-ui {
+    width: 110px;
+    font-size: 10px;
+    padding: 8px 10px;
+  }
+  .dna-label {
+    display: none;
+  }
+  .dna-label-short {
+    display: inline !important;
+  }
 }
 

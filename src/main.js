@@ -133,7 +133,7 @@ const envDetails = [];
 let clueQueue = [];
 let globallyIssuedClueIds = new Set();
 let caseLog = []; // Stores strings like "Name: Clue text"
-let gameState = { isFinished: false, wasSuccess: false, startTime: null, endTime: null, detective: null };
+let gameState = { isFinished: false, wasSuccess: false, startTime: null, endTime: null, detective: null, introFinished: false };
 
 let portraitAnim = {
   active: false,
@@ -258,6 +258,7 @@ function saveGame() {
     wasSuccess: gameState.wasSuccess,
     startTime: gameState.startTime,
     endTime: gameState.endTime,
+    introFinished: gameState.introFinished,
     globallyIssuedClueIds: Array.from(globallyIssuedClueIds),
     clueQueueIds: clueQueue.map(c => c.id),
     activeClueIds: Array.from(activeClues.values()).map(c => ({ id: c.id, speakerId: Array.from(activeClues.keys()).find(k => activeClues.get(k) === c), isRead: c.isRead, generatedText: c.generatedText })),
@@ -312,6 +313,7 @@ function loadGame() {
   gameState.wasSuccess = data.wasSuccess || false;
   gameState.startTime = data.startTime || null;
   gameState.endTime = data.endTime || null;
+  gameState.introFinished = data.introFinished || false;
   globallyIssuedClueIds = new Set(data.globallyIssuedClueIds || []);
   
   if (data.clueQueueIds) {
@@ -1948,6 +1950,7 @@ function showIntro() {
       } else {
         modal.style.display = 'none';
         localStorage.setItem('mysteryFarm_consent', 'true'); // Save consent when they finish the intro
+        gameState.introFinished = true;
         if (!gameState.startTime) {
           gameState.startTime = Date.now();
           saveGame();
@@ -2284,7 +2287,7 @@ function init() {
 
   if (gameState.isFinished) {
     showGameOver(gameState.wasSuccess);
-  } else if (!wasLoaded) {
+  } else if (!wasLoaded || !gameState.introFinished) {
     showIntro();
   }
   

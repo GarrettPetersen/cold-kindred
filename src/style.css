@@ -12,6 +12,12 @@ body, html {
   -webkit-tap-highlight-color: transparent;
 }
 
+a {
+  pointer-events: auto !important;
+  user-select: auto !important;
+  -webkit-user-select: auto !important;
+}
+
 #gameCanvas {
   display: block;
   image-rendering: pixelated;

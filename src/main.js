@@ -76,31 +76,40 @@ const detectiveSprites = {
   hare_celebration: new Image(),
   boarot_celebration: new Image()
 };
-SPECIES.forEach(s => { sprites[s] = { idle: new Image(), walk: new Image(), run: new Image(), death: new Image() }; });
+
+let assetsLoaded = 0;
+const TOTAL_ASSETS = SPECIES.length * 4 + 6 + 6;
+
+function onAssetLoad() { 
+  assetsLoaded++;
+  
+  // Show loading progress on canvas
+  ctx.fillStyle = '#151515';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#fff';
+  ctx.font = '20px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText(`LOADING CASE FILES: ${Math.round((assetsLoaded / TOTAL_ASSETS) * 100)}%`, canvas.width / 2, canvas.height / 2);
+
+  if (assetsLoaded === TOTAL_ASSETS) {
+    init();
+  }
+}
+
+// Grass sprites
 for (let i = 1; i <= 6; i++) {
   const img = new Image();
+  img.onload = onAssetLoad;
+  img.onerror = onAssetLoad;
   img.src = `assets/environment/5 Grass/${i}.png`;
   grassSprites.push(img);
 }
 
-let assetsLoaded = 0;
-const TOTAL_ASSETS = SPECIES.length * 4 + 6 + 6; // +6 for detective sprites (3 base + 3 celebration)
-function onAssetLoad() { 
-  if (++assetsLoaded === TOTAL_ASSETS) init(); 
-}
-
-grassSprites.forEach(img => { img.onload = onAssetLoad; img.onerror = onAssetLoad; });
-for (let i = 1; i <= 6; i++) {
-  grassSprites[i - 1].src = `assets/environment/5 Grass/${i}.png`;
-}
-
 // Detective sprites
-detectiveSprites.fox.onload = detectiveSprites.fox.onerror = onAssetLoad;
-detectiveSprites.hare.onload = detectiveSprites.hare.onerror = onAssetLoad;
-detectiveSprites.boarot.onload = detectiveSprites.boarot.onerror = onAssetLoad;
-detectiveSprites.fox_celebration.onload = detectiveSprites.fox_celebration.onerror = onAssetLoad;
-detectiveSprites.hare_celebration.onload = detectiveSprites.hare_celebration.onerror = onAssetLoad;
-detectiveSprites.boarot_celebration.onload = detectiveSprites.boarot_celebration.onerror = onAssetLoad;
+['fox', 'hare', 'boarot', 'fox_celebration', 'hare_celebration', 'boarot_celebration'].forEach(key => {
+  detectiveSprites[key].onload = onAssetLoad;
+  detectiveSprites[key].onerror = onAssetLoad;
+});
 
 detectiveSprites.fox.src = 'assets/detectives/film_noir_fox.png';
 detectiveSprites.hare.src = 'assets/detectives/sherlock_hare.png';
@@ -110,12 +119,15 @@ detectiveSprites.hare_celebration.src = 'assets/detectives/sherlock_hare_celebra
 detectiveSprites.boarot_celebration.src = 'assets/detectives/hercule_boarot_celebration.png';
 
 SPECIES.forEach(s => {
+  sprites[s] = { idle: new Image(), walk: new Image(), run: new Image(), death: new Image() };
+  
   const walkFile = s === 'Fox' ? 'Fox_walk_with_shadow.png' : `${s}_Walk_with_shadow.png`;
   const runFile = s === 'Grouse' ? 'Grouse_Flight_with_shadow.png' : `${s}_Run_with_shadow.png`;
   
-  // Assign handlers before setting src to avoid race conditions with cache
-  sprites[s].idle.onload = sprites[s].walk.onload = sprites[s].run.onload = sprites[s].death.onload = onAssetLoad;
-  sprites[s].idle.onerror = sprites[s].walk.onerror = sprites[s].run.onerror = sprites[s].death.onerror = onAssetLoad;
+  ['idle', 'walk', 'run', 'death'].forEach(type => {
+    sprites[s][type].onload = onAssetLoad;
+    sprites[s][type].onerror = onAssetLoad;
+  });
 
   sprites[s].idle.src = `assets/${s}/${s}_Idle_with_shadow.png`;
   sprites[s].walk.src = `assets/${s}/${walkFile}`;

@@ -159,7 +159,18 @@ const envDetails = [];
 let clueQueue = [];
 let globallyIssuedClueIds = new Set();
 let caseLog = []; // Stores strings like "Name: Clue text"
-let gameState = { isFinished: false, wasSuccess: false, startTime: null, endTime: null, detective: null, introFinished: false };
+let gameState = { 
+  isFinished: false, 
+  wasSuccess: false, 
+  startTime: null, 
+  endTime: null, 
+  detective: null, 
+  introFinished: false,
+  hasClickedClue: false,
+  hasCreatedConnection: false,
+  hint1Shown: false,
+  hint2Shown: false
+};
 
 let portraitAnim = {
   active: false,
@@ -294,6 +305,10 @@ function saveGame() {
     startTime: gameState.startTime,
     endTime: gameState.endTime,
     introFinished: gameState.introFinished,
+    hasClickedClue: gameState.hasClickedClue,
+    hasCreatedConnection: gameState.hasCreatedConnection,
+    hint1Shown: gameState.hint1Shown,
+    hint2Shown: gameState.hint2Shown,
     globallyIssuedClueIds: Array.from(globallyIssuedClueIds),
     clueQueueIds: clueQueue.map(c => c.id),
     activeClueIds: Array.from(activeClues.values()).map(c => ({ id: c.id, speakerId: Array.from(activeClues.keys()).find(k => activeClues.get(k) === c), isRead: c.isRead, generatedText: c.generatedText })),
@@ -349,6 +364,10 @@ function loadGame() {
   gameState.startTime = data.startTime || null;
   gameState.endTime = data.endTime || null;
   gameState.introFinished = data.introFinished || false;
+  gameState.hasClickedClue = data.hasClickedClue || false;
+  gameState.hasCreatedConnection = data.hasCreatedConnection || false;
+  gameState.hint1Shown = data.hint1Shown || false;
+  gameState.hint2Shown = data.hint2Shown || false;
   globallyIssuedClueIds = new Set(data.globallyIssuedClueIds || []);
   
   if (data.clueQueueIds) {
@@ -1977,6 +1996,31 @@ function toggleTranscript() {
   }
 }
 
+let hintTimer = null;
+function hideSmartHint() {
+  const hint = document.getElementById('smart-hint');
+  if (!hint) return;
+  hint.style.opacity = '0';
+  setTimeout(() => { hint.style.display = 'none'; }, 500);
+  if (hintTimer) clearTimeout(hintTimer);
+}
+
+function showSmartHint(text, duration = 8000) {
+  const hint = document.getElementById('smart-hint');
+  const hintText = document.getElementById('smart-hint-text');
+  if (!hint || !hintText) return;
+
+  hintText.textContent = text;
+  hint.style.display = 'block';
+  hint.style.opacity = '1';
+
+  if (hintTimer) clearTimeout(hintTimer);
+  hintTimer = setTimeout(() => {
+    hint.style.opacity = '0';
+    setTimeout(() => { hint.style.display = 'none'; }, 500);
+  }, duration);
+}
+
 let introStep = 0;
 let introAnimFrame = 0;
 let introAnimTimer = 0;
@@ -2279,6 +2323,8 @@ function init() {
 
             caseLog.push(`${h.rabbit.firstName}: ${clue.generatedText}`);
             updateTranscriptUI(clue.generatedText, h.rabbit.id);
+            gameState.hasClickedClue = true;
+            hideSmartHint();
             saveGame();
           }
           notifications.push({ text: clue.generatedText, x: cx, y: cy - 20, timer: 360, timerMax: 360, color: '#fff' }); 
@@ -2310,6 +2356,8 @@ function init() {
         if (playerConnections.some(conn => conn.childId === c.rabbit.id && rabbits.find(r => r.id === conn.parentId).sex === p.rabbit.sex)) notifications.push({ text: `${c.rabbit.firstName} already has a ${p.rabbit.sex === 'M' ? 'father' : 'mother'}!`, x: cx, y: cy, timer: 120, timerMax: 120 });
         else if (!playerConnections.some(conn => conn.parentId === p.rabbit.id && conn.childId === c.rabbit.id)) { 
           playerConnections.push({ parentId: p.rabbit.id, childId: c.rabbit.id }); 
+          gameState.hasCreatedConnection = true;
+          hideSmartHint();
           updateTreeDiagram(); 
           saveGame();
           notifications.push({ text: "Linked!", x: cx, y: cy - 20, timer: 60, timerMax: 60, color: '#44ff44' }); 
@@ -2577,6 +2625,26 @@ function constrainCamera() {
 }
 
 function loop() {
+  // Smart Hint Checks
+  if (!gameState.isFinished && gameState.introFinished && gameState.startTime) {
+    const now = Date.now();
+    const timeSinceStart = now - gameState.startTime;
+    
+    // Hint 1: Click speech bubbles (30s)
+    if (!gameState.hasClickedClue && timeSinceStart > 30000 && !gameState.hint1Shown) {
+      showSmartHint("Tap the speech bubbles over the animals to find clues!");
+      gameState.hint1Shown = true;
+      saveGame();
+    }
+    
+    // Hint 2: Create connection (60s)
+    if (!gameState.hasCreatedConnection && timeSinceStart > 60000 && !gameState.hint2Shown) {
+      showSmartHint("To build the family tree, select an animal, then tap another to link them. The older animal is automatically set as the parent.");
+      gameState.hint2Shown = true;
+      saveGame();
+    }
+  }
+
   if (!gameState.isFinished && ++lastClueTime >= CLUE_INTERVAL) {
     lastClueTime = 0;
     if (activeClues.size < 3) {
@@ -2692,7 +2760,17 @@ function loop() {
   ctx.fillStyle = 'rgba(255,255,255,0.2)'; 
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
-  ctx.fillText('mystery.farm', 20, 75); // Positioned below the Help (?) button
+  
+  // Dynamically position below the Help button/Stopwatch to account for iPhone safe areas
+  let watermarkY = 75;
+  const helpBtn = document.getElementById('help-btn');
+  if (helpBtn) {
+    const rect = helpBtn.getBoundingClientRect();
+    // Use the bottom of the help button + a small margin
+    watermarkY = rect.bottom + 5;
+  }
+  
+  ctx.fillText('mystery.farm', 20, watermarkY);
   ctx.restore();
   
   ctx.save();

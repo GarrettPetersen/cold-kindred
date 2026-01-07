@@ -2371,6 +2371,12 @@ function init() {
     return false;
   };
 
+  canvas.addEventListener('contextmenu', e => {
+    e.preventDefault();
+    selectedHare = null;
+    updateUI();
+  });
+
   canvas.addEventListener('mousedown', e => { 
     const p = getPos(e); 
     input.isDragging = true; 
@@ -2545,6 +2551,10 @@ function init() {
   // Cheat codes
   let cheatBuffer = "";
   window.addEventListener('keyup', e => {
+    if (e.key === 'Escape') {
+      selectedHare = null;
+      updateUI();
+    }
     cheatBuffer = (cheatBuffer + e.key.toLowerCase()).slice(-10);
     
     // "killer" - Reveals the culprit in the log

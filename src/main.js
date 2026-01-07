@@ -153,6 +153,8 @@ let necessaryConnections = [];
 let cluePool = [];
 let activeClues = new Map();
 let lastClueTime = 0;
+let lastDateCheckTime = 0;
+const DATE_CHECK_INTERVAL = 3600; // Check for date change every ~1 minute (60 * 60 frames)
 const CLUE_INTERVAL = 120;
 const hares = [];
 const envDetails = [];
@@ -2637,6 +2639,23 @@ function constrainCamera() {
 }
 
 function loop() {
+  // Check for date change (midnight crossover)
+  if (++lastDateCheckTime >= DATE_CHECK_INTERVAL) {
+    lastDateCheckTime = 0;
+    const { dateStr: checkDate } = getDailySeed();
+    if (checkDate !== currentDateStr) {
+      // Only reload if the game is finished AND the game over modal isn't open.
+      // This ensures they see their celebration/stats before the new day starts.
+      const gameOverModal = document.getElementById('game-over');
+      const isGameOverVisible = gameOverModal && gameOverModal.style.display === 'flex';
+      
+      if (gameState.isFinished && !isGameOverVisible) {
+        location.reload();
+        return; 
+      }
+    }
+  }
+
   // Smart Hint Checks
   if (!gameState.isFinished && gameState.introFinished && gameState.startTime) {
     const now = Date.now();

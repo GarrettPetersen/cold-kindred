@@ -80,11 +80,16 @@ const detectiveSprites = {
   fox_celebration: new Image(),
   hare_celebration: new Image(),
   boarot_celebration: new Image(),
-  marmot_celebration: new Image()
+  marmot_celebration: new Image(),
+  fox_lab: new Image(),
+  hare_lab: new Image(),
+  boarot_lab: new Image(),
+  marmot_lab: new Image(),
+  dna_test: new Image()
 };
 
 let assetsLoaded = 0;
-const TOTAL_ASSETS = SPECIES.length * 4 + 6 + 8;
+const TOTAL_ASSETS = SPECIES.length * 4 + 6 + 13;
 
 function onAssetLoad() { 
   assetsLoaded++;
@@ -112,7 +117,7 @@ for (let i = 1; i <= 6; i++) {
 }
 
 // Detective sprites
-['fox', 'hare', 'boarot', 'marmot', 'fox_celebration', 'hare_celebration', 'boarot_celebration', 'marmot_celebration'].forEach(key => {
+['fox', 'hare', 'boarot', 'marmot', 'fox_celebration', 'hare_celebration', 'boarot_celebration', 'marmot_celebration', 'fox_lab', 'hare_lab', 'boarot_lab', 'marmot_lab', 'dna_test'].forEach(key => {
   detectiveSprites[key].onload = onAssetLoad;
   detectiveSprites[key].onerror = onAssetLoad;
 });
@@ -125,6 +130,11 @@ detectiveSprites.fox_celebration.src = '/assets/detectives/film_noir_fox_celebra
 detectiveSprites.hare_celebration.src = '/assets/detectives/sherlock_hare_celebration.png';
 detectiveSprites.boarot_celebration.src = '/assets/detectives/hercule_boarot_celebration.png';
 detectiveSprites.marmot_celebration.src = '/assets/detectives/miss_marmot_celebration.png';
+detectiveSprites.fox_lab.src = '/assets/detectives/film_noir_fox_lab.png';
+detectiveSprites.hare_lab.src = '/assets/detectives/sherlock_hare_lab.png';
+detectiveSprites.boarot_lab.src = '/assets/detectives/hercule_boarot_lab.png';
+detectiveSprites.marmot_lab.src = '/assets/detectives/miss_marmot_lab.png';
+detectiveSprites.dna_test.src = '/assets/animations/dna_test.png';
 
 SPECIES.forEach(s => {
   sprites[s] = { idle: new Image(), walk: new Image(), run: new Image(), death: new Image() };
@@ -317,6 +327,7 @@ function saveGame() {
     hint2Shown: gameState.hint2Shown,
     globallyIssuedClueIds: Array.from(globallyIssuedClueIds),
     clueQueueIds: clueQueue.map(c => c.id),
+    testedAnimals: rabbits.filter(r => r.isTested).map(r => ({ id: r.id, rel: r.dnaRelation })),
     activeClueIds: Array.from(activeClues.values()).map(c => ({ id: c.id, speakerId: Array.from(activeClues.keys()).find(k => activeClues.get(k) === c), isRead: c.isRead, generatedText: c.generatedText })),
     highlightedAnimalIds: Array.from(highlightedAnimalIds)
   };
@@ -376,6 +387,16 @@ function loadGame() {
   gameState.hint2Shown = data.hint2Shown || false;
   globallyIssuedClueIds = new Set(data.globallyIssuedClueIds || []);
   
+  if (data.testedAnimals) {
+    data.testedAnimals.forEach(ta => {
+      const rabbit = rabbits.find(r => r.id === ta.id);
+      if (rabbit) {
+        rabbit.isTested = true;
+        rabbit.dnaRelation = ta.rel;
+      }
+    });
+  }
+
   if (data.clueQueueIds) {
     clueQueue = data.clueQueueIds.map(id => cluePool.find(c => c.id === id)).filter(Boolean);
   }
@@ -402,11 +423,11 @@ function loadGame() {
     }
     const name = entry.substring(0, splitIdx);
     const text = entry.substring(splitIdx + 2);
-    if (name === "Case File") {
+    if (name === "Case File" || name === "LAB") {
       updateTranscriptUI(text, null);
     } else {
       const speaker = rabbits.find(r => r.firstName === name);
-      if (speaker) updateTranscriptUI(text, speaker.id);
+      updateTranscriptUI(text, speaker ? speaker.id : null);
     }
   });
   if (tCount) tCount.textContent = dnaTestsRemaining;
@@ -446,17 +467,20 @@ class AnimalRecord {
 function getAncestors(id) {
   const ancestors = new Map();
   if (!id) return ancestors;
-  const stack = [{ id, dist: 0 }];
-  const visited = new Set();
-  while (stack.length > 0) {
-    const { id: currId, dist } = stack.pop();
-    if (visited.has(currId) || dist > 8) continue;
-    visited.add(currId);
+  const queue = [{ id, dist: 0 }];
+  const visited = new Map(); // Store min distance to each node
+  while (queue.length > 0) {
+    const { id: currId, dist } = queue.shift();
+    if (visited.has(currId) && visited.get(currId) <= dist) continue;
+    visited.set(currId, dist);
+    
     if (dist > 0) ancestors.set(currId, dist);
+    if (dist >= 8) continue;
+
     const r = rabbits.find(rb => rb.id === currId);
     if (r) {
-      if (r.fatherId) stack.push({ id: r.fatherId, dist: dist + 1 });
-      if (r.motherId) stack.push({ id: r.motherId, dist: dist + 1 });
+      if (r.fatherId) queue.push({ id: r.fatherId, dist: dist + 1 });
+      if (r.motherId) queue.push({ id: r.motherId, dist: dist + 1 });
     }
   }
   return ancestors;
@@ -468,6 +492,34 @@ function getCommonAncestors(id1, id2) {
   const common = [];
   a1.forEach((dist1, id) => { if (a2.has(id)) common.push({ id, dist1, dist2: a2.get(id) }); });
   return common;
+}
+
+const kinshipMemo = new Map();
+function kinship(a, b) {
+  if (!a || !b) return 0;
+  const key = a < b ? `${a}-${b}` : `${b}-${a}`;
+  if (kinshipMemo.has(key)) return kinshipMemo.get(key);
+  
+  const ra = rabbits.find(r => r.id === a);
+  const rb = rabbits.find(r => r.id === b);
+  if (!ra || !rb) return 0;
+
+  let res;
+  if (a === b) {
+    // Kinship of a with itself is 0.5 * (1 + kinship of parents)
+    res = 0.5 * (1 + kinship(ra.fatherId, ra.motherId));
+  } else {
+    // Kinship of a with b is average of kinship of a's parents with b
+    // (We pick the one from the later generation to ensure recursion terminates)
+    if (ra.generation > rb.generation) {
+      res = 0.5 * (kinship(ra.fatherId, b) + kinship(ra.motherId, b));
+    } else {
+      res = 0.5 * (kinship(a, rb.fatherId) + kinship(a, rb.motherId));
+    }
+  }
+  
+  kinshipMemo.set(key, res);
+  return res;
 }
 
 function getRelationshipLabel(common, id1, id2) {
@@ -1985,6 +2037,172 @@ function showGameOver(isWin) {
   gLoop();
 }
 
+function showDNAModal(animal) {
+  const modal = document.getElementById('dna-modal');
+  const dCanvas = document.getElementById('dnaCanvas');
+  const dCtx = dCanvas.getContext('2d');
+  const title = document.getElementById('dna-modal-title');
+  const resultBox = document.getElementById('dna-result-box');
+  const resultText = document.getElementById('dna-result-text');
+  const doneBtn = document.getElementById('dna-done-btn');
+  
+  dnaTargetAnimal = animal;
+  dnaAnimTimer = 0;
+  modal.style.display = 'flex';
+  resultBox.style.display = 'none';
+  title.textContent = "ANALYZING DNA...";
+  
+  if (dnaHandle) cancelAnimationFrame(dnaHandle);
+
+  // Logic to determine result
+  const isKiller = animal.rabbit.id === killerId;
+  isDnaSuccess = isKiller;
+  
+  // 1. Build ancestor maps including the individuals themselves (dist 0)
+  const a1 = getAncestors(killerId);
+  a1.set(killerId, 0);
+  const a2 = getAncestors(animal.rabbit.id);
+  a2.set(animal.rabbit.id, 0);
+
+  // 2. Find all common ancestors (including self if same)
+  const allCommon = [];
+  a1.forEach((dist1, id) => {
+    if (a2.has(id)) allCommon.push({ id, dist1, dist2: a2.get(id) });
+  });
+
+  // 3. Keep only MRCAs (Most Recent Common Ancestors)
+  // An ancestor is an MRCA if none of its descendants are ALSO common ancestors.
+  const mrcas = allCommon.filter(anc => {
+    return !allCommon.some(other => {
+      if (anc.id === other.id) return false;
+      // Is 'other' a descendant of 'anc'?
+      const otherAncestors = getAncestors(other.id);
+      return otherAncestors.has(anc.id);
+    });
+  });
+
+  // 4. Calculate Relationship Label (using MRCAs that aren't the individuals themselves)
+  const rel = getRelationshipLabel(mrcas.filter(c => c.dist1 > 0 || c.dist2 > 0), killerId, animal.rabbit.id);
+  
+  // 5. Calculate mathematically perfect match percentage using Kinship Coefficient
+  kinshipMemo.clear(); // Clear cache for fresh calculation
+  const k = kinship(killerId, animal.rabbit.id);
+  // Shared DNA % is roughly 2 * kinship coefficient * 100
+  let matchPct = isKiller ? 100 : parseFloat((k * 200).toFixed(3));
+  
+  if (isKiller) {
+    dnaResultText = `100% MATCH DETECTED!\n${animal.rabbit.firstName} is the killer!`;
+  } else {
+    const relText = rel ? `the killer's ${rel}` : "no relation to the killer";
+    dnaResultText = `${matchPct}% MATCH: ${animal.rabbit.firstName} the ${animal.rabbit.species.replace('_', ' ')} is ${relText}.`;
+  }
+
+  function dnaLoop() {
+    dCtx.fillStyle = '#000';
+    dCtx.fillRect(0, 0, dCanvas.width, dCanvas.height);
+    dCtx.imageSmoothingEnabled = false;
+
+    const centerX = dCanvas.width / 2;
+    const centerY = dCanvas.height / 2;
+
+    const det = gameState.detective;
+    const labSpr = detectiveSprites[det + '_lab'];
+    const dnaSpr = detectiveSprites.dna_test;
+
+    // Phase 1: Animation (first 180 frames = 3 seconds at 60fps)
+    if (dnaAnimTimer < 180) {
+      // Draw detective in lab coat
+      if (labSpr && labSpr.complete) {
+        // Shifted further left to avoid overlap
+        dCtx.drawImage(labSpr, centerX - 96, centerY - 48, 96, 96);
+      }
+
+      // Draw DNA animation (loops 3 times over 180 frames)
+      if (dnaSpr && dnaSpr.complete) {
+        const frame = Math.floor((dnaAnimTimer % 60) / (60 / 16));
+        const sx = (frame % 4) * 64;
+        const sy = Math.floor(frame / 4) * 64;
+        // Shifted further right to avoid overlap
+        dCtx.drawImage(dnaSpr, sx, sy, 64, 64, centerX + 16, centerY - 32, 64, 64);
+      }
+    } else {
+      // Phase 2: Show Result
+      title.textContent = "RESULT READY";
+      resultBox.style.display = 'block';
+      resultText.textContent = dnaResultText;
+
+      // Draw animal tested in the lab
+      const spr = sprites[animal.rabbit.species].idle;
+      dCtx.save();
+      dCtx.filter = `hue-rotate(${animal.rabbit.tint.hue}deg) saturate(${animal.rabbit.tint.saturate}%) brightness(${animal.rabbit.tint.brightness}%)`;
+      dCtx.drawImage(spr, 0, 0, 32, 32, centerX - 32, centerY - 32, 64, 64);
+      dCtx.restore();
+
+      // Show result indicators (matching farm screen style)
+      dCtx.textAlign = 'center';
+      
+      // Top Label (DNA connection)
+      const dnaLabel = isKiller ? "🧬 KILLER" : `🧬 ${rel || "no relation"}`;
+      dCtx.font = "bold 14px Arial";
+      const dMetrics = dCtx.measureText(dnaLabel);
+      const dW = dMetrics.width + 12, dH = 20;
+      dCtx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+      dCtx.beginPath();
+      dCtx.roundRect(centerX - dW / 2, centerY - 65, dW, dH, 4);
+      dCtx.fill();
+      dCtx.fillStyle = '#44ff44';
+      dCtx.fillText(dnaLabel, centerX, centerY - 50);
+
+      // Bottom Label (Name)
+      const nameLabel = `${animal.rabbit.firstName} (${CURRENT_YEAR - animal.rabbit.birthYear})`;
+      const nMetrics = dCtx.measureText(nameLabel);
+      const nW = nMetrics.width + 12, nH = 20;
+      dCtx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+      dCtx.beginPath();
+      dCtx.roundRect(centerX - nW / 2, centerY + 40, nW, nH, 4);
+      dCtx.fill();
+      dCtx.fillStyle = getHSL(animal.rabbit);
+      dCtx.fillText(nameLabel, centerX, centerY + 55);
+      
+      cancelAnimationFrame(dnaHandle);
+      return;
+    }
+
+    dnaAnimTimer += 1;
+    dnaHandle = requestAnimationFrame(dnaLoop);
+  }
+
+  dnaLoop();
+
+  doneBtn.onclick = () => {
+    modal.style.display = 'none';
+    if (dnaHandle) cancelAnimationFrame(dnaHandle);
+    
+    // Finalize the test in the game state
+    animal.rabbit.isTested = true;
+    const clickableName = `[[${animal.rabbit.id}:${animal.rabbit.firstName}]]`;
+    if (isKiller) {
+      dnaTestsRemaining--;
+      tCount.textContent = dnaTestsRemaining;
+      const logMsg = `100% MATCH DETECTED! ${clickableName} is the killer!`;
+      caseLog.push(`Case File: ${logMsg}`);
+      updateTranscriptUI(logMsg);
+      showGameOver(true);
+    } else {
+      animal.rabbit.dnaRelation = rel || "no relation";
+      dnaTestsRemaining--;
+      tCount.textContent = dnaTestsRemaining;
+      const relText = rel ? `the killer's ${rel}` : "no relation to the killer";
+      const logMsg = `${matchPct}% MATCH: ${clickableName} is ${relText}.`;
+      caseLog.push(`Case File: ${logMsg}`);
+      updateTranscriptUI(logMsg);
+      if (rel) { updateNecessaryConnections(); generateCluePool(true); }
+      updateUI();
+      saveGame();
+    }
+  };
+}
+
 let isTranscriptOpen = false;
 function toggleTranscript() {
   const container = document.getElementById('transcript-container');
@@ -2032,6 +2250,11 @@ let introStep = 0;
 let introAnimFrame = 0;
 let introAnimTimer = 0;
 let introHandle = null;
+let dnaHandle = null;
+let dnaAnimTimer = 0;
+let dnaTargetAnimal = null;
+let dnaResultText = "";
+let isDnaSuccess = false;
 let isMidGameChange = false;
 
   function showIntro(isMidGameChangeParam = false) {
@@ -2472,16 +2695,7 @@ function init() {
   dnaBtn.addEventListener('pointerdown', e => e.stopPropagation());
   dnaBtn.addEventListener('click', e => {
     e.preventDefault(); if (gameState.isFinished || !selectedHare || dnaTestsRemaining <= 0 || selectedHare.rabbit.isTested) return;
-    if (selectedHare.rabbit.id === killerId) { 
-      dnaTestsRemaining--; // Correctly count the test even if it catches the killer
-      showGameOver(true); 
-      return; 
-    }
-    const rel = getRelationshipLabel(getCommonAncestors(killerId, selectedHare.rabbit.id), killerId, selectedHare.rabbit.id);
-    selectedHare.rabbit.dnaRelation = rel || "no relation"; selectedHare.rabbit.isTested = true; dnaTestsRemaining--; tCount.textContent = dnaTestsRemaining;
-    if (rel) { updateNecessaryConnections(); generateCluePool(true); }
-    updateUI();
-    saveGame();
+    showDNAModal(selectedHare);
   });
   accBtn.addEventListener('pointerdown', e => e.stopPropagation());
   accBtn.addEventListener('click', e => {

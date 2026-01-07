@@ -44,7 +44,7 @@
           <h2 id="intro-title" style="color: #ff4444; font-size: 28px; margin-bottom: 20px; text-transform: uppercase; letter-spacing: 2px;"></h2>
           <div id="intro-text" style="font-size: 18px; line-height: 1.6; margin-bottom: 40px; min-height: 120px; color: #ccc; white-space: pre-line;"></div>
           
-          <div id="character-selection" style="display: none; justify-content: center; gap: 40px; margin-bottom: 40px; flex-wrap: wrap;">
+          <div id="character-selection" style="display: none;">
             <div class="char-card" data-char="fox">
               <canvas id="foxCanvas" width="64" height="64"></canvas>
               <div class="char-name">FILM NOIR FOX</div>
@@ -120,6 +120,22 @@
         <!-- Log entries go here -->
       </div>
     </div>
+    <!-- DNA Test Modal -->
+    <div id="dna-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); color: white; z-index: 250; font-family: monospace; flex-direction: column; align-items: center; justify-content: center; pointer-events: auto;">
+      <div id="dna-modal-content" style="max-width: 600px; width: 100%; text-align: center; padding: 20px;">
+        <h2 id="dna-modal-title" style="color: #44ff44; font-size: 24px; margin-bottom: 30px; letter-spacing: 2px;">ANALYZING DNA...</h2>
+        
+        <div style="position: relative; width: 200px; height: 200px; margin: 0 auto 40px auto; background: #000; border: 2px solid rgba(255,255,255,0.1); border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+          <canvas id="dnaCanvas" width="200" height="200" style="image-rendering: pixelated; width: 200px; height: 200px;"></canvas>
+        </div>
+
+        <div id="dna-result-box" style="display: none;">
+          <p id="dna-result-text" style="font-size: 18px; line-height: 1.6; margin-bottom: 30px; color: #ccc;"></p>
+          <button id="dna-done-btn" style="background: white; color: black; border: none; padding: 12px 40px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 16px; letter-spacing: 1px;">CONTINUE</button>
+        </div>
+      </div>
+    </div>
+
     <div id="game-over" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); color: white; z-index: 300; font-family: monospace; flex-direction: column; pointer-events: auto;">
       <!-- Scrollable Content -->
       <div id="game-over-scroll-container" style="flex: 1; overflow-y: auto; padding: calc(40px + env(safe-area-inset-top)) 20px 20px 20px; display: flex; flex-direction: column; align-items: center; text-align: center;">

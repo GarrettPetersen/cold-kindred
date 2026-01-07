@@ -5,7 +5,9 @@
   margin-bottom: 40px;
   flex-wrap: wrap;
   width: 100%;
-  max-width: 900px;
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .char-card {
@@ -15,7 +17,8 @@
   padding: 15px;
   border-radius: 12px;
   transition: all 0.2s;
-  flex: 1 1 160px;
+  flex: 0 1 calc(50% - 20px);
+  min-width: 140px;
   max-width: 200px;
   display: flex;
   flex-direction: column;
@@ -55,11 +58,14 @@
 
 @media (max-width: 600px) {
   #character-selection {
-    gap: 10px;
+    gap: 12px;
+    padding: 0 10px;
+    box-sizing: border-box;
   }
   .char-card {
-    padding: 10px;
-    flex: 1 1 100px;
+    padding: 12px;
+    flex: 0 1 calc(50% - 6px);
+    min-width: 0;
   }
   .char-card canvas {
     width: 64px;
@@ -92,6 +98,14 @@ a {
   cursor: pointer;
   position: relative;
   z-index: 210;
+}
+
+#dna-modal {
+  touch-action: none !important;
+}
+
+#dnaCanvas {
+  image-rendering: pixelated;
 }
 
 #intro-modal, #game-over {

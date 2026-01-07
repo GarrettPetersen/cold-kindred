@@ -2465,7 +2465,11 @@ function init() {
   dnaBtn.addEventListener('pointerdown', e => e.stopPropagation());
   dnaBtn.addEventListener('click', e => {
     e.preventDefault(); if (gameState.isFinished || !selectedHare || dnaTestsRemaining <= 0 || selectedHare.rabbit.isTested) return;
-    if (selectedHare.rabbit.id === killerId) { showGameOver(true); return; }
+    if (selectedHare.rabbit.id === killerId) { 
+      dnaTestsRemaining--; // Correctly count the test even if it catches the killer
+      showGameOver(true); 
+      return; 
+    }
     const rel = getRelationshipLabel(getCommonAncestors(killerId, selectedHare.rabbit.id), killerId, selectedHare.rabbit.id);
     selectedHare.rabbit.dnaRelation = rel || "no relation"; selectedHare.rabbit.isTested = true; dnaTestsRemaining--; tCount.textContent = dnaTestsRemaining;
     if (rel) { updateNecessaryConnections(); generateCluePool(true); }

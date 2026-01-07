@@ -14,6 +14,10 @@ if (typeof window !== 'undefined' && window.Capacitor && window.Capacitor.getPla
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
+// Set initial size immediately
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
 const FIELD_WIDTH = 2500;
 const FIELD_HEIGHT = 2500;
 const FRAME_SIZE = 32;
@@ -101,7 +105,7 @@ for (let i = 1; i <= 6; i++) {
   const img = new Image();
   img.onload = onAssetLoad;
   img.onerror = onAssetLoad;
-  img.src = `assets/environment/5 Grass/${i}.png`;
+  img.src = `/assets/environment/5 Grass/${i}.png`;
   grassSprites.push(img);
 }
 
@@ -111,12 +115,12 @@ for (let i = 1; i <= 6; i++) {
   detectiveSprites[key].onerror = onAssetLoad;
 });
 
-detectiveSprites.fox.src = 'assets/detectives/film_noir_fox.png';
-detectiveSprites.hare.src = 'assets/detectives/sherlock_hare.png';
-detectiveSprites.boarot.src = 'assets/detectives/hercule_boarot.png';
-detectiveSprites.fox_celebration.src = 'assets/detectives/film_noir_fox_celebration.png';
-detectiveSprites.hare_celebration.src = 'assets/detectives/sherlock_hare_celebration.png';
-detectiveSprites.boarot_celebration.src = 'assets/detectives/hercule_boarot_celebration.png';
+detectiveSprites.fox.src = '/assets/detectives/film_noir_fox.png';
+detectiveSprites.hare.src = '/assets/detectives/sherlock_hare.png';
+detectiveSprites.boarot.src = '/assets/detectives/hercule_boarot.png';
+detectiveSprites.fox_celebration.src = '/assets/detectives/film_noir_fox_celebration.png';
+detectiveSprites.hare_celebration.src = '/assets/detectives/sherlock_hare_celebration.png';
+detectiveSprites.boarot_celebration.src = '/assets/detectives/hercule_boarot_celebration.png';
 
 SPECIES.forEach(s => {
   sprites[s] = { idle: new Image(), walk: new Image(), run: new Image(), death: new Image() };
@@ -129,10 +133,10 @@ SPECIES.forEach(s => {
     sprites[s][type].onerror = onAssetLoad;
   });
 
-  sprites[s].idle.src = `assets/${s}/${s}_Idle_with_shadow.png`;
-  sprites[s].walk.src = `assets/${s}/${walkFile}`;
-  sprites[s].run.src = `assets/${s}/${runFile}`;
-  sprites[s].death.src = `assets/${s}/${s}_Death_with_shadow.png`;
+  sprites[s].idle.src = `/assets/${s}/${s}_Idle_with_shadow.png`;
+  sprites[s].walk.src = `/assets/${s}/${walkFile}`;
+  sprites[s].run.src = `/assets/${s}/${runFile}`;
+  sprites[s].death.src = `/assets/${s}/${s}_Death_with_shadow.png`;
 });
 
 // --- State ---
@@ -2219,8 +2223,7 @@ function init() {
   }
 
   window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; constrainCamera(); });
-  canvas.width = window.innerWidth; canvas.height = window.innerHeight;
-
+  
   // Start somewhat zoomed in (1.0 zoom) instead of showing the whole field
   camera.zoom = 1.0;
   camera.x = FIELD_WIDTH / 2 - (canvas.width / camera.zoom) / 2;

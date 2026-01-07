@@ -327,7 +327,7 @@ function saveGame() {
     hint2Shown: gameState.hint2Shown,
     globallyIssuedClueIds: Array.from(globallyIssuedClueIds),
     clueQueueIds: clueQueue.map(c => c.id),
-    testedAnimals: rabbits.filter(r => r.isTested).map(r => ({ id: r.id, rel: r.dnaRelation })),
+    testedAnimals: rabbits.filter(r => r.isTested).map(r => ({ id: r.id, rel: r.dnaRelation, pct: r.dnaMatchPct })),
     activeClueIds: Array.from(activeClues.values()).map(c => ({ id: c.id, speakerId: Array.from(activeClues.keys()).find(k => activeClues.get(k) === c), isRead: c.isRead, generatedText: c.generatedText })),
     highlightedAnimalIds: Array.from(highlightedAnimalIds)
   };
@@ -393,6 +393,7 @@ function loadGame() {
       if (rabbit) {
         rabbit.isTested = true;
         rabbit.dnaRelation = ta.rel;
+        rabbit.dnaMatchPct = ta.pct ?? null;
       }
     });
   }
@@ -459,6 +460,7 @@ class AnimalRecord {
     this.motherId = motherId;
     this.isTested = false;
     this.dnaRelation = null;
+    this.dnaMatchPct = null;
     this.tint = { hue: random() * 360, saturate: 70 + random() * 30, brightness: 70 + random() * 20 };
   }
 }
@@ -1536,7 +1538,12 @@ function updateUI() {
     const hint = document.getElementById('selection-hint'); if (hint) hint.style.display = 'block';
     if (dnaTestsRemaining > 0) {
       dnaBtn.style.display = 'block'; accBtn.style.display = 'none';
-      if (selectedHare.rabbit.isTested) { dnaBtn.disabled = true; dnaBtn.style.opacity = '0.5'; dnaBtn.textContent = 'ALREADY TESTED'; }
+      if (selectedHare.rabbit.isTested) { 
+        dnaBtn.disabled = true; 
+        dnaBtn.style.opacity = '0.5'; 
+        const pct = selectedHare.rabbit.dnaMatchPct;
+        dnaBtn.textContent = (pct !== null) ? `${pct}% MATCH` : 'TESTED'; 
+      }
       else { dnaBtn.disabled = false; dnaBtn.style.opacity = '1.0'; dnaBtn.textContent = 'DNA TEST'; }
     } else { dnaBtn.style.display = 'none'; accBtn.style.display = 'block'; accBtn.style.opacity = '1.0'; }
   } else sPanel.style.display = 'none';
@@ -2180,6 +2187,7 @@ function showDNAModal(animal) {
     
     // Finalize the test in the game state
     animal.rabbit.isTested = true;
+    animal.rabbit.dnaMatchPct = matchPct;
     const clickableName = `[[${animal.rabbit.id}:${animal.rabbit.firstName}]]`;
     if (isKiller) {
       dnaTestsRemaining--;

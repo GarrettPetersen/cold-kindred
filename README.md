@@ -10,27 +10,28 @@ This project has been restarted. Previous progress has been moved to the `archiv
 2. Start the development server: `npm run dev`
 3. Build for production: `npm run build`
 
-## iOS Development
-This project uses [Capacitor](https://capacitorjs.com/) to run as a native iOS app.
+## Native App Development (iOS & Android)
+This project uses [Capacitor](https://capacitorjs.com/) to run as a native app on iOS and Android.
 
 ### Quick Build & Sync
-Run the following command to build the web assets and sync with the iOS project in one step:
+Run the following command to build the web assets and sync with both native projects in one step:
 ```bash
 make
 ```
 
+Or for a specific platform:
+```bash
+make build-ios
+make build-android
+```
+
 ### Manual Steps
-1. **Build the web project**:
-   ```bash
-   npm run build
-   ```
-2. **Sync with iOS project**:
-   ```bash
-   npx cap sync ios
-   ```
-3. **Open in Xcode**:
-   ```bash
-   npx cap open ios
-   ```
-   From Xcode, you can run the app on a simulator or a physical device.
+
+#### iOS
+1. **Sync**: `npx cap sync ios`
+2. **Open Xcode**: `npx cap open ios`
+
+#### Android
+1. **Sync**: `npx cap sync android`
+2. **Open Android Studio**: `npx cap open android`
 

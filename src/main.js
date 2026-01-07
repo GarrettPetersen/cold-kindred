@@ -2040,6 +2040,7 @@ let isMidGameChange = false;
   const charSelection = document.getElementById('character-selection');
   
   modal.style.display = 'flex';
+  updateScrollHint(); // Initial check
 
   // Function to check if scrolling is needed and show/hide hint
   function updateScrollHint() {
@@ -2106,7 +2107,6 @@ let isMidGameChange = false;
           ctx.drawImage(detectiveSprites[char], 0, 0, 64, 64, 0, 0, 64, 64);
         }
       });
-      updateScrollHint();
     } else {
       iCanvas.style.display = 'block';
       charSelection.style.display = 'none';
@@ -2489,9 +2489,8 @@ function init() {
       return;
     }
     gameState.detective = null;
-    isMidGameChange = true;
     introStep = 0;
-    showIntro();
+    showIntro(true); // Pass true to correctly signal a mid-game character change
     saveGame();
   });
 
@@ -2527,7 +2526,7 @@ function init() {
     introStep++;
     const scrollContainer = document.getElementById('intro-scroll-container');
     if (scrollContainer) scrollContainer.scrollTop = 0;
-    showIntro();
+    showIntro(isMidGameChange); // Preserve the mid-game change state
   });
 
   document.getElementById('game-over-next').addEventListener('click', () => {
@@ -2539,11 +2538,10 @@ function init() {
   });
 
   document.getElementById('help-btn').addEventListener('click', () => {
-    isMidGameChange = false;
     introStep = 0;
     const scrollContainer = document.getElementById('intro-scroll-container');
     if (scrollContainer) scrollContainer.scrollTop = 0;
-    showIntro();
+    showIntro(false); // Help button always shows the briefing intro
   });
 
   document.getElementById('transcript-header').addEventListener('click', toggleTranscript);

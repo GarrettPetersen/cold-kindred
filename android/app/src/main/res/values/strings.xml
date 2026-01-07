@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">mystery.farm</string>
+    <string name="title_activity_main">mystery.farm</string>
+    <string name="package_name">farm.mystery.app</string>
+    <string name="custom_url_scheme">farm.mystery.app</string>
+</resources>

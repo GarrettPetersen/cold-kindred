@@ -39,6 +39,7 @@
 [data-char="fox"] .char-name { color: #ffaa44; }
 [data-char="hare"] .char-name { color: #44aaff; }
 [data-char="boarot"] .char-name { color: #88ff88; }
+[data-char="marmot"] .char-name { color: #ff66aa; }
 
 .char-card:hover {
   background: rgba(255,255,255,0.15);

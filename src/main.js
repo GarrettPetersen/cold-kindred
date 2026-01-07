@@ -76,13 +76,15 @@ const detectiveSprites = {
   fox: new Image(),
   hare: new Image(),
   boarot: new Image(),
+  marmot: new Image(),
   fox_celebration: new Image(),
   hare_celebration: new Image(),
-  boarot_celebration: new Image()
+  boarot_celebration: new Image(),
+  marmot_celebration: new Image()
 };
 
 let assetsLoaded = 0;
-const TOTAL_ASSETS = SPECIES.length * 4 + 6 + 6;
+const TOTAL_ASSETS = SPECIES.length * 4 + 6 + 8;
 
 function onAssetLoad() { 
   assetsLoaded++;
@@ -110,7 +112,7 @@ for (let i = 1; i <= 6; i++) {
 }
 
 // Detective sprites
-['fox', 'hare', 'boarot', 'fox_celebration', 'hare_celebration', 'boarot_celebration'].forEach(key => {
+['fox', 'hare', 'boarot', 'marmot', 'fox_celebration', 'hare_celebration', 'boarot_celebration', 'marmot_celebration'].forEach(key => {
   detectiveSprites[key].onload = onAssetLoad;
   detectiveSprites[key].onerror = onAssetLoad;
 });
@@ -118,9 +120,11 @@ for (let i = 1; i <= 6; i++) {
 detectiveSprites.fox.src = '/assets/detectives/film_noir_fox.png';
 detectiveSprites.hare.src = '/assets/detectives/sherlock_hare.png';
 detectiveSprites.boarot.src = '/assets/detectives/hercule_boarot.png';
+detectiveSprites.marmot.src = '/assets/detectives/miss_marmot.png';
 detectiveSprites.fox_celebration.src = '/assets/detectives/film_noir_fox_celebration.png';
 detectiveSprites.hare_celebration.src = '/assets/detectives/sherlock_hare_celebration.png';
 detectiveSprites.boarot_celebration.src = '/assets/detectives/hercule_boarot_celebration.png';
+detectiveSprites.marmot_celebration.src = '/assets/detectives/miss_marmot_celebration.png';
 
 SPECIES.forEach(s => {
   sprites[s] = { idle: new Image(), walk: new Image(), run: new Image(), death: new Image() };
@@ -1930,6 +1934,7 @@ function showGameOver(isWin) {
       if (det === 'fox') detName = "FILM NOIR FOX";
       else if (det === 'hare') detName = "SHERLOCK HARE";
       else if (det === 'boarot') detName = "HERCULE BOAROT";
+      else if (det === 'marmot') detName = "MISS MARMOT";
 
       msg.innerHTML = `Justice is served. The farm is safe once again.<br><br><b>${detName}</b> has cracked the case!${timeStr}${statsLine}`;
 
@@ -2100,7 +2105,7 @@ let isMidGameChange = false;
       btn.style.display = 'none'; // Hide next button until character is picked
 
       // Draw the idle frames on the character canvases
-      ['fox', 'hare', 'boarot'].forEach(char => {
+      ['fox', 'hare', 'boarot', 'marmot'].forEach(char => {
         const c = document.getElementById(char + 'Canvas');
         if (c) {
           const ctx = c.getContext('2d');

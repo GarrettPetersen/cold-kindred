@@ -184,6 +184,7 @@ function renderStaticLayer() {
     staticCanvas.height = FIELD_HEIGHT;
   }
   const sCtx = staticCanvas.getContext('2d');
+  sCtx.imageSmoothingEnabled = false;
   sCtx.clearRect(0, 0, FIELD_WIDTH, FIELD_HEIGHT);
   
   // Draw world grid
@@ -207,7 +208,7 @@ function renderStaticLayer() {
     if (!img || !img.complete) return;
     const sw = img.width, sh = img.height;
     const szW = sw * d.scale, szH = sh * d.scale;
-    sCtx.drawImage(img, d.x, d.y, szW, szH);
+    sCtx.drawImage(img, Math.floor(d.x), Math.floor(d.y), Math.floor(szW), Math.floor(szH));
   });
 }
 
@@ -843,8 +844,17 @@ function generateClueText(clue, speakerId) {
     const a = rabbits.find(r => r.id === clue.conn.a);
     const b = rabbits.find(r => r.id === clue.conn.b);
     const bRole = b.sex === 'M' ? 'brother' : 'sister';
-    if (speakerId === a.id) return pick([`${mark(b.id)} is my ${bRole}.`, `Have you seen my ${bRole}, ${mark(b.id)}?`, `I grew up with ${mark(b.id)}.`]);
-    if (speakerId === b.id) return pick([`${mark(a.id)} is my ${a.sex === 'M' ? 'brother' : 'sister'}.`, `I'm looking for my ${a.sex === 'M' ? 'brother' : 'sister'}, ${mark(a.id)}.`]);
+    if (speakerId === a.id) return pick([
+      `${mark(b.id)} is my ${bRole}.`, 
+      `Have you seen my ${bRole}, ${mark(b.id)}?`, 
+      `I grew up with ${mark(b.id)}.`,
+      `${mark(b.id)} belongs to my family.`
+    ]);
+    if (speakerId === b.id) return pick([
+      `${mark(a.id)} is my ${a.sex === 'M' ? 'brother' : 'sister'}.`, 
+      `I'm looking for my ${a.sex === 'M' ? 'brother' : 'sister'}, ${mark(a.id)}.`,
+      `${mark(a.id)} belongs to my family.`
+    ]);
     return pick([`${mark(a.id)} and ${mark(b.id)} are siblings.`, `I believe ${mark(a.id)} and ${mark(b.id)} are ${a.sex === b.sex ? (a.sex === 'M' ? 'brothers' : 'sisters') : 'brother and sister'}.`]);
   }
 
@@ -865,7 +875,12 @@ function generateClueText(clue, speakerId) {
   const cRoleShort = c.sex === 'M' ? 'boy' : 'girl';
   const cPoss = c.sex === 'M' ? 'his' : 'her';
 
-  if (speakerId === c.id) return pick([`${mark(p.id)} is my ${pRole}.`, `Have you seen my ${pRoleShort}, ${mark(p.id)}?`, `I believe ${mark(p.id)} is my ${pRoleShort}.`]);
+  if (speakerId === c.id) return pick([
+    `${mark(p.id)} is my ${pRole}.`, 
+    `Have you seen my ${pRoleShort}, ${mark(p.id)}?`, 
+    `I believe ${mark(p.id)} is my ${pRoleShort}.`,
+    `${mark(p.id)} belongs to my family.`
+  ]);
   if (speakerId === p.id) return pick([`${mark(c.id)} is my ${cRole}.`, `I'm looking for my ${cRoleShort}, ${mark(c.id)}.`, `${mark(c.id)} belongs to my family.`]);
   
   return pick([`${mark(p.id)} is ${mark(c.id)}'s ${pRoleShort}.`, `${mark(c.id)} is ${mark(p.id)}'s ${cRole}.`, `I saw ${mark(c.id)} with ${cPoss} ${pRoleShort}, ${mark(p.id)}.`]);
@@ -1573,7 +1588,7 @@ function updateUI() {
     if (selectedHare) {
       sPanel.style.display = 'block'; 
       sName.textContent = `${selectedHare.rabbit.firstName} (${CURRENT_YEAR - selectedHare.rabbit.birthYear})`; 
-      sSpec.textContent = selectedHare.rabbit.species;
+      sSpec.textContent = `${selectedHare.rabbit.species}, ${selectedHare.rabbit.sex === 'M' ? 'Male' : 'Female'}`;
       dnaBtn.style.display = 'none';
       accBtn.style.display = 'none';
       const hint = document.getElementById('selection-hint'); if (hint) hint.style.display = 'none';
@@ -1583,7 +1598,9 @@ function updateUI() {
   if (playAgainUi) playAgainUi.style.display = 'none';
 
   if (selectedHare) {
-    sPanel.style.display = 'block'; sName.textContent = `${selectedHare.rabbit.firstName} (${CURRENT_YEAR - selectedHare.rabbit.birthYear})`; sSpec.textContent = selectedHare.rabbit.species;
+    sPanel.style.display = 'block'; 
+    sName.textContent = `${selectedHare.rabbit.firstName} (${CURRENT_YEAR - selectedHare.rabbit.birthYear})`; 
+    sSpec.textContent = `${selectedHare.rabbit.species}, ${selectedHare.rabbit.sex === 'M' ? 'Male' : 'Female'}`;
     const hint = document.getElementById('selection-hint'); if (hint) hint.style.display = 'block';
     if (dnaTestsRemaining > 0) {
       dnaBtn.style.display = 'block'; accBtn.style.display = 'none';
@@ -2093,6 +2110,25 @@ function showGameOver(isWin) {
   gLoop();
 }
 
+function drawAnimalPreview(canvasId, nameId, animal) {
+  const canvas = document.getElementById(canvasId);
+  const nameDiv = document.getElementById(nameId);
+  if (!canvas || !nameDiv) return;
+  
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.imageSmoothingEnabled = false;
+  
+  const tintedSpr = getTintedSprite(animal.rabbit || animal, 'idle');
+  if (tintedSpr) {
+    ctx.drawImage(tintedSpr, 0, 0, 32, 32, 0, 0, 64, 64);
+  }
+  
+  const rabbit = animal.rabbit || animal;
+  nameDiv.textContent = `${rabbit.firstName} (${CURRENT_YEAR - rabbit.birthYear})`;
+  nameDiv.style.color = getHSL(rabbit);
+}
+
 function showDNAModal(animal) {
   const modal = document.getElementById('dna-modal');
   const dCanvas = document.getElementById('dnaCanvas');
@@ -2101,56 +2137,85 @@ function showDNAModal(animal) {
   const resultBox = document.getElementById('dna-result-box');
   const resultText = document.getElementById('dna-result-text');
   const doneBtn = document.getElementById('dna-done-btn');
+  const progressBar = document.getElementById('dna-progress-bar');
   
+  const confirmStep = document.getElementById('dna-confirm-step');
+  const animStep = document.getElementById('dna-anim-step');
+  const confirmText = document.getElementById('dna-confirm-text');
+  const confirmBtn = document.getElementById('dna-confirm-btn');
+  const cancelBtn = document.getElementById('dna-cancel-btn');
+
   dnaTargetAnimal = animal;
   dnaAnimTimer = 0;
   modal.style.display = 'flex';
+  confirmStep.style.display = 'flex';
+  animStep.style.display = 'none';
   resultBox.style.display = 'none';
-  title.textContent = "ANALYZING DNA...";
+  progressBar.style.width = '0%';
   
+  drawAnimalPreview('dna-confirm-canvas', 'dna-confirm-name', animal);
+  confirmText.textContent = `Are you sure you want to test ${animal.rabbit.firstName}'s DNA? This will use 1 of your remaining DNA tests.`;
+
   if (dnaHandle) cancelAnimationFrame(dnaHandle);
 
-  // Logic to determine result
-  const isKiller = animal.rabbit.id === killerId;
-  isDnaSuccess = isKiller;
-  
-  // 1. Build ancestor maps including the individuals themselves (dist 0)
-  const a1 = getAncestors(killerId);
-  a1.set(killerId, 0);
-  const a2 = getAncestors(animal.rabbit.id);
-  a2.set(animal.rabbit.id, 0);
+  cancelBtn.onclick = () => {
+    modal.style.display = 'none';
+  };
 
-  // 2. Find all common ancestors (including self if same)
-  const allCommon = [];
-  a1.forEach((dist1, id) => {
-    if (a2.has(id)) allCommon.push({ id, dist1, dist2: a2.get(id) });
-  });
+  confirmBtn.onclick = () => {
+    confirmStep.style.display = 'none';
+    animStep.style.display = 'block';
+    startDNAAnimation();
+  };
 
-  // 3. Keep only MRCAs (Most Recent Common Ancestors)
-  // An ancestor is an MRCA if none of its descendants are ALSO common ancestors.
-  const mrcas = allCommon.filter(anc => {
-    return !allCommon.some(other => {
-      if (anc.id === other.id) return false;
-      // Is 'other' a descendant of 'anc'?
-      const otherAncestors = getAncestors(other.id);
-      return otherAncestors.has(anc.id);
+  // Logic to determine result (moved into a function to be called after confirmation)
+  let matchPct;
+  let rel;
+  let isKiller;
+
+  function startDNAAnimation() {
+    title.textContent = "ANALYZING DNA...";
+    
+    isKiller = animal.rabbit.id === killerId;
+    isDnaSuccess = isKiller;
+    
+    // 1. Build ancestor maps including the individuals themselves (dist 0)
+    const a1 = getAncestors(killerId);
+    a1.set(killerId, 0);
+    const a2 = getAncestors(animal.rabbit.id);
+    a2.set(animal.rabbit.id, 0);
+
+    // 2. Find all common ancestors (including self if same)
+    const allCommon = [];
+    a1.forEach((dist1, id) => {
+      if (a2.has(id)) allCommon.push({ id, dist1, dist2: a2.get(id) });
     });
-  });
 
-  // 4. Calculate Relationship Label (using MRCAs that aren't the individuals themselves)
-  const rel = getRelationshipLabel(mrcas.filter(c => c.dist1 > 0 || c.dist2 > 0), killerId, animal.rabbit.id);
-  
-  // 5. Calculate mathematically perfect match percentage using Kinship Coefficient
-  kinshipMemo.clear(); // Clear cache for fresh calculation
-  const k = kinship(killerId, animal.rabbit.id);
-  // Shared DNA % is roughly 2 * kinship coefficient * 100
-  let matchPct = isKiller ? 100 : parseFloat((k * 200).toFixed(3));
-  
-  if (isKiller) {
-    dnaResultText = `100% MATCH DETECTED!\n${animal.rabbit.firstName} is the killer!`;
-  } else {
-    const relText = rel ? `the killer's ${rel}` : "no relation to the killer";
-    dnaResultText = `${matchPct}% MATCH: ${animal.rabbit.firstName} the ${animal.rabbit.species.replace('_', ' ')} is ${relText}.`;
+    // 3. Keep only MRCAs (Most Recent Common Ancestors)
+    const mrcas = allCommon.filter(anc => {
+      return !allCommon.some(other => {
+        if (anc.id === other.id) return false;
+        const otherAncestors = getAncestors(other.id);
+        return otherAncestors.has(anc.id);
+      });
+    });
+
+    // 4. Calculate Relationship Label
+    rel = getRelationshipLabel(mrcas.filter(c => c.dist1 > 0 || c.dist2 > 0), killerId, animal.rabbit.id);
+    
+    // 5. Calculate match percentage
+    kinshipMemo.clear(); 
+    const k = kinship(killerId, animal.rabbit.id);
+    matchPct = isKiller ? 100 : parseFloat((k * 200).toFixed(3));
+    
+    if (isKiller) {
+      dnaResultText = `100% MATCH DETECTED!\n${animal.rabbit.firstName} is the killer!`;
+    } else {
+      const relText = rel ? `the killer's ${rel}` : "no relation to the killer";
+      dnaResultText = `${matchPct}% MATCH: ${animal.rabbit.firstName} the ${animal.rabbit.species.replace('_', ' ')} is ${relText}.`;
+    }
+
+    dnaLoop();
   }
 
   function dnaLoop() {
@@ -2167,22 +2232,25 @@ function showDNAModal(animal) {
 
     // Phase 1: Animation (first 180 frames = 3 seconds at 60fps)
     if (dnaAnimTimer < 180) {
+      // Update loading bar
+      const progress = (dnaAnimTimer / 180) * 100;
+      progressBar.style.width = `${progress}%`;
+
       // Draw detective in lab coat
       if (labSpr && labSpr.complete) {
-        // Shifted further left to avoid overlap
         dCtx.drawImage(labSpr, centerX - 96, centerY - 48, 96, 96);
       }
 
-      // Draw DNA animation (loops 3 times over 180 frames)
+      // Draw DNA animation
       if (dnaSpr && dnaSpr.complete) {
         const frame = Math.floor((dnaAnimTimer % 60) / (60 / 16));
         const sx = (frame % 4) * 64;
         const sy = Math.floor(frame / 4) * 64;
-        // Shifted further right to avoid overlap
         dCtx.drawImage(dnaSpr, sx, sy, 64, 64, centerX + 16, centerY - 32, 64, 64);
       }
     } else {
       // Phase 2: Show Result
+      progressBar.style.width = '100%';
       title.textContent = "RESULT READY";
       resultBox.style.display = 'block';
       resultText.textContent = dnaResultText;
@@ -2227,8 +2295,6 @@ function showDNAModal(animal) {
     dnaAnimTimer += 1;
     dnaHandle = requestAnimationFrame(dnaLoop);
   }
-
-  dnaLoop();
 
   doneBtn.onclick = () => {
     modal.style.display = 'none';
@@ -2547,7 +2613,7 @@ function init() {
       x: random() * FIELD_WIDTH,
       y: random() * FIELD_HEIGHT,
       spriteIndex: Math.floor(random() * 6),
-      scale: 1.0 + random() * 0.5
+      scale: 2.0 + random() * 1.0
     });
   }
 
@@ -2756,8 +2822,26 @@ function init() {
   });
   accBtn.addEventListener('pointerdown', e => e.stopPropagation());
   accBtn.addEventListener('click', e => {
-    e.preventDefault(); if (gameState.isFinished || !selectedHare || dnaTestsRemaining > 0) return;
-    showGameOver(selectedHare.rabbit.id === killerId);
+    e.preventDefault(); 
+    if (gameState.isFinished || !selectedHare || dnaTestsRemaining > 0) return;
+    
+    const accModal = document.getElementById('accuse-modal');
+    const accText = document.getElementById('accuse-confirm-text');
+    const accConfirm = document.getElementById('accuse-confirm-btn');
+    const accCancel = document.getElementById('accuse-cancel-btn');
+    
+    drawAnimalPreview('accuse-confirm-canvas', 'accuse-confirm-name', selectedHare);
+    accText.textContent = `Are you absolutely certain ${selectedHare.rabbit.firstName} is the killer? A mistake here will end the investigation.`;
+    accModal.style.display = 'flex';
+    
+    accCancel.onclick = () => {
+      accModal.style.display = 'none';
+    };
+    
+    accConfirm.onclick = () => {
+      accModal.style.display = 'none';
+      showGameOver(selectedHare.rabbit.id === killerId);
+    };
   });
 
   // Portrait click to change character or replay celebration

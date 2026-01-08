@@ -7,9 +7,9 @@ all: build-all
 build-ios:
 	@echo "Ensuring all assets are in public folder..."
 	@mkdir -p public/assets/animations public/assets/detectives public/assets/items
-	@cp -n assets/animations/*.png public/assets/animations/ 2>/dev/null || true
-	@cp -n assets/detectives/*.png public/assets/detectives/ 2>/dev/null || true
-	@cp -n assets/items/*.png public/assets/items/ 2>/dev/null || true
+	@cp assets/animations/*.png public/assets/animations/ 2>/dev/null || true
+	@cp assets/detectives/*.png public/assets/detectives/ 2>/dev/null || true
+	@cp assets/items/*.png public/assets/items/ 2>/dev/null || true
 	@echo "Building web assets..."
 	npm run build
 	@echo "Syncing with iOS project..."
@@ -20,9 +20,9 @@ build-ios:
 build-android:
 	@echo "Ensuring all assets are in public folder..."
 	@mkdir -p public/assets/animations public/assets/detectives public/assets/items
-	@cp -n assets/animations/*.png public/assets/animations/ 2>/dev/null || true
-	@cp -n assets/detectives/*.png public/assets/detectives/ 2>/dev/null || true
-	@cp -n assets/items/*.png public/assets/items/ 2>/dev/null || true
+	@cp assets/animations/*.png public/assets/animations/ 2>/dev/null || true
+	@cp assets/detectives/*.png public/assets/detectives/ 2>/dev/null || true
+	@cp assets/items/*.png public/assets/items/ 2>/dev/null || true
 	@echo "Building web assets..."
 	npm run build
 	@echo "Syncing with Android project..."
@@ -31,6 +31,11 @@ build-android:
 
 # Build for both
 build-all:
+	@echo "Ensuring all assets are in public folder..."
+	@mkdir -p public/assets/animations public/assets/detectives public/assets/items
+	@cp assets/animations/*.png public/assets/animations/ 2>/dev/null || true
+	@cp assets/detectives/*.png public/assets/detectives/ 2>/dev/null || true
+	@cp assets/items/*.png public/assets/items/ 2>/dev/null || true
 	@echo "Building web assets..."
 	npm run build
 	@echo "Syncing with iOS and Android projects..."

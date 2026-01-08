@@ -322,11 +322,22 @@ function drawRankProgress(ctx, centerX, y, wins, forceRank = null) {
   const totalNeeded = nextRank.minWins - rank.minWins;
   const currentInTier = wins - rank.minWins;
   
-  const boxSize = 8;
-  const gap = 4;
-  const cols = Math.min(10, totalNeeded);
-  const rows = Math.ceil(totalNeeded / cols);
+  // Dynamically adjust scale based on density
+  let boxSize = 8;
+  let gap = 4;
+  let cols = 10;
   
+  if (totalNeeded > 100) {
+    boxSize = 4;
+    gap = 2;
+    cols = 25;
+  } else if (totalNeeded > 50) {
+    boxSize = 6;
+    gap = 3;
+    cols = 20;
+  }
+  
+  const rows = Math.ceil(totalNeeded / cols);
   const gridW = cols * boxSize + (cols - 1) * gap;
   const startX = centerX - gridW / 2;
   
@@ -3210,6 +3221,17 @@ function init() {
       const currIdx = SPECIES.indexOf(k.species);
       k.species = SPECIES[(currIdx + 1) % SPECIES.length];
       notifications.push({ text: `KILLER SPECIES: ${k.species}`, x: canvas.width / 2, y: canvas.height / 2, timer: 120, timerMax: 120, color: '#44ff44' });
+      cheatBuffer = "";
+    }
+
+    // "wins" - Manually set lifetime wins
+    if (cheatBuffer.endsWith("wins")) {
+      const stats = getStats();
+      // Increment by 25 each time to avoid prompt() which is often blocked in native environments
+      stats.lifetimeWins = (stats.lifetimeWins || 0) + 25;
+      saveStats(stats);
+      notifications.push({ text: `TOTAL WINS: ${stats.lifetimeWins} (+25)`, x: canvas.width / 2, y: canvas.height / 2, timer: 120, timerMax: 120, color: '#44ff44' });
+      updateUI();
       cheatBuffer = "";
     }
   });

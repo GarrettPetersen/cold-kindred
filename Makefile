@@ -1,4 +1,4 @@
-.PHONY: build-ios build-android build-all
+.PHONY: build-ios build-android build-all open-ios open-android
 
 # Default target
 all: build-all
@@ -34,4 +34,11 @@ build-all:
 	@echo "Syncing with iOS and Android projects..."
 	npx cap sync
 	@echo "Done! All platforms synced."
+
+# Open native IDEs
+open-ios:
+	npx cap open ios
+
+open-android:
+	npx cap open android
 

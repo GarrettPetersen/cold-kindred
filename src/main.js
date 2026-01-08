@@ -1296,21 +1296,46 @@ class Animal {
       if (d > 5) { this.state = 'run'; this.vx = (dx / d) * 2.5; this.vy = (dy / d) * 2.5; this.updateDir(); }
       else { this.state = 'idle'; this.vx = this.vy = 0; this.x = this.targetX; this.y = this.targetY; }
     } else if (!gameState.isFinished) {
-      // Optimization: only check nearby animals or skip frames
-      if (Date.now() % 3 === 0) { // Check every ~3 frames
+      // Voronoi-style Spatial Relaxation (Lloyd's Algorithm variation)
+      // Only runs for animals not currently in the family tree
+      if (Date.now() % 4 === 0) { 
+        let forceX = 0, forceY = 0;
+        let count = 0;
+        const spacing = 100; // Desired minimum spacing
+
         hares.forEach(o => {
-          if (o === this || o.targetX !== null) return;
+          if (o === this) return;
           const dx = this.x - o.x, dy = this.y - o.y;
-          if (Math.abs(dx) > 40 || Math.abs(dy) > 40) return; // Fast broad-phase
           const d2 = dx * dx + dy * dy;
-          if (d2 < 1600 && d2 > 0) {
+          
+          // Influence falls off with distance
+          if (d2 < spacing * spacing) {
             const d = Math.sqrt(d2);
-            this.vx += (dx / d) * 0.2;
-            this.vy += (dy / d) * 0.2;
+            const strength = (spacing - d) / spacing;
+            forceX += (dx / d) * strength;
+            forceY += (dy / d) * strength;
+            count++;
           }
         });
+
+        // Add boundary repulsion (treat edges as neighbors)
+        const edgePush = 0.5;
+        if (this.x < spacing) forceX += (1 - this.x / spacing) * edgePush;
+        if (this.x > FIELD_WIDTH - spacing) forceX -= (1 - (FIELD_WIDTH - this.x) / spacing) * edgePush;
+        if (this.y < spacing) forceY += (1 - this.y / spacing) * edgePush;
+        if (this.y > FIELD_HEIGHT - spacing) forceY -= (1 - (FIELD_HEIGHT - this.y) / spacing) * edgePush;
+
+        if (count > 0 || Math.abs(forceX) > 0.1 || Math.abs(forceY) > 0.1) {
+          this.vx = (this.vx * 0.9) + (forceX * 0.2);
+          this.vy = (this.vy * 0.9) + (forceY * 0.2);
+        }
       }
-      if (this.state !== 'idle') { const s = this.state === 'walk' ? 1 : 2.5, curr = Math.sqrt(this.vx * this.vx + this.vy * this.vy); if (curr > s) { this.vx = (this.vx / curr) * s; this.vy = (this.vy / curr) * s; } }
+
+      if (this.state !== 'idle') { 
+        const s = this.state === 'walk' ? 1 : 2.5;
+        const curr = Math.sqrt(this.vx * this.vx + this.vy * this.vy); 
+        if (curr > s) { this.vx = (this.vx / curr) * s; this.vy = (this.vy / curr) * s; } 
+      }
       if (--this.moveTimer <= 0) this.setRandomBehavior();
     } else {
       this.vx = 0; this.vy = 0; this.state = 'idle';

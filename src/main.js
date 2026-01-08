@@ -175,6 +175,42 @@ const envDetails = [];
 let clueQueue = [];
 let globallyIssuedClueIds = new Set();
 let caseLog = []; // Stores strings like "Name: Clue text"
+let staticCanvas = null;
+
+function renderStaticLayer() {
+  if (!staticCanvas) {
+    staticCanvas = document.createElement('canvas');
+    staticCanvas.width = FIELD_WIDTH;
+    staticCanvas.height = FIELD_HEIGHT;
+  }
+  const sCtx = staticCanvas.getContext('2d');
+  sCtx.clearRect(0, 0, FIELD_WIDTH, FIELD_HEIGHT);
+  
+  // Draw world grid
+  sCtx.strokeStyle = 'rgba(255,255,255,0.05)';
+  sCtx.lineWidth = 1;
+  for (let x = 0; x <= FIELD_WIDTH; x += 100) {
+    sCtx.beginPath(); sCtx.moveTo(x, 0); sCtx.lineTo(x, FIELD_HEIGHT); sCtx.stroke();
+  }
+  for (let y = 0; y <= FIELD_HEIGHT; y += 100) {
+    sCtx.beginPath(); sCtx.moveTo(0, y); sCtx.lineTo(FIELD_WIDTH, y); sCtx.stroke();
+  }
+
+  // Draw walkable area boundary
+  sCtx.strokeStyle = 'rgba(255,255,255,0.2)';
+  sCtx.lineWidth = 4;
+  sCtx.strokeRect(0, 0, FIELD_WIDTH, FIELD_HEIGHT);
+
+  // Draw grass sprites
+  envDetails.forEach(d => {
+    const img = grassSprites[d.spriteIndex];
+    if (!img || !img.complete) return;
+    const sw = img.width, sh = img.height;
+    const szW = sw * d.scale, szH = sh * d.scale;
+    sCtx.drawImage(img, d.x, d.y, szW, szH);
+  });
+}
+
 let gameState = { 
   isFinished: false, 
   wasSuccess: false, 
@@ -185,7 +221,8 @@ let gameState = {
   hasClickedClue: false,
   hasCreatedConnection: false,
   hint1Shown: false,
-  hint2Shown: false
+  hint2Shown: false,
+  isMidGameChange: false
 };
 
 let portraitAnim = {
@@ -201,7 +238,7 @@ function drawPortrait() {
   const pCtx = pCanvas.getContext('2d');
   pCtx.imageSmoothingEnabled = false;
   const det = gameState.detective;
-  if (!det) {
+  if (!det || det === "null") {
     document.getElementById('portrait-box').style.display = 'none';
     return;
   }
@@ -325,6 +362,7 @@ function saveGame() {
     hasCreatedConnection: gameState.hasCreatedConnection,
     hint1Shown: gameState.hint1Shown,
     hint2Shown: gameState.hint2Shown,
+    isMidGameChange: gameState.isMidGameChange,
     globallyIssuedClueIds: Array.from(globallyIssuedClueIds),
     clueQueueIds: clueQueue.map(c => c.id),
     testedAnimals: rabbits.filter(r => r.isTested).map(r => ({ id: r.id, rel: r.dnaRelation, pct: r.dnaMatchPct })),
@@ -332,7 +370,11 @@ function saveGame() {
     highlightedAnimalIds: Array.from(highlightedAnimalIds)
   };
   localStorage.setItem('mysteryFarm_current', JSON.stringify(data));
-  localStorage.setItem('mysteryFarm_detective', gameState.detective); // Global preference
+  if (gameState.detective && gameState.detective !== "null") {
+    localStorage.setItem('mysteryFarm_detective', gameState.detective); // Global preference
+  } else {
+    localStorage.removeItem('mysteryFarm_detective');
+  }
   
   if (gameState.isFinished) {
     const stats = getStats();
@@ -351,7 +393,9 @@ function saveGame() {
 
 function loadGame() {
   const savedDet = localStorage.getItem('mysteryFarm_detective');
-  if (savedDet) gameState.detective = savedDet;
+  if (savedDet && savedDet !== "null" && savedDet !== "undefined") {
+    gameState.detective = savedDet;
+  }
 
   const saved = localStorage.getItem('mysteryFarm_current');
   if (!saved) return false;
@@ -375,7 +419,11 @@ function loadGame() {
   dnaTestsRemaining = data.dnaTestsRemaining ?? 3;
   playerConnections = data.playerConnections || [];
   caseLog = data.caseLog || [];
-  gameState.detective = data.detective || savedDet || null;
+  
+  // Clean up the detective string
+  const dataDet = (data.detective && data.detective !== "null") ? data.detective : null;
+  const prefDet = (savedDet && savedDet !== "null") ? savedDet : null;
+  gameState.detective = dataDet || prefDet || null;
   gameState.isFinished = data.isFinished || false;
   gameState.wasSuccess = data.wasSuccess || false;
   gameState.startTime = data.startTime || null;
@@ -385,6 +433,7 @@ function loadGame() {
   gameState.hasCreatedConnection = data.hasCreatedConnection || false;
   gameState.hint1Shown = data.hint1Shown || false;
   gameState.hint2Shown = data.hint2Shown || false;
+  gameState.isMidGameChange = data.isMidGameChange || false;
   globallyIssuedClueIds = new Set(data.globallyIssuedClueIds || []);
   
   if (data.testedAnimals) {
@@ -2263,10 +2312,8 @@ let dnaAnimTimer = 0;
 let dnaTargetAnimal = null;
 let dnaResultText = "";
 let isDnaSuccess = false;
-let isMidGameChange = false;
-
   function showIntro(isMidGameChangeParam = false) {
-  isMidGameChange = isMidGameChangeParam;
+  gameState.isMidGameChange = isMidGameChangeParam;
   const modal = document.getElementById('intro-modal');
   const scrollContainer = document.getElementById('intro-scroll-container');
   const scrollHint = document.getElementById('intro-scroll-hint');
@@ -2328,7 +2375,7 @@ let isMidGameChange = false;
 
     // Handle character selection state
     const needsSelection = !gameState.detective;
-    if ((needsSelection || isMidGameChange) && introStep === 0) {
+    if ((needsSelection || gameState.isMidGameChange) && introStep === 0) {
       title.textContent = "CHOOSE YOUR CHARACTER";
       textContainer.textContent = "Select your detective to begin the investigation.";
       iCanvas.style.display = 'none';
@@ -2511,6 +2558,8 @@ function init() {
   camera.x = FIELD_WIDTH / 2 - (canvas.width / camera.zoom) / 2;
   camera.y = FIELD_HEIGHT / 2 - (canvas.height / camera.zoom) / 2;
   constrainCamera();
+
+  renderStaticLayer();
 
   const getPos = (e) => {
     const rect = canvas.getBoundingClientRect();
@@ -2740,16 +2789,17 @@ function init() {
         const scrollContainer = document.getElementById('intro-scroll-container');
         if (scrollContainer) scrollContainer.scrollTop = 0;
 
-        if (isMidGameChange) {
+        if (gameState.isMidGameChange) {
           const modal = document.getElementById('intro-modal');
           modal.style.display = 'none';
           if (introHandle) cancelAnimationFrame(introHandle);
-          isMidGameChange = false;
+          gameState.isMidGameChange = false;
           introStep = 0;
           introAnimTimer = 0;
         } else {
           showIntro();
         }
+        updateUI();
         saveGame();
       }, 500);
     });
@@ -2759,7 +2809,7 @@ function init() {
     introStep++;
     const scrollContainer = document.getElementById('intro-scroll-container');
     if (scrollContainer) scrollContainer.scrollTop = 0;
-    showIntro(isMidGameChange); // Preserve the mid-game change state
+    showIntro(gameState.isMidGameChange); // Preserve the mid-game change state
   });
 
   document.getElementById('game-over-next').addEventListener('click', () => {
@@ -2775,6 +2825,7 @@ function init() {
     const scrollContainer = document.getElementById('intro-scroll-container');
     if (scrollContainer) scrollContainer.scrollTop = 0;
     showIntro(false); // Help button always shows the briefing intro
+    saveGame();
   });
 
   document.getElementById('transcript-header').addEventListener('click', toggleTranscript);
@@ -2831,8 +2882,10 @@ function init() {
 
   if (gameState.isFinished) {
     showGameOver(gameState.wasSuccess);
-  } else if (!wasLoaded || !gameState.introFinished) {
-    showIntro();
+  } else if (!wasLoaded || !gameState.introFinished || !gameState.detective || gameState.detective === "null") {
+    // If they have no detective but intro was finished, it was a mid-game change interrupted by a page reload
+    const isActuallyMidGame = (!gameState.detective || gameState.detective === "null") && (gameState.introFinished || gameState.isMidGameChange);
+    showIntro(isActuallyMidGame);
   }
   
   loop();
@@ -2989,29 +3042,16 @@ function loop() {
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.imageSmoothingEnabled = false;
   
-  ctx.strokeStyle = 'rgba(255,255,255,0.05)'; const sp = 100 * camera.zoom;
-  for (let x = (-camera.x * camera.zoom) % sp; x < canvas.width; x += sp) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); }
-  for (let y = (-camera.y * camera.zoom) % sp; y < canvas.height; y += sp) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke(); }
-  
-  // Draw walkable area boundary
-  ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-  ctx.lineWidth = 4 * camera.zoom;
-  ctx.strokeRect(
-    -camera.x * camera.zoom,
-    -camera.y * camera.zoom,
-    FIELD_WIDTH * camera.zoom,
-    FIELD_HEIGHT * camera.zoom
-  );
-
-  // Draw grass sprites
-  envDetails.forEach(d => {
-    const img = grassSprites[d.spriteIndex];
-    const sw = img.width, sh = img.height;
-    const sx = (d.x - camera.x) * camera.zoom, sy = (d.y - camera.y) * camera.zoom;
-    const szW = sw * d.scale * camera.zoom, szH = sh * d.scale * camera.zoom;
-    if (sx < -szW || sx > canvas.width || sy < -szH || sy > canvas.height) return;
-    ctx.drawImage(img, Math.floor(sx), Math.floor(sy), Math.floor(szW), Math.floor(szH));
-  });
+  // Draw static background layer (grid, grass, and boundaries)
+  if (staticCanvas) {
+    ctx.drawImage(
+      staticCanvas, 
+      Math.floor(-camera.x * camera.zoom), 
+      Math.floor(-camera.y * camera.zoom), 
+      Math.floor(FIELD_WIDTH * camera.zoom), 
+      Math.floor(FIELD_HEIGHT * camera.zoom)
+    );
+  }
 
   ctx.save(); 
   ctx.font = 'bold 24px monospace'; 

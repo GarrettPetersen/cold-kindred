@@ -397,7 +397,7 @@ function loadGame() {
       }
     });
   }
-
+  
   if (data.clueQueueIds) {
     clueQueue = data.clueQueueIds.map(id => cluePool.find(c => c.id === id)).filter(Boolean);
   }
@@ -1996,7 +1996,7 @@ function showGameOver(isWin) {
       else if (det === 'marmot') detName = "MISS MARMOT";
 
       msg.innerHTML = `Justice is served. The farm is safe once again.<br><br><b>${detName}</b> has cracked the case!${timeStr}${statsLine}`;
-
+      
       const spr = detectiveSprites[det + '_celebration'];
       if (spr && spr.complete) {
         gCtx.save();

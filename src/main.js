@@ -216,6 +216,10 @@ let clueQueue = [];
 let globallyIssuedClueIds = new Set();
 let caseLog = []; // Stores strings like "Name: Clue text"
 let staticCanvas = null;
+const pixelCanvas = document.createElement('canvas');
+pixelCanvas.width = 64;
+pixelCanvas.height = 64;
+const pCtx = pixelCanvas.getContext('2d');
 
 function renderStaticLayer() {
   if (!staticCanvas) {
@@ -1362,19 +1366,40 @@ class Animal {
     ctx.restore();
     }
 
+    if (selectedHare === this) {
+      const pulse = Math.sin(Date.now() / 200) * 0.1 + 0.9;
+      
+      // Draw pixelated donut on a larger scratch canvas (64x64) to prevent clipping
+      pCtx.clearRect(0, 0, 64, 64);
+      pCtx.imageSmoothingEnabled = false;
+      pCtx.beginPath();
+      
+      // We center the animal in the 64x64 space. 
+      // Animal sprite is 32x32. In 64x64, its base (feet) is at y ≈ 46
+      pCtx.ellipse(32, 46, 16 * pulse, 8 * pulse, 0, 0, Math.PI * 2);
+      pCtx.strokeStyle = '#44ff44';
+      pCtx.lineWidth = 1;
+      pCtx.stroke();
+
+      ctx.save();
+      ctx.imageSmoothingEnabled = false;
+      // Draw the 64x64 scratch canvas centered on the animal.
+      // Since the scratch is 2x the native sprite size (32), 
+      // we draw it at 2x sz to keep pixel sizes consistent.
+      ctx.drawImage(pixelCanvas, 
+        Math.floor(sx - sz / 2), 
+        Math.floor(sy - sz / 2), 
+        sz * 2, sz * 2
+      );
+      ctx.restore();
+    }
+
     const tintedSpr = getTintedSprite(this.rabbit, this.state);
     if (tintedSpr) {
       ctx.drawImage(tintedSpr, this.frame * FRAME_SIZE, d * FRAME_SIZE, FRAME_SIZE, FRAME_SIZE, Math.floor(sx), Math.floor(sy), sz, sz);
     }
 
     if (selectedHare === this) {
-      const pulse = Math.sin(Date.now() / 200) * 0.1 + 0.9;
-      ctx.beginPath();
-      ctx.ellipse(sx + sz / 2, sy + sz * 0.9, sz * 0.4 * pulse, sz * 0.2 * pulse, 0, 0, Math.PI * 2);
-      ctx.strokeStyle = '#44ff44';
-      ctx.lineWidth = 3 * camera.zoom;
-      ctx.stroke();
-
       const textAlpha = Math.sin(Date.now() / 200) * 0.3 + 0.7;
       ctx.fillStyle = `rgba(68, 255, 68, ${textAlpha})`;
       ctx.font = `bold ${Math.max(10, Math.floor(10 * camera.zoom))}px monospace`;

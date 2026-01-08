@@ -85,11 +85,12 @@ const detectiveSprites = {
   hare_lab: new Image(),
   boarot_lab: new Image(),
   marmot_lab: new Image(),
-  dna_test: new Image()
+  dna_test: new Image(),
+  police_badge: new Image()
 };
 
 let assetsLoaded = 0;
-const TOTAL_ASSETS = SPECIES.length * 4 + 6 + 13;
+const TOTAL_ASSETS = SPECIES.length * 4 + 6 + 14;
 
 function onAssetLoad() { 
   assetsLoaded++;
@@ -117,7 +118,7 @@ for (let i = 1; i <= 6; i++) {
 }
 
 // Detective sprites
-['fox', 'hare', 'boarot', 'marmot', 'fox_celebration', 'hare_celebration', 'boarot_celebration', 'marmot_celebration', 'fox_lab', 'hare_lab', 'boarot_lab', 'marmot_lab', 'dna_test'].forEach(key => {
+['fox', 'hare', 'boarot', 'marmot', 'fox_celebration', 'hare_celebration', 'boarot_celebration', 'marmot_celebration', 'fox_lab', 'hare_lab', 'boarot_lab', 'marmot_lab', 'dna_test', 'police_badge'].forEach(key => {
   detectiveSprites[key].onload = onAssetLoad;
   detectiveSprites[key].onerror = onAssetLoad;
 });
@@ -135,6 +136,7 @@ detectiveSprites.hare_lab.src = '/assets/detectives/sherlock_hare_lab.png';
 detectiveSprites.boarot_lab.src = '/assets/detectives/hercule_boarot_lab.png';
 detectiveSprites.marmot_lab.src = '/assets/detectives/miss_marmot_lab.png';
 detectiveSprites.dna_test.src = '/assets/animations/dna_test.png';
+detectiveSprites.police_badge.src = '/assets/items/police_badge.png';
 
 SPECIES.forEach(s => {
   sprites[s] = { idle: new Image(), walk: new Image(), run: new Image(), death: new Image() };
@@ -153,7 +155,45 @@ SPECIES.forEach(s => {
   sprites[s].death.src = `/assets/${s}/${s}_Death_with_shadow.png`;
 });
 
-// --- State ---
+// --- Ranks ---
+const RANKS = [
+  { title: 'RECRUIT', minWins: 0, hue: 0, sat: 0, bri: 0 },          // No badge
+  { title: 'ROOKIE', minWins: 1, hue: 30, sat: 50, bri: 60 },        // Bronze
+  { title: 'OFFICER', minWins: 5, hue: 0, sat: 0, bri: 90 },        // Silver
+  { title: 'DETECTIVE', minWins: 15, hue: 50, sat: 100, bri: 100 },  // Gold
+  { title: 'SERGEANT', minWins: 30, hue: 190, sat: 30, bri: 150 },   // Platinum
+  { title: 'LIEUTENANT', minWins: 60, hue: 0, sat: 100, bri: 80 },   // Ruby
+  { title: 'CAPTAIN', minWins: 125, hue: 120, sat: 100, bri: 80 },   // Emerald
+  { title: 'COMMANDER', minWins: 250, hue: 190, sat: 100, bri: 120 }, // Diamond
+  { title: 'COMMISSIONER', minWins: 500, hue: 280, sat: 100, bri: 70 } // Onyx
+];
+
+function getRank(wins) {
+  for (let i = RANKS.length - 1; i >= 0; i--) {
+    if (wins >= RANKS[i].minWins) return { ...RANKS[i], index: i };
+  }
+  return { ...RANKS[0], index: 0 };
+}
+
+const badgeCache = new Map();
+function getBadgeSprite(rankIndex) {
+  if (rankIndex === 0) return null; // Recruit has no badge
+  if (badgeCache.has(rankIndex)) return badgeCache.get(rankIndex);
+  
+  const base = detectiveSprites.police_badge;
+  if (!base || !base.complete) return null;
+  
+  const r = RANKS[rankIndex];
+  const canvas = document.createElement('canvas');
+  canvas.width = 64; canvas.height = 64;
+  const bCtx = canvas.getContext('2d');
+  bCtx.imageSmoothingEnabled = false;
+  bCtx.filter = `hue-rotate(${r.hue}deg) saturate(${r.sat}%) brightness(${r.bri}%)`;
+  bCtx.drawImage(base, 0, 0);
+  
+  badgeCache.set(rankIndex, canvas);
+  return canvas;
+}
 const rabbits = [];
 let nextRabbitId = 1;
 let playerConnections = [];
@@ -252,7 +292,7 @@ function drawPortrait() {
 
   if (!spr || !spr.complete) return;
 
-  pCtx.clearRect(0, 0, 64, 64);
+  pCtx.clearRect(0, 0, 128, 128);
 
   let frame = 0;
   if (portraitAnim.active) {
@@ -271,13 +311,72 @@ function drawPortrait() {
 
   const sx = (frame % 4) * 64;
   const sy = Math.floor(frame / 4) * 64;
-  pCtx.drawImage(spr, sx, sy, 64, 64, 0, 0, 64, 64);
+  pCtx.drawImage(spr, sx, sy, 64, 64, 0, 0, 128, 128);
+}
+
+function drawRankProgress(ctx, centerX, y, wins, forceRank = null) {
+  const rank = forceRank || getRank(wins);
+  const nextRank = (rank.index < RANKS.length - 1) ? RANKS[rank.index + 1] : null;
+  if (!nextRank) return 0;
+  
+  const totalNeeded = nextRank.minWins - rank.minWins;
+  const currentInTier = wins - rank.minWins;
+  
+  const boxSize = 8;
+  const gap = 4;
+  const cols = Math.min(10, totalNeeded);
+  const rows = Math.ceil(totalNeeded / cols);
+  
+  const gridW = cols * boxSize + (cols - 1) * gap;
+  const startX = centerX - gridW / 2;
+  
+  ctx.imageSmoothingEnabled = false;
+  
+  for (let i = 0; i < totalNeeded; i++) {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const x = startX + col * (boxSize + gap);
+    const yPos = y + row * (boxSize + gap);
+    
+    ctx.fillStyle = (i < currentInTier) ? '#44ff44' : 'rgba(255,255,255,0.15)';
+    ctx.fillRect(Math.floor(x), Math.floor(yPos), boxSize, boxSize);
+  }
+  return rows * (boxSize + gap);
+}
+
+function showStatsModal() {
+  const modal = document.getElementById('stats-modal');
+  const canvas = document.getElementById('statsBadgeCanvas');
+  const pCanvas = document.getElementById('statsProgressCanvas');
+  const rankLabel = document.getElementById('stats-rank-badge-label');
+  const winsCount = document.getElementById('stats-wins-count');
+  
+  const stats = getStats();
+  const wins = stats.lifetimeWins || 0;
+  const rank = getRank(wins);
+  
+  winsCount.textContent = wins;
+  rankLabel.textContent = rank.title;
+  
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, 128, 128);
+  ctx.imageSmoothingEnabled = false;
+  const badge = getBadgeSprite(rank.index);
+  if (badge) {
+    ctx.drawImage(badge, 0, 0, 64, 64, 0, 0, 128, 128);
+  }
+  
+  const pCtx = pCanvas.getContext('2d');
+  pCtx.clearRect(0, 0, pCanvas.width, pCanvas.height);
+  drawRankProgress(pCtx, pCanvas.width / 2, 0, wins);
+  
+  modal.style.display = 'flex';
 }
 
 // --- Persistence & Stats ---
 function getStats() {
   const stats = localStorage.getItem('mysteryFarm_stats');
-  return stats ? JSON.parse(stats) : { history: {} };
+  return stats ? JSON.parse(stats) : { history: {}, lifetimeWins: 0 };
 }
 
 function saveStats(stats) {
@@ -377,7 +476,7 @@ function saveGame() {
     localStorage.removeItem('mysteryFarm_detective');
   }
   
-  if (gameState.isFinished) {
+  if (gameState.isFinished && !gameState.statsUpdated) {
     const stats = getStats();
     let solveTime = null;
     if (gameState.startTime && gameState.endTime) {
@@ -388,7 +487,11 @@ function saveGame() {
       solveTime: solveTime,
       dnaTestsUsed: 3 - dnaTestsRemaining
     };
+    if (gameState.wasSuccess) {
+      stats.lifetimeWins = (stats.lifetimeWins || 0) + 1;
+    }
     saveStats(stats);
+    gameState.statsUpdated = true;
   }
 }
 
@@ -1727,6 +1830,9 @@ const VILLAIN_QUOTES = [
   "I didn't mean to do it! I just tripped and {victim} happened to be in the way. Multiple times."
 ];
 
+let introScrollHintTimeout = null;
+let gameOverScrollHintTimeout = null;
+
 function showGameOver(isWin) {
   const modal = document.getElementById('game-over');
   const scrollContainer = document.getElementById('game-over-scroll-container');
@@ -1738,19 +1844,45 @@ function showGameOver(isWin) {
   const gCanvas = document.getElementById('gameOverCanvas');
   const gCtx = gCanvas.getContext('2d');
   
+  // Reset scroll state for this step
+  scrollContainer.dataset.hasScrolled = 'false';
+
   // Function to check if scrolling is needed and show/hide hint
   function updateScrollHint() {
-    setTimeout(() => {
-      if (!scrollContainer) return;
-      const isScrollable = scrollContainer.scrollHeight > scrollContainer.clientHeight;
-      const isAtBottom = scrollContainer.scrollHeight - scrollContainer.scrollTop <= scrollContainer.clientHeight + 20;
-      scrollHint.style.display = (isScrollable && !isAtBottom) ? 'block' : 'none';
-    }, 100);
+    if (!scrollContainer) return;
+    const isScrollable = scrollContainer.scrollHeight > scrollContainer.clientHeight;
+    const isAtBottom = scrollContainer.scrollHeight - scrollContainer.scrollTop <= scrollContainer.clientHeight + 20;
+    
+    if (!isScrollable || isAtBottom || scrollContainer.dataset.hasScrolled === 'true') {
+      if (gameOverScrollHintTimeout) {
+        clearTimeout(gameOverScrollHintTimeout);
+        gameOverScrollHintTimeout = null;
+      }
+      scrollHint.style.display = 'none';
+    } else {
+      // Only start timer if not already running
+      if (!gameOverScrollHintTimeout) {
+        gameOverScrollHintTimeout = setTimeout(() => {
+          if (scrollContainer.dataset.hasScrolled === 'false') scrollHint.style.display = 'block';
+          gameOverScrollHintTimeout = null;
+        }, 2000);
+      }
+    }
   }
+
+  scrollHint.onclick = () => {
+    scrollContainer.scrollTo({ top: scrollContainer.scrollHeight, behavior: 'smooth' });
+    scrollContainer.dataset.hasScrolled = 'true';
+    scrollHint.style.display = 'none';
+  };
 
   // Attach scroll listener once
   if (scrollContainer && !scrollContainer.dataset.listenerAttached) {
-    scrollContainer.addEventListener('scroll', updateScrollHint);
+    scrollContainer.addEventListener('scroll', () => {
+      scrollContainer.dataset.hasScrolled = 'true';
+      if (gameOverScrollHintTimeout) clearTimeout(gameOverScrollHintTimeout);
+      scrollHint.style.display = 'none';
+    });
     scrollContainer.dataset.listenerAttached = 'true';
   }
 
@@ -1856,7 +1988,19 @@ function showGameOver(isWin) {
     if (gameOverStep === 0) {
       title.textContent = "CASE SOLVED!";
       title.style.color = "#44ff44";
-      msg.innerHTML = `You found the killer! <span style="color: ${getHSL(killer)}; font-weight: bold;">${killer.firstName}</span> has been apprehended.${timeStr}${statsLine}`;
+      
+      const stats = getStats();
+      // Use pre-win count for rank display before the promotion screen
+      const rank = getRank(isWin ? (stats.lifetimeWins - 1) : stats.lifetimeWins);
+      const titlePrefix = rank.title.charAt(0) + rank.title.slice(1).toLowerCase();
+      const det = gameState.detective;
+      let detName = "THE DETECTIVE";
+      if (det === 'fox') detName = "FILM NOIR FOX";
+      else if (det === 'hare') detName = "SHERLOCK HARE";
+      else if (det === 'boarot') detName = "HERCULE BOAROT";
+      else if (det === 'marmot') detName = "MISS MARMOT";
+
+      msg.innerHTML = `${titlePrefix} ${detName} has found the killer! <span style="color: ${getHSL(killer)}; font-weight: bold;">${killer.firstName}</span> has been apprehended.${timeStr}${statsLine}`;
       
       gCtx.save();
       gCtx.filter = `hue-rotate(${killer.tint.hue}deg) saturate(${killer.tint.saturate}%) brightness(${killer.tint.brightness}%)`;
@@ -2050,8 +2194,64 @@ function showGameOver(isWin) {
       gameOverAnimTimer += 1;
       if (isCut && headPhysics.vx === 0) {
         nextBtn.style.display = "block";
-        nextBtn.textContent = "FINISH";
+        nextBtn.textContent = "SERVICE RECORD";
       }
+    } else if (gameOverStep === 3) {
+      title.textContent = "SERVICE RECORD";
+      const stats = getStats();
+      const winsBefore = stats.lifetimeWins - 1;
+      const winsAfter = stats.lifetimeWins;
+      
+      const rankBefore = getRank(winsBefore);
+      const rankAfter = getRank(winsAfter);
+      const promoted = rankAfter.index > rankBefore.index;
+      
+      const isPromotedState = promoted && gameOverAnimTimer > 120;
+      let currentWins = (gameOverAnimTimer > 60) ? winsAfter : winsBefore;
+      
+      if (promoted && gameOverAnimTimer === 120) {
+        triggerHaptic();
+      }
+
+      // Unified Side-by-Side Layout
+      // The internal canvas is 600px wide, so side-by-side always fits even if the screen is narrow.
+      const totalPairW = isPromotedState ? 276 : 128;
+      const startX = centerX - totalPairW / 2;
+      const drawY = centerY - 64; // Centered vertically
+
+      // Progress Boxes at the very top
+      const progressY = drawY - 40;
+      if (isPromotedState) {
+        drawRankProgress(gCtx, centerX, progressY, winsAfter);
+      } else {
+        drawRankProgress(gCtx, centerX, progressY, currentWins, rankBefore);
+      }
+
+      const badge = getBadgeSprite(isPromotedState ? rankAfter.index : rankBefore.index);
+      const rankTitle = isPromotedState ? rankAfter.title : rankBefore.title;
+
+      if (badge) {
+        gCtx.drawImage(badge, 0, 0, 64, 64, Math.floor(startX), Math.floor(drawY), 128, 128);
+      }
+      
+      if (isPromotedState) {
+        const spr = detectiveSprites[gameState.detective + '_celebration'];
+        if (spr && spr.complete) {
+          const frame = Math.floor((gameOverAnimTimer - 120) / 5) % 16;
+          const sx = (frame % 4) * 64;
+          const sy = Math.floor(frame / 4) * 64;
+          gCtx.drawImage(spr, sx, sy, 64, 64, Math.floor(startX + 148), Math.floor(drawY), 128, 128);
+        }
+      }
+
+      msg.innerHTML = `<div style="font-size: 48px; font-weight: bold; color: #44ff44; margin-bottom: 10px;">${currentWins}</div>
+        <div style="font-size: 14px; opacity: 0.6; letter-spacing: 2px; margin-bottom: 20px;">CASES SOLVED</div>
+        ${isPromotedState ? `<div style="color: #44ff44; font-weight: bold; font-size: 20px; animation: bounce-text 1s infinite; line-height: 1.2;">PROMOTED TO ${rankTitle}!</div>` : `<div style="font-size: 18px; font-weight: bold;">${rankTitle}</div>`}`;
+
+      nextBtn.style.display = "block";
+      nextBtn.textContent = "NEXT";
+      viewFarmBtn.style.display = "none";
+      gameOverAnimTimer++;
     } else {
       title.textContent = "HOORAY!";
       const det = gameState.detective;
@@ -2061,7 +2261,11 @@ function showGameOver(isWin) {
       else if (det === 'boarot') detName = "HERCULE BOAROT";
       else if (det === 'marmot') detName = "MISS MARMOT";
 
-      msg.innerHTML = `Justice is served. The farm is safe once again.<br><br><b>${detName}</b> has cracked the case!${timeStr}${statsLine}`;
+      const stats = getStats();
+      const rank = getRank(stats.lifetimeWins);
+      const titlePrefix = rank.title.charAt(0) + rank.title.slice(1).toLowerCase();
+
+      msg.innerHTML = `Justice is served. The farm is safe once again.<br><br><b>${titlePrefix} ${detName}</b> has cracked the case!${timeStr}${statsLine}`;
       
       const spr = detectiveSprites[det + '_celebration'];
       if (spr && spr.complete) {
@@ -2084,7 +2288,7 @@ function showGameOver(isWin) {
 
         const sx = (frame % 4) * 64;
         const sy = Math.floor(frame / 4) * 64;
-        gCtx.drawImage(spr, sx, sy, 64, 64, centerX - 48, centerY - 48, 96, 96);
+        gCtx.drawImage(spr, sx, sy, 64, 64, centerX - 64, centerY - 64, 128, 128);
         gCtx.restore();
       } else {
         const baseSpr = detectiveSprites[det];
@@ -2390,23 +2594,48 @@ let isDnaSuccess = false;
   const iCtx = iCanvas.getContext('2d');
   const charSelection = document.getElementById('character-selection');
   
+  // Reset scroll state for this step
+  scrollContainer.dataset.hasScrolled = 'false';
+
   modal.style.display = 'flex';
   updateScrollHint(); // Initial check
 
   // Function to check if scrolling is needed and show/hide hint
   function updateScrollHint() {
     if (modal.style.display === 'none') return;
-    // Small delay to allow DOM to layout
-    setTimeout(() => {
-      const isScrollable = scrollContainer.scrollHeight > scrollContainer.clientHeight;
-      const isAtBottom = scrollContainer.scrollHeight - scrollContainer.scrollTop <= scrollContainer.clientHeight + 20;
-      scrollHint.style.display = (isScrollable && !isAtBottom) ? 'block' : 'none';
-    }, 100);
+    const isScrollable = scrollContainer.scrollHeight > scrollContainer.clientHeight;
+    const isAtBottom = scrollContainer.scrollHeight - scrollContainer.scrollTop <= scrollContainer.clientHeight + 20;
+    
+    if (!isScrollable || isAtBottom || scrollContainer.dataset.hasScrolled === 'true') {
+      if (introScrollHintTimeout) {
+        clearTimeout(introScrollHintTimeout);
+        introScrollHintTimeout = null;
+      }
+      scrollHint.style.display = 'none';
+    } else {
+      // Only start timer if not already running
+      if (!introScrollHintTimeout) {
+        introScrollHintTimeout = setTimeout(() => {
+          if (scrollContainer.dataset.hasScrolled === 'false') scrollHint.style.display = 'block';
+          introScrollHintTimeout = null;
+        }, 2000);
+      }
+    }
   }
+
+  scrollHint.onclick = () => {
+    scrollContainer.scrollTo({ top: scrollContainer.scrollHeight, behavior: 'smooth' });
+    scrollContainer.dataset.hasScrolled = 'true';
+    scrollHint.style.display = 'none';
+  };
 
   // Attach scroll listener once
   if (!scrollContainer.dataset.listenerAttached) {
-    scrollContainer.addEventListener('scroll', updateScrollHint);
+    scrollContainer.addEventListener('scroll', () => {
+      scrollContainer.dataset.hasScrolled = 'true';
+      if (introScrollHintTimeout) clearTimeout(introScrollHintTimeout);
+      scrollHint.style.display = 'none';
+    });
     scrollContainer.dataset.listenerAttached = 'true';
   }
   
@@ -2454,8 +2683,8 @@ let isDnaSuccess = false;
         if (c) {
           const ctx = c.getContext('2d');
           ctx.imageSmoothingEnabled = false;
-          ctx.clearRect(0, 0, 64, 64);
-          ctx.drawImage(detectiveSprites[char], 0, 0, 64, 64, 0, 0, 64, 64);
+          ctx.clearRect(0, 0, 128, 128);
+          ctx.drawImage(detectiveSprites[char], 0, 0, 64, 64, 0, 0, 128, 128);
         }
       });
     } else {
@@ -2860,7 +3089,16 @@ function init() {
     saveGame();
   });
 
-  // Character selection
+  // Stats Modal
+  document.querySelectorAll('.open-stats-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      showStatsModal();
+    });
+  });
+  document.getElementById('close-stats-btn').addEventListener('click', () => {
+    document.getElementById('stats-modal').style.display = 'none';
+  });
   document.querySelectorAll('.char-card').forEach(card => {
     card.addEventListener('click', () => {
       const char = card.getAttribute('data-char');
@@ -2891,23 +3129,35 @@ function init() {
 
   document.getElementById('intro-next').addEventListener('click', () => {
     introStep++;
+    if (introScrollHintTimeout) { clearTimeout(introScrollHintTimeout); introScrollHintTimeout = null; }
     const scrollContainer = document.getElementById('intro-scroll-container');
-    if (scrollContainer) scrollContainer.scrollTop = 0;
+    if (scrollContainer) {
+      scrollContainer.scrollTop = 0;
+      scrollContainer.dataset.hasScrolled = 'false';
+    }
     showIntro(gameState.isMidGameChange); // Preserve the mid-game change state
   });
 
   document.getElementById('game-over-next').addEventListener('click', () => {
     gameOverStep++;
     gameOverAnimTimer = 0;
+    if (gameOverScrollHintTimeout) { clearTimeout(gameOverScrollHintTimeout); gameOverScrollHintTimeout = null; }
     const scrollContainer = document.getElementById('game-over-scroll-container');
-    if (scrollContainer) scrollContainer.scrollTop = 0;
+    if (scrollContainer) {
+      scrollContainer.scrollTop = 0;
+      scrollContainer.dataset.hasScrolled = 'false';
+    }
     showGameOver(gameState.wasSuccess);
   });
 
   document.getElementById('help-btn').addEventListener('click', () => {
     introStep = 0;
+    if (introScrollHintTimeout) { clearTimeout(introScrollHintTimeout); introScrollHintTimeout = null; }
     const scrollContainer = document.getElementById('intro-scroll-container');
-    if (scrollContainer) scrollContainer.scrollTop = 0;
+    if (scrollContainer) {
+      scrollContainer.scrollTop = 0;
+      scrollContainer.dataset.hasScrolled = 'false';
+    }
     showIntro(false); // Help button always shows the briefing intro
     saveGame();
   });

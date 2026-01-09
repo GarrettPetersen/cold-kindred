@@ -309,17 +309,17 @@ a {
   font-family: 'Courier New', Courier, monospace;
   z-index: 100;
   transition: height 0.3s ease;
-  height: 50px;
+  height: 60px; /* Base height for 2 lines */
   display: flex;
   flex-direction: column;
   box-shadow: 0 -4px 20px rgba(0,0,0,0.5);
   box-sizing: border-box;
-  padding-bottom: calc(10px + var(--safe-bottom) + env(safe-area-inset-bottom)) !important;
+  padding-bottom: calc(var(--safe-bottom) + env(safe-area-inset-bottom)) !important;
 }
 
 @media (max-width: 600px) {
   #transcript-container {
-    height: calc(50px + var(--safe-bottom) + env(safe-area-inset-bottom));
+    height: calc(60px + var(--safe-bottom) + env(safe-area-inset-bottom));
   }
 }
 
@@ -330,14 +330,18 @@ a {
   justify-content: space-between;
   align-items: center;
   border-bottom: 1px solid rgba(0,0,0,0.1);
+  min-height: 50px;
 }
 
 #latest-clue {
   overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   flex-grow: 1;
   font-size: 14px;
+  line-height: 1.2;
   color: #2c3e50;
   font-weight: bold;
 }
@@ -346,6 +350,9 @@ a {
   margin-left: 15px;
   font-size: 12px;
   opacity: 0.6;
+  width: 65px; /* Fixed width to prevent layout shift */
+  text-align: right;
+  flex-shrink: 0;
 }
 
 #transcript-list {

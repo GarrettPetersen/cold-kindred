@@ -1444,7 +1444,7 @@ class Animal {
       this.frame = Math.floor(this.frameTimer);
     }
   }
-  draw() {
+  drawSprite() {
     const sx = (this.x - camera.x) * camera.zoom, sy = (this.y - camera.y) * camera.zoom, sz = FRAME_SIZE * 2 * camera.zoom;
     // Account for labels and speech bubbles in culling
     if (sx < -sz * 4 || sx > canvas.width + sz * 4 || sy < -sz * 4 || sy > canvas.height + sz * 4) return;
@@ -1500,6 +1500,12 @@ class Animal {
     if (tintedSpr) {
       ctx.drawImage(tintedSpr, this.frame * FRAME_SIZE, d * FRAME_SIZE, FRAME_SIZE, FRAME_SIZE, Math.floor(sx), Math.floor(sy), sz, sz);
     }
+    ctx.shadowBlur = 0;
+  }
+
+  drawLabels() {
+    const sx = (this.x - camera.x) * camera.zoom, sy = (this.y - camera.y) * camera.zoom, sz = FRAME_SIZE * 2 * camera.zoom;
+    if (sx < -sz * 4 || sx > canvas.width + sz * 4 || sy < -sz * 4 || sy > canvas.height + sz * 4) return;
 
     if (selectedHare === this) {
       const textAlpha = Math.sin(Date.now() / 200) * 0.3 + 0.7;
@@ -1516,7 +1522,10 @@ class Animal {
     const labelWidth = this.nameWidth * (fontSize / 13);
     const padX = 6 * camera.zoom, padY = 2 * camera.zoom;
     const bgW = labelWidth + padX * 2, bgH = fontSize + padY * 2;
-    const bgX = sx + sz / 2 - bgW / 2, bgY = sy + sz + 5 * camera.zoom;
+    
+    // Stagger height to prevent horizontal overlap in family trees
+    const staggerY = (this.rabbit.id % 2 === 0) ? 0 : (fontSize * 0.6);
+    const bgX = sx + sz / 2 - bgW / 2, bgY = sy + sz + 5 * camera.zoom + staggerY;
 
     // Background pill
     ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
@@ -1553,8 +1562,8 @@ class Animal {
       const words = dnaLabel.split(' ');
       let line = '';
       const lines = [];
-      // Let it get wider as we zoom out to prevent extremely tall boxes
-      const maxW = (isZoomedOut ? 120 : 80) * camera.zoom;
+      // Ensure a minimum width on screen (60px) so boxes don't get too narrow when zoomed out
+      const maxW = Math.max((isZoomedOut ? 120 : 80) * camera.zoom, 60);
       
       for (let n = 0; n < words.length; n++) {
         const testLine = line + words[n] + ' ';
@@ -1571,6 +1580,8 @@ class Animal {
       const dW = Math.max(...lines.map(l => ctx.measureText(l).width)) + padX * 2;
       const lineH = relFontSize + padY;
       const dH = lines.length * lineH + padY;
+      
+      // Removed stagger for DNA label (too tall)
       const dX = sx + sz / 2 - dW / 2;
       const dY = Math.max(5, sy - dH - 5 * camera.zoom);
 
@@ -1617,7 +1628,6 @@ class Animal {
       ctx.font = `bold ${Math.floor(14 * bubbleScale)}px Arial`; 
       ctx.fillText('?', bx + bw / 2, by - bh / 2); 
     }
-    ctx.shadowBlur = 0;
   }
 }
 
@@ -1656,6 +1666,23 @@ function updateTreeDiagram() {
       (childrenMap.get(id) || []).forEach(cid => walk(cid, l + 1)); 
     };
     roots.forEach(r => walk(r, 0));
+
+    // Pull nodes down as far as possible to align spouses and peers
+    let changed = true;
+    while (changed) {
+      changed = false;
+      t.forEach(id => {
+        const cs = childrenMap.get(id) || [];
+        if (cs.length > 0) {
+          const minChildLvl = Math.min(...cs.map(cid => lvls.get(cid)));
+          const targetLvl = minChildLvl - 1;
+          if (lvls.get(id) < targetLvl) {
+            lvls.set(id, targetLvl);
+            changed = true;
+          }
+        }
+      });
+    }
     
     const grps = []; 
     lvls.forEach((l, id) => { if (!grps[l]) grps[l] = []; grps[l].push(id); });
@@ -2756,9 +2783,9 @@ function toggleTranscript() {
     list.style.display = 'block';
     toggle.textContent = '▼ CLOSE';
   } else {
-    // Height should match the CSS: 50px + safe area padding
+    // Height should match the CSS: 60px + safe area padding
     const safeBottom = window.innerWidth <= 600 ? 40 : 0;
-    container.style.height = `calc(50px + ${safeBottom}px + env(safe-area-inset-bottom))`;
+    container.style.height = `calc(60px + ${safeBottom}px + env(safe-area-inset-bottom))`;
     list.style.display = 'none';
     toggle.textContent = '▲ OPEN';
   }
@@ -3825,7 +3852,14 @@ function loop() {
   });
   ctx.restore();
 
-  hares.sort((a, b) => a.y - b.y).forEach(h => { h.update(); h.draw(); });
+  hares.forEach(h => h.update());
+  
+  // Pass 1: Draw sprites sorted by Y
+  hares.slice().sort((a, b) => a.y - b.y).forEach(h => h.drawSprite());
+  
+  // Pass 2: Draw labels sorted by X ascending (so rightmost labels sit on top)
+  // This ensures that the start of every name remains visible even if overlapped.
+  hares.slice().sort((a, b) => a.x - b.x).forEach(h => h.drawLabels());
 
   // Update stopwatch display in real-time
   updateUI();

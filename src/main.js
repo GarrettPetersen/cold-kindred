@@ -213,6 +213,7 @@ const CLUE_INTERVAL = 120;
 const hares = [];
 let xButtons = []; // Shared list of relationship-removal buttons
 let hoveredBubbleId = null;
+let hoveredXButton = null;
 const envDetails = [];
 let clueQueue = [];
 let globallyIssuedClueIds = new Set();
@@ -1296,10 +1297,12 @@ function getTintedSprite(animal, state) {
   return cache[state];
 }
 
-function drawPixelX(ctx, centerX, centerY, scale) {
+function drawPixelX(ctx, centerX, centerY, scale, isHovered = false) {
   // Scale up as zoom (scale) decreases to keep it clickable
   // At zoom 1, pixelSize = 2. At zoom 0.2, pixelSize = 4.
-  const pixelSize = Math.max(1, Math.round(2 / Math.pow(scale, 0.4)));
+  let pixelSize = Math.max(1, Math.round(2 / Math.pow(scale, 0.4)));
+  if (isHovered) pixelSize = Math.round(pixelSize * 1.2); // Grow slightly on hover
+  
   const size = 7; // 7x7 grid
   const xGrid = [
     [0, 0, 0, 0, 0, 0, 0],
@@ -1323,8 +1326,19 @@ function drawPixelX(ctx, centerX, centerY, scale) {
   ctx.fillRect(cx - off + pixelSize, cy - off + pixelSize, totalSize, totalSize);
 
   // 2. Draw solid Red Background Box (single rect prevents internal gaps)
-  ctx.fillStyle = '#f44';
-  ctx.fillRect(cx - off, cy - off, totalSize, totalSize);
+  // Brighter on hover
+  ctx.fillStyle = isHovered ? '#ff6666' : '#f44';
+  
+  // Optional: white glow if hovered
+  if (isHovered) {
+    ctx.save();
+    ctx.shadowBlur = 10;
+    ctx.shadowColor = 'white';
+    ctx.fillRect(cx - off, cy - off, totalSize, totalSize);
+    ctx.restore();
+  } else {
+    ctx.fillRect(cx - off, cy - off, totalSize, totalSize);
+  }
 
   // 3. Draw White X pixels
   ctx.fillStyle = '#fff';
@@ -3214,6 +3228,7 @@ function init() {
   window.addEventListener('mousemove', e => { 
     const p = getPos(e);
     let foundBubble = null;
+    let foundX = null;
     
     // Check if hovering over a bubble
     for (const h of hares) {
@@ -3231,10 +3246,23 @@ function init() {
         }
       }
     }
+
+    // Check if hovering over an X button
+    if (!foundBubble) {
+      for (const btn of xButtons) {
+        const pSize = Math.max(1, Math.round(2 / Math.pow(camera.zoom, 0.4)));
+        const hitRadius = (7 * pSize) / 2 + 10;
+        if (Math.hypot(p.cx - btn.x, p.cy - btn.y) < hitRadius) {
+          foundX = btn;
+          break;
+        }
+      }
+    }
     
-    if (hoveredBubbleId !== foundBubble) {
+    if (hoveredBubbleId !== foundBubble || hoveredXButton !== foundX) {
       hoveredBubbleId = foundBubble;
-      canvas.style.cursor = hoveredBubbleId ? 'pointer' : 'default';
+      hoveredXButton = foundX;
+      canvas.style.cursor = (hoveredBubbleId || hoveredXButton) ? 'pointer' : 'default';
     }
 
     if (input.isDragging) { 
@@ -3794,53 +3822,15 @@ function loop() {
           const cx = (c.x - camera.x + FRAME_SIZE) * camera.zoom;
           const cy = (c.y - camera.y + FRAME_SIZE) * camera.zoom;
           
-          // Determine the "Unique" segment of this path
-          // If multiple parents, the vertical stems from parents to midY are unique.
-          // If multiple children, the vertical stems from midY to children are unique.
-          // The horizontal union bar is shared.
-          
           let bx, by;
-          if (ps.length > 1 && selectedHare === p) {
-            // Place on the unique parent-to-bar segment
-            bx = px;
-            by = (py + screenMidY) / 2;
-          } else if (cs.length > 1 && selectedHare === c) {
-            // Place on the unique bar-to-child segment
+          if (selectedHare === p) {
+            // Place on the child's vertical stem, 50% of the way to the child
             bx = cx;
-            by = (screenMidY + cy) / 2;
+            by = screenMidY + (cy - screenMidY) * 0.5;
           } else {
-            // If it's a 1-to-1 or the shared part, use the midpoint of the whole path
-            const L1 = Math.abs(screenMidY - py);
-            const L2 = Math.abs(cx - px);
-            const L3 = Math.abs(cy - screenMidY);
-            const mid = (L1 + L2 + L3) / 2;
-            
-            if (mid <= L1) {
-              bx = px;
-              by = py + (screenMidY > py ? mid : -mid);
-            } else if (mid <= L1 + L2) {
-              bx = px + (cx > px ? (mid - L1) : -(mid - L1));
-              by = screenMidY;
-            } else {
-              bx = cx;
-              by = screenMidY + (cy > screenMidY ? (mid - L1 - L2) : -(mid - L1 - L2));
-            }
-          }
-          
-          // Check for overlaps with existing buttons and nudge slightly if needed
-          let nudged = true;
-          let safety = 0;
-          while (nudged && safety < 10) {
-            nudged = false;
-            safety++;
-            for (const other of xButtons) {
-              if (Math.hypot(bx - other.x, by - other.y) < 20 * camera.zoom) {
-                bx += 10 * camera.zoom;
-                by += 10 * camera.zoom;
-                nudged = true;
-                break;
-              }
-            }
+            // Place on the parent's vertical stem, 50% of the way to the parent
+            bx = px;
+            by = screenMidY + (py - screenMidY) * 0.5;
           }
 
           xButtons.push({ x: bx, y: by, pId: p.rabbit.id, cId: c.rabbit.id });
@@ -3866,7 +3856,8 @@ function loop() {
   
   // 4. Draw recorded "X" buttons on TOP of animals/labels
   xButtons.forEach(btn => {
-    drawPixelX(ctx, btn.x, btn.y, camera.zoom);
+    const isHovered = hoveredXButton === btn;
+    drawPixelX(ctx, btn.x, btn.y, camera.zoom, isHovered);
   });
   
   // Render notifications/rich text

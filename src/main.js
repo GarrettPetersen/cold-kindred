@@ -211,6 +211,8 @@ let lastDateCheckTime = 0;
 const DATE_CHECK_INTERVAL = 3600; // Check for date change every ~1 minute (60 * 60 frames)
 const CLUE_INTERVAL = 120;
 const hares = [];
+let xButtons = []; // Shared list of relationship-removal buttons
+let hoveredBubbleId = null;
 const envDetails = [];
 let clueQueue = [];
 let globallyIssuedClueIds = new Set();
@@ -1210,8 +1212,12 @@ function runSimulation() {
 
       if (bestPair) {
         killerId = killer.id;
-        bestPair[0].r.dnaRelation = getDNARelationshipLabel(bestPair[0].label);
-        bestPair[1].r.dnaRelation = getDNARelationshipLabel(bestPair[1].label);
+        bestPair.forEach(bp => {
+          bp.r.dnaRelation = getDNARelationshipLabel(bp.label);
+          bp.r.isTested = true;
+          kinshipMemo.clear();
+          bp.r.dnaMatchPct = parseFloat((kinship(killerId, bp.r.id) * 200).toFixed(3));
+        });
         found = true;
         break;
       }
@@ -1237,12 +1243,21 @@ function runSimulation() {
       .sort((a, b) => b.n - a.n);
     
     if (others.length >= 2) {
-      others[0].r.dnaRelation = getDNARelationshipLabel(others[0].label);
-      others[1].r.dnaRelation = getDNARelationshipLabel(others[1].label);
+      others.slice(0, 2).forEach(o => {
+        o.r.dnaRelation = getDNARelationshipLabel(o.label);
+        o.r.isTested = true;
+        kinshipMemo.clear();
+        o.r.dnaMatchPct = parseFloat((kinship(killerId, o.r.id) * 200).toFixed(3));
+      });
     } else {
       // Last resort fallback
       const lastResort = shuffle(rabbits.filter(r => r.id !== killerId && r.id !== killer.fatherId && r.id !== killer.motherId)).slice(0, 2);
-      lastResort.forEach(lr => lr.dnaRelation = getDNARelationshipLabel("distant relative"));
+      lastResort.forEach(lr => {
+        lr.dnaRelation = getDNARelationshipLabel("distant relative");
+        lr.isTested = true;
+        kinshipMemo.clear();
+        lr.dnaMatchPct = parseFloat((kinship(killerId, lr.id) * 200).toFixed(3));
+      });
     }
   }
   updateNecessaryConnections();
@@ -1279,6 +1294,47 @@ function getTintedSprite(animal, state) {
     cache[state] = canvas;
   }
   return cache[state];
+}
+
+function drawPixelX(ctx, centerX, centerY, scale) {
+  // Scale up as zoom (scale) decreases to keep it clickable
+  // At zoom 1, pixelSize = 2. At zoom 0.2, pixelSize = 4.
+  const pixelSize = Math.max(1, Math.round(2 / Math.pow(scale, 0.4)));
+  const size = 7; // 7x7 grid
+  const xGrid = [
+    [0, 0, 0, 0, 0, 0, 0],
+    [0, 1, 0, 0, 0, 1, 0],
+    [0, 0, 1, 0, 1, 0, 0],
+    [0, 0, 0, 1, 0, 0, 0],
+    [0, 0, 1, 0, 1, 0, 0],
+    [0, 1, 0, 0, 0, 1, 0],
+    [0, 0, 0, 0, 0, 0, 0]
+  ];
+  
+  const totalSize = size * pixelSize;
+  const off = Math.floor(size / 2) * pixelSize;
+  
+  // Use Math.round to snap to integer coordinates, preventing "lines" between pixels
+  const cx = Math.round(centerX);
+  const cy = Math.round(centerY);
+
+  // 1. Draw shadow (single rect for performance and clean edges)
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
+  ctx.fillRect(cx - off + pixelSize, cy - off + pixelSize, totalSize, totalSize);
+
+  // 2. Draw solid Red Background Box (single rect prevents internal gaps)
+  ctx.fillStyle = '#f44';
+  ctx.fillRect(cx - off, cy - off, totalSize, totalSize);
+
+  // 3. Draw White X pixels
+  ctx.fillStyle = '#fff';
+  for (let r = 0; r < size; r++) {
+    for (let c = 0; c < size; c++) {
+      if (xGrid[r][c]) {
+        ctx.fillRect(cx - off + c * pixelSize, cy - off + r * pixelSize, pixelSize, pixelSize);
+      }
+    }
+  }
 }
 
 // --- Animal Sprite ---
@@ -1475,13 +1531,31 @@ class Animal {
     ctx.fillText(label, sx + sz / 2, bgY + padY);
 
     if (this.rabbit.dnaRelation) { 
-      ctx.font = `bold ${fontSize}px Arial`; 
-      const dnaLabel = `🧬 ${this.rabbit.dnaRelation}`;
+      // Use abbreviations and smaller text when zoomed out far
+      const isZoomedOut = camera.zoom < 0.5;
+      const relFontSize = isZoomedOut ? Math.max(9, Math.floor(11 * camera.zoom * 1.5)) : fontSize;
+      ctx.font = `bold ${relFontSize}px Arial`; 
+      
+      let relationText = this.rabbit.dnaRelation;
+      if (isZoomedOut) {
+        relationText = relationText
+          .replace(/1st Cousin/g, "1C")
+          .replace(/2nd Cousin/g, "2C")
+          .replace(/Once Removed/g, "1R")
+          .replace(/Great-Grandparent/g, "G-GP")
+          .replace(/Grandparent/g, "GP")
+          .replace(/Grandchild/g, "GC")
+          .replace(/Distant Relative/g, "Distant");
+      }
+
+      const dnaLabel = `🧬 ${relationText}`;
       
       const words = dnaLabel.split(' ');
       let line = '';
       const lines = [];
-      const maxW = 80 * camera.zoom;
+      // Let it get wider as we zoom out to prevent extremely tall boxes
+      const maxW = (isZoomedOut ? 120 : 80) * camera.zoom;
+      
       for (let n = 0; n < words.length; n++) {
         const testLine = line + words[n] + ' ';
         const metrics = ctx.measureText(testLine);
@@ -1495,7 +1569,7 @@ class Animal {
       lines.push(line);
 
       const dW = Math.max(...lines.map(l => ctx.measureText(l).width)) + padX * 2;
-      const lineH = fontSize + padY;
+      const lineH = relFontSize + padY;
       const dH = lines.length * lineH + padY;
       const dX = sx + sz / 2 - dW / 2;
       const dY = Math.max(5, sy - dH - 5 * camera.zoom);
@@ -1514,18 +1588,29 @@ class Animal {
     const clue = activeClues.get(this.rabbit.id);
     if (clue) {
       // Partial scaling for bubbles: they stay larger when zoomed out
-      const bubbleScale = camera.zoom * 0.4 + 0.6;
+      const isHovered = hoveredBubbleId === this.rabbit.id;
+      const bubbleScale = (camera.zoom * 0.4 + 0.6) * (isHovered ? 1.2 : 1.0);
       
       const bw = 30 * bubbleScale, bh = 25 * bubbleScale, r = 5 * bubbleScale;
       const bx = sx + sz * 0.8, by = sy - 15 * camera.zoom;
       
       const s = Math.max(0, Math.min(100, this.rabbit.tint.saturate)), l = Math.max(0, Math.min(100, this.rabbit.tint.brightness));
-      ctx.fillStyle = `hsla(${this.rabbit.tint.hue}, ${s}%, ${l}%, 0.9)`;
+      const brightness = isHovered ? Math.min(100, l + 20) : l;
+      ctx.fillStyle = `hsla(${this.rabbit.tint.hue}, ${s}%, ${brightness}%, 0.9)`;
+      
+      // Add a slight white border if hovered
+      if (isHovered) {
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = 'white';
+      }
+
       ctx.beginPath();
       ctx.roundRect(bx, by - bh, bw, bh, r);
       ctx.fill();
       
       ctx.beginPath(); ctx.moveTo(bx + 5 * bubbleScale, by); ctx.lineTo(bx + 15 * bubbleScale, by); ctx.lineTo(bx + 10 * bubbleScale, by + 5 * bubbleScale); ctx.fill();
+      
+      ctx.shadowBlur = 0; // Reset shadow
       ctx.fillStyle = 'white'; 
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -3047,18 +3132,17 @@ function init() {
         }
       }
     }
-    const cToP = new Map(); playerConnections.forEach(c => { if (!cToP.has(c.childId)) cToP.set(c.childId, []); cToP.get(c.childId).push(c); });
-    for (const [cid, conns] of cToP) {
-      const child = hares.find(h => h.rabbit.id === cid); if (!child) continue;
-      const py = conns.reduce((s, c) => s + (hares.find(h => h.rabbit.id === c.parentId).y + FRAME_SIZE), 0) / conns.length, midY = (py + child.y + FRAME_SIZE) / 2;
-      for (const c of conns) {
-        const p = hares.find(h => h.rabbit.id === c.parentId); if (selectedHare !== p && selectedHare !== child) continue;
-        if (Math.hypot(wx - (p.x + FRAME_SIZE), wy - (p.y + FRAME_SIZE + midY) / 2) < 25 / camera.zoom) { 
-          playerConnections.splice(playerConnections.indexOf(c), 1); 
-          updateTreeDiagram(); 
+    for (const btn of xButtons) {
+      const pSize = Math.max(1, Math.round(2 / Math.pow(camera.zoom, 0.4)));
+      const hitRadius = (7 * pSize) / 2 + 10;
+      if (Math.hypot(cx - btn.x, cy - btn.y) < hitRadius) {
+        const conn = playerConnections.find(c => c.parentId === btn.pId && c.childId === btn.cId);
+        if (conn) {
+          playerConnections.splice(playerConnections.indexOf(conn), 1);
+          updateTreeDiagram();
           saveGame();
-          notifications.push({ text: "Removed", x: cx, y: cy - 20, timer: 60, timerMax: 60, color: '#f44' }); 
-          return true; 
+          notifications.push({ text: "Removed", x: cx, y: cy - 20, timer: 60, timerMax: 60, color: '#f44' });
+          return true;
         }
       }
     }
@@ -3101,6 +3185,31 @@ function init() {
   });
 
   window.addEventListener('mousemove', e => { 
+    const p = getPos(e);
+    let foundBubble = null;
+    
+    // Check if hovering over a bubble
+    for (const h of hares) {
+      const clue = activeClues.get(h.rabbit.id);
+      if (clue) {
+        const bubbleScale = camera.zoom * 0.4 + 0.6;
+        const bw = 30 * bubbleScale, bh = 25 * bubbleScale;
+        const sx = (h.x - camera.x) * camera.zoom, sy = (h.y - camera.y) * camera.zoom;
+        const ssz = (FRAME_SIZE * 2) * camera.zoom;
+        const sbx = sx + ssz * 0.8, sby = sy - 15 * camera.zoom;
+        
+        if (p.cx >= sbx - 5 && p.cx <= sbx + bw + 5 && p.cy >= sby - bh - 5 && p.cy <= sby + 5) {
+          foundBubble = h.rabbit.id;
+          break;
+        }
+      }
+    }
+    
+    if (hoveredBubbleId !== foundBubble) {
+      hoveredBubbleId = foundBubble;
+      canvas.style.cursor = hoveredBubbleId ? 'pointer' : 'default';
+    }
+
     if (input.isDragging) { 
       const dx = e.clientX - input.lastMouseX;
       const dy = e.clientY - input.lastMouseY;
@@ -3594,7 +3703,7 @@ function loop() {
     });
   });
 
-  const xButtons = []; // Store X button positions to draw them last
+  xButtons = []; // Store X button positions to draw them last
 
   unions.forEach((u, key) => {
     const ps = u.parents.map(id => idToAnimal.get(id)).filter(Boolean);
@@ -3633,11 +3742,6 @@ function loop() {
       ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px, screenMidY); ctx.stroke();
       parentXRange.min = Math.min(parentXRange.min, px);
       parentXRange.max = Math.max(parentXRange.max, px);
-
-      // Record "X" position if selected
-      if (selectedHare === p || cs.some(c => selectedHare === c)) {
-        xButtons.push({ x: px, y: (py + screenMidY) / 2 });
-      }
     });
 
     // 2. Draw vertical stems from midY to children
@@ -3653,6 +3757,70 @@ function loop() {
     const barMinX = Math.min(parentXRange.min, childXRange.min);
     const barMaxX = Math.max(parentXRange.max, childXRange.max);
     ctx.beginPath(); ctx.moveTo(barMinX, screenMidY); ctx.lineTo(barMaxX, screenMidY); ctx.stroke();
+    
+    // 4. Record "X" buttons for each relationship in this union
+    ps.forEach(p => {
+      cs.forEach(c => {
+        if (selectedHare === p || selectedHare === c) {
+          const px = (p.x - camera.x + FRAME_SIZE) * camera.zoom;
+          const py = (p.y - camera.y + FRAME_SIZE) * camera.zoom;
+          const cx = (c.x - camera.x + FRAME_SIZE) * camera.zoom;
+          const cy = (c.y - camera.y + FRAME_SIZE) * camera.zoom;
+          
+          // Determine the "Unique" segment of this path
+          // If multiple parents, the vertical stems from parents to midY are unique.
+          // If multiple children, the vertical stems from midY to children are unique.
+          // The horizontal union bar is shared.
+          
+          let bx, by;
+          if (ps.length > 1 && selectedHare === p) {
+            // Place on the unique parent-to-bar segment
+            bx = px;
+            by = (py + screenMidY) / 2;
+          } else if (cs.length > 1 && selectedHare === c) {
+            // Place on the unique bar-to-child segment
+            bx = cx;
+            by = (screenMidY + cy) / 2;
+          } else {
+            // If it's a 1-to-1 or the shared part, use the midpoint of the whole path
+            const L1 = Math.abs(screenMidY - py);
+            const L2 = Math.abs(cx - px);
+            const L3 = Math.abs(cy - screenMidY);
+            const mid = (L1 + L2 + L3) / 2;
+            
+            if (mid <= L1) {
+              bx = px;
+              by = py + (screenMidY > py ? mid : -mid);
+            } else if (mid <= L1 + L2) {
+              bx = px + (cx > px ? (mid - L1) : -(mid - L1));
+              by = screenMidY;
+            } else {
+              bx = cx;
+              by = screenMidY + (cy > screenMidY ? (mid - L1 - L2) : -(mid - L1 - L2));
+            }
+          }
+          
+          // Check for overlaps with existing buttons and nudge slightly if needed
+          let nudged = true;
+          let safety = 0;
+          while (nudged && safety < 10) {
+            nudged = false;
+            safety++;
+            for (const other of xButtons) {
+              if (Math.hypot(bx - other.x, by - other.y) < 20 * camera.zoom) {
+                bx += 10 * camera.zoom;
+                by += 10 * camera.zoom;
+                nudged = true;
+                break;
+              }
+            }
+          }
+
+          xButtons.push({ x: bx, y: by, pId: p.rabbit.id, cId: c.rabbit.id });
+        }
+      });
+    });
+
     ctx.restore();
   });
   ctx.restore();
@@ -3664,10 +3832,7 @@ function loop() {
   
   // 4. Draw recorded "X" buttons on TOP of animals/labels
   xButtons.forEach(btn => {
-    ctx.save();
-    ctx.fillStyle = '#f44'; ctx.beginPath(); ctx.arc(btn.x, btn.y, 10 * camera.zoom, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#fff'; ctx.font = `bold ${Math.floor(12 * camera.zoom)}px Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('X', btn.x, btn.y);
-    ctx.restore();
+    drawPixelX(ctx, btn.x, btn.y, camera.zoom);
   });
   
   // Render notifications/rich text

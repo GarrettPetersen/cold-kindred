@@ -269,9 +269,10 @@ let gameState = {
   hasClickedClue: false,
   hasCreatedConnection: false,
   hint1Shown: false,
-  hint2Shown: false,
-  isMidGameChange: false
-};
+    hint2Shown: false,
+    isMidGameChange: false,
+    statsUpdated: false
+  };
 
 let portraitAnim = {
   active: false,
@@ -481,6 +482,7 @@ function saveGame() {
     hint1Shown: gameState.hint1Shown,
     hint2Shown: gameState.hint2Shown,
     isMidGameChange: gameState.isMidGameChange,
+    statsUpdated: gameState.statsUpdated,
     globallyIssuedClueIds: Array.from(globallyIssuedClueIds),
     clueQueueIds: clueQueue.map(c => c.id),
     testedAnimals: rabbits.filter(r => r.isTested).map(r => ({ id: r.id, rel: r.dnaRelation, pct: r.dnaMatchPct })),
@@ -496,6 +498,13 @@ function saveGame() {
   
   if (gameState.isFinished && !gameState.statsUpdated) {
     const stats = getStats();
+    
+    // Avoid double-counting if today is already in history
+    if (stats.history[currentDateStr] && (stats.history[currentDateStr].status === 'success' || stats.history[currentDateStr].status === 'failure')) {
+      gameState.statsUpdated = true;
+      return;
+    }
+
     let solveTime = null;
     if (gameState.startTime && gameState.endTime) {
       solveTime = gameState.endTime - gameState.startTime;
@@ -556,6 +565,7 @@ function loadGame() {
   gameState.hint1Shown = data.hint1Shown || false;
   gameState.hint2Shown = data.hint2Shown || false;
   gameState.isMidGameChange = data.isMidGameChange || false;
+  gameState.statsUpdated = data.statsUpdated || (data.isFinished && data.date === currentDateStr) || false;
   globallyIssuedClueIds = new Set(data.globallyIssuedClueIds || []);
   
   if (data.testedAnimals) {
@@ -773,6 +783,7 @@ function getDNARelationshipLabel(preciseLabel) {
   if (!preciseLabel) return "no relation";
   const l = preciseLabel.toLowerCase();
   
+  if (l === "self") return "Match";
   if (l === "parent" || l === "child") return "Parent or Child";
   if (l === "sibling") return "Full Sibling";
   if (l === "grandparent" || l === "grandchild") return "Grandparent or Grandchild";
@@ -2699,8 +2710,8 @@ function showDNAModal(animal) {
       dCtx.textAlign = 'center';
       
       // Top Label (DNA connection)
-      const fuzzyRel = getDNARelationshipLabel(rel);
-      const dnaLabel = isKiller ? "🧬 KILLER" : `🧬 ${fuzzyRel}`;
+      const fuzzyRel = getDNARelationshipLabel(isKiller ? "self" : rel);
+      const dnaLabel = `🧬 ${fuzzyRel}`;
       dCtx.font = "bold 14px Arial";
       
       const words = dnaLabel.split(' ');
@@ -2763,6 +2774,7 @@ function showDNAModal(animal) {
     animal.rabbit.dnaMatchPct = matchPct;
     const clickableName = `[[${animal.rabbit.id}:${animal.rabbit.firstName}]]`;
     if (isKiller) {
+      animal.rabbit.dnaRelation = "Match";
       dnaTestsRemaining--;
       tCount.textContent = dnaTestsRemaining;
       const logMsg = `100% MATCH DETECTED! ${clickableName} is the killer!`;
@@ -3393,6 +3405,67 @@ function init() {
   });
   document.getElementById('close-stats-btn').addEventListener('click', () => {
     document.getElementById('stats-modal').style.display = 'none';
+    document.getElementById('stats-cheat-input').style.display = 'none';
+    document.getElementById('stats-cheat-input').value = '';
+  });
+
+  // Mobile Cheat Entry: 5-tap the top-left corner of the stats box to toggle a debug menu
+  let statsClickCount = 0;
+  let statsClickTimer = null;
+  const cheatInput = document.getElementById('stats-cheat-input');
+  
+  document.getElementById('stats-cheat-zone').addEventListener('click', () => {
+    statsClickCount++;
+    if (statsClickTimer) clearTimeout(statsClickTimer);
+    statsClickTimer = setTimeout(() => { statsClickCount = 0; }, 1000);
+
+    if (statsClickCount >= 5) {
+      statsClickCount = 0;
+      cheatInput.style.display = 'block';
+      cheatInput.focus();
+    }
+  });
+
+  cheatInput.addEventListener('keyup', (e) => {
+    if (e.key === 'Enter') {
+      const cmd = cheatInput.value;
+      if (cmd) {
+        const c = cmd.toLowerCase();
+        if (c === "killer") {
+          const k = rabbits.find(r => r.id === killerId);
+          notifications.push({ text: `KILLER: ${k.firstName}`, x: canvas.width / 2, y: canvas.height / 2, timer: 180, timerMax: 180, color: '#ff4444' });
+        } else if (c === "solve") {
+          playerConnections = [];
+          rabbits.forEach(r => {
+            if (r.fatherId) playerConnections.push({ parentId: r.fatherId, childId: r.id });
+            if (r.motherId) playerConnections.push({ parentId: r.motherId, childId: r.id });
+          });
+          updateTreeDiagram();
+          saveGame();
+          updateUI();
+          notifications.push({ text: "GENEALOGY SYNCED", x: canvas.width / 2, y: canvas.height / 2, timer: 120, timerMax: 120, color: '#44ff44' });
+        } else if (c === "species") {
+          const k = rabbits.find(r => r.id === killerId);
+          const currIdx = SPECIES.indexOf(k.species);
+          k.species = SPECIES[(currIdx + 1) % SPECIES.length];
+          notifications.push({ text: `KILLER: ${k.species}`, x: canvas.width / 2, y: canvas.height / 2, timer: 120, timerMax: 120, color: '#44ff44' });
+        } else if (c === "wins") {
+          const stats = getStats();
+          stats.lifetimeWins = (stats.lifetimeWins || 0) + 25;
+          saveStats(stats);
+          showStatsModal(); // Refresh the view
+          notifications.push({ text: `TOTAL WINS: ${stats.lifetimeWins} (+25)`, x: canvas.width / 2, y: canvas.height / 2, timer: 120, timerMax: 120, color: '#44ff44' });
+        } else if (c === "reset") {
+          localStorage.removeItem('mysteryFarm_current');
+          localStorage.removeItem('mysteryFarm_stats');
+          localStorage.removeItem('mysteryFarm_consent');
+          localStorage.removeItem('mysteryFarm_detective');
+          location.reload(true);
+        }
+      }
+      cheatInput.value = '';
+      cheatInput.style.display = 'none';
+    }
   });
   document.querySelectorAll('.char-card').forEach(card => {
     card.addEventListener('click', () => {

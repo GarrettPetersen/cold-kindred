@@ -560,7 +560,7 @@ function loadGame() {
       const rabbit = rabbits.find(r => r.id === ta.id);
       if (rabbit) {
         rabbit.isTested = true;
-        rabbit.dnaRelation = ta.rel;
+        rabbit.dnaRelation = getDNARelationshipLabel(ta.rel);
         rabbit.dnaMatchPct = ta.pct ?? null;
       }
     });
@@ -764,6 +764,27 @@ function getRelationshipLabel(common, id1, id2) {
   let l = `${ords[n] || n + "th"} cousin`;
   if (removed > 0) l += ` ${rems[removed] || removed + " times"} removed`;
   return l;
+}
+
+function getDNARelationshipLabel(preciseLabel) {
+  if (!preciseLabel) return "no relation";
+  const l = preciseLabel.toLowerCase();
+  
+  if (l === "parent" || l === "child") return "Parent or Child";
+  if (l === "sibling") return "Full Sibling";
+  if (l === "grandparent" || l === "grandchild") return "Grandparent or Grandchild";
+  if (l === "uncle" || l === "aunt" || l === "nephew" || l === "niece") return "Aunt, Uncle, Niece, or Nephew";
+  
+  // Grouping based on shared DNA percentage
+  if (l.includes("1st cousin") && !l.includes("removed")) return "1st Cousin or Great-Grandparent";
+  if (l.includes("gr-grandparent") || l.includes("gr-grandchild") || 
+      l.includes("gr-uncle") || l.includes("gr-aunt") || l.includes("gr-nephew") || l.includes("gr-niece")) {
+    return "1st Cousin or Great-Grandparent";
+  }
+  
+  if (l.includes("2nd cousin") || l.includes("1st cousin once removed")) return "2nd Cousin or 1st Cousin Once Removed";
+  
+  return "Distant Relative";
 }
 
 function getPath(startId, targetId) {
@@ -1189,8 +1210,8 @@ function runSimulation() {
 
       if (bestPair) {
         killerId = killer.id;
-        bestPair[0].r.dnaRelation = bestPair[0].label;
-        bestPair[1].r.dnaRelation = bestPair[1].label;
+        bestPair[0].r.dnaRelation = getDNARelationshipLabel(bestPair[0].label);
+        bestPair[1].r.dnaRelation = getDNARelationshipLabel(bestPair[1].label);
         found = true;
         break;
       }
@@ -1216,12 +1237,12 @@ function runSimulation() {
       .sort((a, b) => b.n - a.n);
     
     if (others.length >= 2) {
-      others[0].r.dnaRelation = others[0].label;
-      others[1].r.dnaRelation = others[1].label;
+      others[0].r.dnaRelation = getDNARelationshipLabel(others[0].label);
+      others[1].r.dnaRelation = getDNARelationshipLabel(others[1].label);
     } else {
       // Last resort fallback
       const lastResort = shuffle(rabbits.filter(r => r.id !== killerId && r.id !== killer.fatherId && r.id !== killer.motherId)).slice(0, 2);
-      lastResort.forEach(lr => lr.dnaRelation = "distant relative");
+      lastResort.forEach(lr => lr.dnaRelation = getDNARelationshipLabel("distant relative"));
     }
   }
   updateNecessaryConnections();
@@ -1456,10 +1477,28 @@ class Animal {
     if (this.rabbit.dnaRelation) { 
       ctx.font = `bold ${fontSize}px Arial`; 
       const dnaLabel = `🧬 ${this.rabbit.dnaRelation}`;
-      // DNA labels are rare, measuring them is okay or we could cache them too
-      const dnaMetrics = ctx.measureText(dnaLabel);
-      const dW = dnaMetrics.width + padX * 2, dH = fontSize + padY * 2;
-      const dX = sx + sz / 2 - dW / 2, dY = Math.max(5, sy - 15 * camera.zoom);
+      
+      const words = dnaLabel.split(' ');
+      let line = '';
+      const lines = [];
+      const maxW = 80 * camera.zoom;
+      for (let n = 0; n < words.length; n++) {
+        const testLine = line + words[n] + ' ';
+        const metrics = ctx.measureText(testLine);
+        if (metrics.width > maxW && n > 0) {
+          lines.push(line);
+          line = words[n] + ' ';
+        } else {
+          line = testLine;
+        }
+      }
+      lines.push(line);
+
+      const dW = Math.max(...lines.map(l => ctx.measureText(l).width)) + padX * 2;
+      const lineH = fontSize + padY;
+      const dH = lines.length * lineH + padY;
+      const dX = sx + sz / 2 - dW / 2;
+      const dY = Math.max(5, sy - dH - 5 * camera.zoom);
 
       ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
       ctx.beginPath();
@@ -1468,7 +1507,9 @@ class Animal {
 
       ctx.fillStyle = '#44ff44';
       ctx.textBaseline = 'top';
-      ctx.fillText(dnaLabel, sx + sz / 2, dY + padY); 
+      lines.forEach((l, i) => {
+        ctx.fillText(l.trim(), sx + sz / 2, dY + padY + i * lineH);
+      });
     }
     const clue = activeClues.get(this.rabbit.id);
     if (clue) {
@@ -2476,7 +2517,8 @@ function showDNAModal(animal) {
     if (isKiller) {
       dnaResultText = `100% MATCH DETECTED!\n${animal.rabbit.firstName} is the killer!`;
     } else {
-      const relText = rel ? `the killer's ${rel}` : "no relation to the killer";
+      const fuzzyRel = getDNARelationshipLabel(rel);
+      const relText = rel ? `the killer's ${fuzzyRel}` : "no relation to the killer";
       dnaResultText = `${matchPct}% MATCH: ${animal.rabbit.firstName} the ${animal.rabbit.species.replace('_', ' ')} is ${relText}.`;
     }
 
@@ -2531,16 +2573,41 @@ function showDNAModal(animal) {
       dCtx.textAlign = 'center';
       
       // Top Label (DNA connection)
-      const dnaLabel = isKiller ? "🧬 KILLER" : `🧬 ${rel || "no relation"}`;
+      const fuzzyRel = getDNARelationshipLabel(rel);
+      const dnaLabel = isKiller ? "🧬 KILLER" : `🧬 ${fuzzyRel}`;
       dCtx.font = "bold 14px Arial";
-      const dMetrics = dCtx.measureText(dnaLabel);
-      const dW = dMetrics.width + 12, dH = 20;
+      
+      const words = dnaLabel.split(' ');
+      let line = '';
+      const lines = [];
+      const maxWidth = 130;
+      for (let n = 0; n < words.length; n++) {
+        const testLine = line + words[n] + ' ';
+        const metrics = dCtx.measureText(testLine);
+        if (metrics.width > maxWidth && n > 0) {
+          lines.push(line);
+          line = words[n] + ' ';
+        } else {
+          line = testLine;
+        }
+      }
+      lines.push(line);
+
+      const lineH = 18;
+      const dH = lines.length * lineH + 6;
+      const dW = Math.max(...lines.map(l => dCtx.measureText(l).width)) + 12;
+      const dY = centerY - 65;
+
       dCtx.fillStyle = 'rgba(0, 0, 0, 0.6)';
       dCtx.beginPath();
-      dCtx.roundRect(centerX - dW / 2, centerY - 65, dW, dH, 4);
+      dCtx.roundRect(centerX - dW / 2, dY - dH, dW, dH, 4);
       dCtx.fill();
+      
       dCtx.fillStyle = '#44ff44';
-      dCtx.fillText(dnaLabel, centerX, centerY - 50);
+      dCtx.textBaseline = 'middle';
+      lines.forEach((l, i) => {
+        dCtx.fillText(l.trim(), centerX, dY - dH + (i + 0.5) * lineH + 3);
+      });
 
       // Bottom Label (Name)
       const nameLabel = `${animal.rabbit.firstName} (${CURRENT_YEAR - animal.rabbit.birthYear})`;
@@ -2577,10 +2644,11 @@ function showDNAModal(animal) {
       updateTranscriptUI(logMsg);
       showGameOver(true);
     } else {
-      animal.rabbit.dnaRelation = rel || "no relation";
+      const fuzzyRel = getDNARelationshipLabel(rel);
+      animal.rabbit.dnaRelation = fuzzyRel;
       dnaTestsRemaining--;
       tCount.textContent = dnaTestsRemaining;
-      const relText = rel ? `the killer's ${rel}` : "no relation to the killer";
+      const relText = rel ? `the killer's ${fuzzyRel}` : "no relation to the killer";
       const logMsg = `${matchPct}% MATCH: ${clickableName} is ${relText}.`;
       caseLog.push(`Case File: ${logMsg}`);
       updateTranscriptUI(logMsg);
@@ -2603,7 +2671,9 @@ function toggleTranscript() {
     list.style.display = 'block';
     toggle.textContent = '▼ CLOSE';
   } else {
-    container.style.height = '40px';
+    // Height should match the CSS: 50px + safe area padding
+    const safeBottom = window.innerWidth <= 600 ? 40 : 0;
+    container.style.height = `calc(50px + ${safeBottom}px + env(safe-area-inset-bottom))`;
     list.style.display = 'none';
     toggle.textContent = '▲ OPEN';
   }
@@ -2813,7 +2883,7 @@ let isDnaSuccess = false;
         const words = label.split(' ');
         let line = '';
         const lines = [];
-        const maxWidth = 100; // Max width for label before wrapping
+        const maxWidth = 125; // Slightly wider for fuzzy labels
         
         for (let n = 0; n < words.length; n++) {
           const testLine = line + words[n] + ' ';

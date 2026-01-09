@@ -1,3 +1,13 @@
+:root {
+  --safe-bottom: 0px;
+}
+
+@media (max-width: 600px) {
+  :root {
+    --safe-bottom: 40px;
+  }
+}
+
 #character-selection {
   display: none;
   justify-content: center;
@@ -131,6 +141,10 @@ a {
 }
 
 /* Mobile Safe Area Adjustments */
+#intro-footer, #game-over-footer {
+  padding-bottom: calc(20px + var(--safe-bottom) + env(safe-area-inset-bottom)) !important;
+}
+
 #help-btn {
   position: absolute;
   top: calc(15px + env(safe-area-inset-top)) !important;
@@ -295,11 +309,18 @@ a {
   font-family: 'Courier New', Courier, monospace;
   z-index: 100;
   transition: height 0.3s ease;
-  height: 40px;
+  height: 50px;
   display: flex;
   flex-direction: column;
   box-shadow: 0 -4px 20px rgba(0,0,0,0.5);
-  padding-bottom: env(safe-area-inset-bottom) !important;
+  box-sizing: border-box;
+  padding-bottom: calc(10px + var(--safe-bottom) + env(safe-area-inset-bottom)) !important;
+}
+
+@media (max-width: 600px) {
+  #transcript-container {
+    height: calc(50px + var(--safe-bottom) + env(safe-area-inset-bottom));
+  }
 }
 
 #transcript-header {

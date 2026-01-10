@@ -2098,6 +2098,7 @@ let gameOverScrollHintTimeout = null;
 
 function showGameOver(isWin) {
   const modal = document.getElementById('game-over');
+  if (!modal) return;
   const scrollContainer = document.getElementById('game-over-scroll-container');
   const scrollHint = document.getElementById('game-over-scroll-hint');
   const title = document.getElementById('game-over-title');
@@ -2105,14 +2106,15 @@ function showGameOver(isWin) {
   const nextBtn = document.getElementById('game-over-next');
   const viewFarmBtn = document.getElementById('game-over-view-farm');
   const gCanvas = document.getElementById('gameOverCanvas');
+  if (!gCanvas) return;
   const gCtx = gCanvas.getContext('2d');
   
   // Reset scroll state for this step
-  scrollContainer.dataset.hasScrolled = 'false';
+  if (scrollContainer) scrollContainer.dataset.hasScrolled = 'false';
 
   // Function to check if scrolling is needed and show/hide hint
   function updateScrollHint() {
-    if (!scrollContainer) return;
+    if (!scrollContainer || !scrollHint) return;
     const isScrollable = scrollContainer.scrollHeight > scrollContainer.clientHeight;
     const isAtBottom = scrollContainer.scrollHeight - scrollContainer.scrollTop <= scrollContainer.clientHeight + 20;
     
@@ -2133,18 +2135,22 @@ function showGameOver(isWin) {
     }
   }
 
-  scrollHint.onclick = () => {
-    scrollContainer.scrollTo({ top: scrollContainer.scrollHeight, behavior: 'smooth' });
-    scrollContainer.dataset.hasScrolled = 'true';
-    scrollHint.style.display = 'none';
-  };
+  if (scrollHint) {
+    scrollHint.onclick = () => {
+      if (scrollContainer) {
+        scrollContainer.scrollTo({ top: scrollContainer.scrollHeight, behavior: 'smooth' });
+        scrollContainer.dataset.hasScrolled = 'true';
+      }
+      scrollHint.style.display = 'none';
+    };
+  }
 
   // Attach scroll listener once
   if (scrollContainer && !scrollContainer.dataset.listenerAttached) {
     scrollContainer.addEventListener('scroll', () => {
       scrollContainer.dataset.hasScrolled = 'true';
       if (gameOverScrollHintTimeout) clearTimeout(gameOverScrollHintTimeout);
-      scrollHint.style.display = 'none';
+      if (scrollHint) scrollHint.style.display = 'none';
     });
     scrollContainer.dataset.listenerAttached = 'true';
   }
@@ -2598,7 +2604,9 @@ function drawAnimalPreview(canvasId, nameId, animal) {
 
 function showDNAModal(animal) {
   const modal = document.getElementById('dna-modal');
+  if (!modal) return;
   const dCanvas = document.getElementById('dnaCanvas');
+  if (!dCanvas) return;
   const dCtx = dCanvas.getContext('2d');
   const title = document.getElementById('dna-modal-title');
   const resultBox = document.getElementById('dna-result-box');
@@ -2611,6 +2619,8 @@ function showDNAModal(animal) {
   const confirmText = document.getElementById('dna-confirm-text');
   const confirmBtn = document.getElementById('dna-confirm-btn');
   const cancelBtn = document.getElementById('dna-cancel-btn');
+
+  if (!confirmStep || !animStep) return;
 
   dnaTargetAnimal = animal;
   dnaAnimTimer = 0;
@@ -2876,61 +2886,67 @@ let dnaTargetAnimal = null;
 let dnaResultText = "";
 let isDnaSuccess = false;
   function showIntro(isMidGameChangeParam = false) {
-  gameState.isMidGameChange = isMidGameChangeParam;
-  const modal = document.getElementById('intro-modal');
-  const scrollContainer = document.getElementById('intro-scroll-container');
-  const scrollHint = document.getElementById('intro-scroll-hint');
-  const title = document.getElementById('intro-title');
-  const textContainer = document.getElementById('intro-text');
-  const btn = document.getElementById('intro-next');
-  const iCanvas = document.getElementById('introCanvas');
-  const iCtx = iCanvas.getContext('2d');
-  const charSelection = document.getElementById('character-selection');
-  
-  // Reset scroll state for this step
-  scrollContainer.dataset.hasScrolled = 'false';
-
-  modal.style.display = 'flex';
-  updateScrollHint(); // Initial check
-
-  // Function to check if scrolling is needed and show/hide hint
-  function updateScrollHint() {
-    if (modal.style.display === 'none') return;
-    const isScrollable = scrollContainer.scrollHeight > scrollContainer.clientHeight;
-    const isAtBottom = scrollContainer.scrollHeight - scrollContainer.scrollTop <= scrollContainer.clientHeight + 20;
+    gameState.isMidGameChange = isMidGameChangeParam;
+    const modal = document.getElementById('intro-modal');
+    if (!modal) return;
+    const scrollContainer = document.getElementById('intro-scroll-container');
+    const scrollHint = document.getElementById('intro-scroll-hint');
+    const title = document.getElementById('intro-title');
+    const textContainer = document.getElementById('intro-text');
+    const btn = document.getElementById('intro-next');
+    const iCanvas = document.getElementById('introCanvas');
+    if (!iCanvas) return;
+    const iCtx = iCanvas.getContext('2d');
+    const charSelection = document.getElementById('character-selection');
     
-    if (!isScrollable || isAtBottom || scrollContainer.dataset.hasScrolled === 'true') {
-      if (introScrollHintTimeout) {
-        clearTimeout(introScrollHintTimeout);
-        introScrollHintTimeout = null;
-      }
-      scrollHint.style.display = 'none';
-    } else {
-      // Only start timer if not already running
-      if (!introScrollHintTimeout) {
-        introScrollHintTimeout = setTimeout(() => {
-          if (scrollContainer.dataset.hasScrolled === 'false') scrollHint.style.display = 'block';
+    // Reset scroll state for this step
+    if (scrollContainer) scrollContainer.dataset.hasScrolled = 'false';
+
+    modal.style.display = 'flex';
+    updateScrollHint(); // Initial check
+
+    // Function to check if scrolling is needed and show/hide hint
+    function updateScrollHint() {
+      if (!modal || !scrollContainer || !scrollHint || modal.style.display === 'none') return;
+      const isScrollable = scrollContainer.scrollHeight > scrollContainer.clientHeight;
+      const isAtBottom = scrollContainer.scrollHeight - scrollContainer.scrollTop <= scrollContainer.clientHeight + 20;
+      
+      if (!isScrollable || isAtBottom || scrollContainer.dataset.hasScrolled === 'true') {
+        if (introScrollHintTimeout) {
+          clearTimeout(introScrollHintTimeout);
           introScrollHintTimeout = null;
-        }, 2000);
+        }
+        scrollHint.style.display = 'none';
+      } else {
+        // Only start timer if not already running
+        if (!introScrollHintTimeout) {
+          introScrollHintTimeout = setTimeout(() => {
+            if (scrollContainer.dataset.hasScrolled === 'false') scrollHint.style.display = 'block';
+            introScrollHintTimeout = null;
+          }, 2000);
+        }
       }
     }
-  }
 
-  scrollHint.onclick = () => {
-    scrollContainer.scrollTo({ top: scrollContainer.scrollHeight, behavior: 'smooth' });
-    scrollContainer.dataset.hasScrolled = 'true';
-    scrollHint.style.display = 'none';
-  };
+    if (scrollHint) {
+      scrollHint.onclick = () => {
+        if (scrollContainer) {
+          scrollContainer.scrollTo({ top: scrollContainer.scrollHeight, behavior: 'smooth' });
+          scrollContainer.dataset.hasScrolled = 'true';
+        }
+        scrollHint.style.display = 'none';
+      };
+    }
 
-  // Attach scroll listener once
-  if (!scrollContainer.dataset.listenerAttached) {
-    scrollContainer.addEventListener('scroll', () => {
-      scrollContainer.dataset.hasScrolled = 'true';
-      if (introScrollHintTimeout) clearTimeout(introScrollHintTimeout);
-      scrollHint.style.display = 'none';
-    });
-    scrollContainer.dataset.listenerAttached = 'true';
-  }
+    // Attach scroll listener once
+    if (scrollContainer && !scrollContainer.dataset.listenerAttached) {
+      scrollContainer.addEventListener('scroll', () => {
+        scrollContainer.dataset.hasScrolled = 'true';
+        if (introScrollHintTimeout) clearTimeout(introScrollHintTimeout);
+        if (scrollHint) scrollHint.style.display = 'none';
+      });
+      scrollContainer.dataset.listenerAttached = 'true';
+    }
   
   if (introHandle) cancelAnimationFrame(introHandle);
   
@@ -3375,50 +3391,60 @@ function init() {
     input.isDragging = false; 
     input.lastTouchDist = 0; 
   });
-  dnaBtn.addEventListener('pointerdown', e => e.stopPropagation());
-  dnaBtn.addEventListener('click', e => {
-    e.preventDefault(); if (gameState.isFinished || !selectedHare || dnaTestsRemaining <= 0 || selectedHare.rabbit.isTested) return;
-    showDNAModal(selectedHare);
-  });
-  accBtn.addEventListener('pointerdown', e => e.stopPropagation());
-  accBtn.addEventListener('click', e => {
-    e.preventDefault(); 
-    if (gameState.isFinished || !selectedHare || dnaTestsRemaining > 0) return;
-    
-    const accModal = document.getElementById('accuse-modal');
-    const accText = document.getElementById('accuse-confirm-text');
-    const accConfirm = document.getElementById('accuse-confirm-btn');
-    const accCancel = document.getElementById('accuse-cancel-btn');
-    
-    drawAnimalPreview('accuse-confirm-canvas', 'accuse-confirm-name', selectedHare);
-    accText.textContent = `Are you absolutely certain ${selectedHare.rabbit.firstName} is the killer? A mistake here will end the investigation.`;
-    accModal.style.display = 'flex';
-    
-    accCancel.onclick = () => {
-      accModal.style.display = 'none';
-    };
-    
-    accConfirm.onclick = () => {
-      accModal.style.display = 'none';
-      showGameOver(selectedHare.rabbit.id === killerId);
-    };
-  });
+  if (dnaBtn) {
+    dnaBtn.addEventListener('pointerdown', e => e.stopPropagation());
+    dnaBtn.addEventListener('click', e => {
+      e.preventDefault(); if (gameState.isFinished || !selectedHare || dnaTestsRemaining <= 0 || selectedHare.rabbit.isTested) return;
+      showDNAModal(selectedHare);
+    });
+  }
+  
+  if (accBtn) {
+    accBtn.addEventListener('pointerdown', e => e.stopPropagation());
+    accBtn.addEventListener('click', e => {
+      e.preventDefault(); 
+      if (gameState.isFinished || !selectedHare || dnaTestsRemaining > 0) return;
+      
+      const accModal = document.getElementById('accuse-modal');
+      const accText = document.getElementById('accuse-confirm-text');
+      const accConfirm = document.getElementById('accuse-confirm-btn');
+      const accCancel = document.getElementById('accuse-cancel-btn');
+      
+      if (!accModal || !accText || !accConfirm || !accCancel) return;
+
+      drawAnimalPreview('accuse-confirm-canvas', 'accuse-confirm-name', selectedHare);
+      accText.textContent = `Are you absolutely certain ${selectedHare.rabbit.firstName} is the killer? A mistake here will end the investigation.`;
+      accModal.style.display = 'flex';
+      
+      accCancel.onclick = () => {
+        accModal.style.display = 'none';
+      };
+      
+      accConfirm.onclick = () => {
+        accModal.style.display = 'none';
+        showGameOver(selectedHare.rabbit.id === killerId);
+      };
+    });
+  }
 
   // Portrait click to change character or replay celebration
-  document.getElementById('portrait-box').addEventListener('click', () => {
-    if (gameState.isFinished) {
-      if (gameState.wasSuccess) {
-        // Replay celebration animation
-        portraitAnim.active = true;
-        portraitAnim.timer = 0;
+  const portraitBox = document.getElementById('portrait-box');
+  if (portraitBox) {
+    portraitBox.addEventListener('click', () => {
+      if (gameState.isFinished) {
+        if (gameState.wasSuccess) {
+          // Replay celebration animation
+          portraitAnim.active = true;
+          portraitAnim.timer = 0;
+        }
+        return;
       }
-      return;
-    }
-    gameState.detective = null;
-    introStep = 0;
-    showIntro(true); // Pass true to correctly signal a mid-game character change
-    saveGame();
-  });
+      gameState.detective = null;
+      introStep = 0;
+      showIntro(true); // Pass true to correctly signal a mid-game character change
+      saveGame();
+    });
+  }
 
   // Stats Modal
   document.querySelectorAll('.open-stats-btn').forEach(btn => {
@@ -3428,78 +3454,98 @@ function init() {
     });
   });
 
-  document.getElementById('play-again-ui').addEventListener('click', () => {
-    document.getElementById('limit-modal').style.display = 'flex';
-  });
+  const playAgainUI = document.getElementById('play-again-ui');
+  if (playAgainUI) {
+    playAgainUI.addEventListener('click', () => {
+      const limitModal = document.getElementById('limit-modal');
+      if (limitModal) limitModal.style.display = 'flex';
+    });
+  }
 
-  document.getElementById('close-limit-btn').addEventListener('click', () => {
-    document.getElementById('limit-modal').style.display = 'none';
-  });
+  const closeLimitBtn = document.getElementById('close-limit-btn');
+  if (closeLimitBtn) {
+    closeLimitBtn.addEventListener('click', () => {
+      const limitModal = document.getElementById('limit-modal');
+      if (limitModal) limitModal.style.display = 'none';
+    });
+  }
 
-  document.getElementById('close-stats-btn').addEventListener('click', () => {
-    document.getElementById('stats-modal').style.display = 'none';
-    document.getElementById('stats-cheat-input').style.display = 'none';
-    document.getElementById('stats-cheat-input').value = '';
-  });
+  const closeStatsBtn = document.getElementById('close-stats-btn');
+  if (closeStatsBtn) {
+    closeStatsBtn.addEventListener('click', () => {
+      const statsModal = document.getElementById('stats-modal');
+      if (statsModal) {
+        statsModal.style.display = 'none';
+        const cheatInput = document.getElementById('stats-cheat-input');
+        if (cheatInput) {
+          cheatInput.style.display = 'none';
+          cheatInput.value = '';
+        }
+      }
+    });
+  }
 
   // Mobile Cheat Entry: 5-tap the top-left corner of the stats box to toggle a debug menu
   let statsClickCount = 0;
   let statsClickTimer = null;
   const cheatInput = document.getElementById('stats-cheat-input');
+  const cheatZone = document.getElementById('stats-cheat-zone');
   
-  document.getElementById('stats-cheat-zone').addEventListener('click', () => {
-    statsClickCount++;
-    if (statsClickTimer) clearTimeout(statsClickTimer);
-    statsClickTimer = setTimeout(() => { statsClickCount = 0; }, 1000);
+  if (cheatZone && cheatInput) {
+    cheatZone.addEventListener('click', () => {
+      statsClickCount++;
+      if (statsClickTimer) clearTimeout(statsClickTimer);
+      statsClickTimer = setTimeout(() => { statsClickCount = 0; }, 1000);
 
-    if (statsClickCount >= 5) {
-      statsClickCount = 0;
-      cheatInput.style.display = 'block';
-      cheatInput.focus();
-    }
-  });
-
-  cheatInput.addEventListener('keyup', (e) => {
-    if (e.key === 'Enter') {
-      const cmd = cheatInput.value;
-      if (cmd) {
-        const c = cmd.toLowerCase();
-        if (c === "killer") {
-          const k = rabbits.find(r => r.id === killerId);
-          notifications.push({ text: `KILLER: ${k.firstName}`, x: canvas.width / 2, y: canvas.height / 2, timer: 180, timerMax: 180, color: '#ff4444' });
-        } else if (c === "solve") {
-          playerConnections = [];
-          rabbits.forEach(r => {
-            if (r.fatherId) playerConnections.push({ parentId: r.fatherId, childId: r.id });
-            if (r.motherId) playerConnections.push({ parentId: r.motherId, childId: r.id });
-          });
-          updateTreeDiagram();
-          saveGame();
-          updateUI();
-          notifications.push({ text: "GENEALOGY SYNCED", x: canvas.width / 2, y: canvas.height / 2, timer: 120, timerMax: 120, color: '#44ff44' });
-        } else if (c === "species") {
-          const k = rabbits.find(r => r.id === killerId);
-          const currIdx = SPECIES.indexOf(k.species);
-          k.species = SPECIES[(currIdx + 1) % SPECIES.length];
-          notifications.push({ text: `KILLER: ${k.species}`, x: canvas.width / 2, y: canvas.height / 2, timer: 120, timerMax: 120, color: '#44ff44' });
-        } else if (c === "wins") {
-          const stats = getStats();
-          stats.lifetimeWins = (stats.lifetimeWins || 0) + 25;
-          saveStats(stats);
-          showStatsModal(); // Refresh the view
-          notifications.push({ text: `TOTAL WINS: ${stats.lifetimeWins} (+25)`, x: canvas.width / 2, y: canvas.height / 2, timer: 120, timerMax: 120, color: '#44ff44' });
-        } else if (c === "reset") {
-          localStorage.removeItem('mysteryFarm_current');
-          localStorage.removeItem('mysteryFarm_stats');
-          localStorage.removeItem('mysteryFarm_consent');
-          localStorage.removeItem('mysteryFarm_detective');
-          location.reload(true);
-        }
+      if (statsClickCount >= 5) {
+        statsClickCount = 0;
+        cheatInput.style.display = 'block';
+        cheatInput.focus();
       }
-      cheatInput.value = '';
-      cheatInput.style.display = 'none';
-    }
-  });
+    });
+
+    cheatInput.addEventListener('keyup', (e) => {
+      if (e.key === 'Enter') {
+        const cmd = cheatInput.value;
+        if (cmd) {
+          const c = cmd.toLowerCase();
+          if (c === "killer") {
+            const k = rabbits.find(r => r.id === killerId);
+            notifications.push({ text: `KILLER: ${k.firstName}`, x: canvas.width / 2, y: canvas.height / 2, timer: 180, timerMax: 180, color: '#ff4444' });
+          } else if (c === "solve") {
+            playerConnections = [];
+            rabbits.forEach(r => {
+              if (r.fatherId) playerConnections.push({ parentId: r.fatherId, childId: r.id });
+              if (r.motherId) playerConnections.push({ parentId: r.motherId, childId: r.id });
+            });
+            updateTreeDiagram();
+            saveGame();
+            updateUI();
+            notifications.push({ text: "GENEALOGY SYNCED", x: canvas.width / 2, y: canvas.height / 2, timer: 120, timerMax: 120, color: '#44ff44' });
+          } else if (c === "species") {
+            const k = rabbits.find(r => r.id === killerId);
+            const currIdx = SPECIES.indexOf(k.species);
+            k.species = SPECIES[(currIdx + 1) % SPECIES.length];
+            notifications.push({ text: `KILLER: ${k.species}`, x: canvas.width / 2, y: canvas.height / 2, timer: 120, timerMax: 120, color: '#44ff44' });
+          } else if (c === "wins") {
+            const stats = getStats();
+            stats.lifetimeWins = (stats.lifetimeWins || 0) + 25;
+            saveStats(stats);
+            showStatsModal(); // Refresh the view
+            notifications.push({ text: `TOTAL WINS: ${stats.lifetimeWins} (+25)`, x: canvas.width / 2, y: canvas.height / 2, timer: 120, timerMax: 120, color: '#44ff44' });
+          } else if (c === "reset") {
+            localStorage.removeItem('mysteryFarm_current');
+            localStorage.removeItem('mysteryFarm_stats');
+            localStorage.removeItem('mysteryFarm_consent');
+            localStorage.removeItem('mysteryFarm_detective');
+            location.reload(true);
+          }
+        }
+        cheatInput.value = '';
+        cheatInput.style.display = 'none';
+      }
+    });
+  }
   document.querySelectorAll('.char-card').forEach(card => {
     card.addEventListener('click', () => {
       const char = card.getAttribute('data-char');
@@ -3528,46 +3574,58 @@ function init() {
     });
   });
 
-  document.getElementById('intro-next').addEventListener('click', () => {
-    introStep++;
-    if (introScrollHintTimeout) { clearTimeout(introScrollHintTimeout); introScrollHintTimeout = null; }
-    const scrollContainer = document.getElementById('intro-scroll-container');
-    if (scrollContainer) {
-      scrollContainer.scrollTop = 0;
-      scrollContainer.dataset.hasScrolled = 'false';
-    }
-    showIntro(gameState.isMidGameChange); // Preserve the mid-game change state
-  });
+  const introNextBtn = document.getElementById('intro-next');
+  if (introNextBtn) {
+    introNextBtn.addEventListener('click', () => {
+      introStep++;
+      if (introScrollHintTimeout) { clearTimeout(introScrollHintTimeout); introScrollHintTimeout = null; }
+      const scrollContainer = document.getElementById('intro-scroll-container');
+      if (scrollContainer) {
+        scrollContainer.scrollTop = 0;
+        scrollContainer.dataset.hasScrolled = 'false';
+      }
+      showIntro(gameState.isMidGameChange); // Preserve the mid-game change state
+    });
+  }
 
-  document.getElementById('game-over-next').addEventListener('click', () => {
-    gameOverStep++;
-    gameOverAnimTimer = 0;
-    if (gameOverScrollHintTimeout) { clearTimeout(gameOverScrollHintTimeout); gameOverScrollHintTimeout = null; }
-    const scrollContainer = document.getElementById('game-over-scroll-container');
-    if (scrollContainer) {
-      scrollContainer.scrollTop = 0;
-      scrollContainer.dataset.hasScrolled = 'false';
-    }
-    showGameOver(gameState.wasSuccess);
-  });
+  const gameOverNextBtn = document.getElementById('game-over-next');
+  if (gameOverNextBtn) {
+    gameOverNextBtn.addEventListener('click', () => {
+      gameOverStep++;
+      gameOverAnimTimer = 0;
+      if (gameOverScrollHintTimeout) { clearTimeout(gameOverScrollHintTimeout); gameOverScrollHintTimeout = null; }
+      const scrollContainer = document.getElementById('game-over-scroll-container');
+      if (scrollContainer) {
+        scrollContainer.scrollTop = 0;
+        scrollContainer.dataset.hasScrolled = 'false';
+      }
+      showGameOver(gameState.wasSuccess);
+    });
+  }
 
-  document.getElementById('help-btn').addEventListener('click', () => {
-    if (gameState.isFinished) {
-      showStatsModal();
-      return;
-    }
-    introStep = 0;
-    if (introScrollHintTimeout) { clearTimeout(introScrollHintTimeout); introScrollHintTimeout = null; }
-    const scrollContainer = document.getElementById('intro-scroll-container');
-    if (scrollContainer) {
-      scrollContainer.scrollTop = 0;
-      scrollContainer.dataset.hasScrolled = 'false';
-    }
-    showIntro(false); // Help button always shows the briefing intro
-    saveGame();
-  });
+  const helpBtn = document.getElementById('help-btn');
+  if (helpBtn) {
+    helpBtn.addEventListener('click', () => {
+      if (gameState.isFinished) {
+        showStatsModal();
+        return;
+      }
+      introStep = 0;
+      if (introScrollHintTimeout) { clearTimeout(introScrollHintTimeout); introScrollHintTimeout = null; }
+      const scrollContainer = document.getElementById('intro-scroll-container');
+      if (scrollContainer) {
+        scrollContainer.scrollTop = 0;
+        scrollContainer.dataset.hasScrolled = 'false';
+      }
+      showIntro(false); // Help button always shows the briefing intro
+      saveGame();
+    });
+  }
 
-  document.getElementById('transcript-header').addEventListener('click', toggleTranscript);
+  const transcriptHeader = document.getElementById('transcript-header');
+  if (transcriptHeader) {
+    transcriptHeader.addEventListener('click', toggleTranscript);
+  }
 
   // Cheat codes
   let cheatBuffer = "";

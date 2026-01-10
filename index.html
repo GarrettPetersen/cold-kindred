@@ -100,7 +100,7 @@
         <button id="dna-test-btn">DNA TEST</button>
         <button id="accuse-btn">ACCUSE</button>
       </div>
-      <button id="play-again-ui" style="display: none;" onclick="location.reload()">PLAY AGAIN TOMORROW</button>
+      <button id="play-again-ui" style="display: none;">PLAY AGAIN TOMORROW</button>
     </div>
 
     <!-- Smart Hint -->
@@ -225,6 +225,19 @@
         </div>
 
         <button id="close-stats-btn" style="background: white; color: black; border: none; padding: 12px 40px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 16px; letter-spacing: 1px;">BACK</button>
+      </div>
+    </div>
+
+    <div id="limit-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); color: white; z-index: 500; font-family: monospace; flex-direction: column; align-items: center; justify-content: center; pointer-events: auto;">
+      <div style="max-width: 500px; width: 100%; text-align: center; padding: 40px; background: #111; border: 1px solid #333; border-radius: 12px; box-shadow: 0 10px 50px rgba(0,0,0,0.8);">
+        <div style="font-size: 50px; margin-bottom: 20px;">⏳</div>
+        <h2 style="color: #44ff44; font-size: 24px; margin-bottom: 20px; letter-spacing: 2px;">TODAY'S CASE IS SOLVED</h2>
+        <p style="font-size: 18px; line-height: 1.6; color: #ccc; margin-bottom: 30px;">
+          The local authorities are processing the evidence.
+          <br><br>
+          A new mystery will be assigned at <b>midnight</b>. See you then, detective!
+        </p>
+        <button id="close-limit-btn" style="background: white; color: black; border: none; padding: 12px 40px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 16px; letter-spacing: 1px;">UNDERSTOOD</button>
       </div>
     </div>
 

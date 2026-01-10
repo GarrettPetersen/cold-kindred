@@ -783,14 +783,15 @@ function getDNARelationshipLabel(preciseLabel) {
   if (!preciseLabel) return "no relation";
   const l = preciseLabel.toLowerCase();
   
-  if (l === "self") return "Match";
-  if (l === "parent" || l === "child") return "Parent or Child";
-  if (l === "sibling") return "Full Sibling";
-  if (l === "grandparent" || l === "grandchild") return "Grandparent or Grandchild";
-  if (l === "uncle" || l === "aunt" || l === "nephew" || l === "niece") return "Aunt, Uncle, Niece, or Nephew";
+  if (l === "self" || l === "match") return "Match";
+  if (l === "parent" || l === "child" || l === "parent or child") return "Parent or Child";
+  if (l === "sibling" || l === "full sibling") return "Full Sibling";
+  if (l === "grandparent" || l === "grandchild" || l === "grandparent or grandchild") return "Grandparent or Grandchild";
+  if (l === "uncle" || l === "aunt" || l === "nephew" || l === "niece" || l.includes("aunt, uncle, niece, or nephew")) return "Aunt, Uncle, Niece, or Nephew";
   
   // Grouping based on shared DNA percentage
   if (l.includes("1st cousin") && !l.includes("removed")) return "1st Cousin or Great-Grandparent";
+  if (l.includes("great-grandparent")) return "1st Cousin or Great-Grandparent";
   if (l.includes("gr-grandparent") || l.includes("gr-grandchild") || 
       l.includes("gr-uncle") || l.includes("gr-aunt") || l.includes("gr-nephew") || l.includes("gr-niece")) {
     return "1st Cousin or Great-Grandparent";
@@ -1403,7 +1404,7 @@ class Animal {
       if (Date.now() % 4 === 0) { 
         let forceX = 0, forceY = 0;
         let count = 0;
-        const spacing = 100; // Desired minimum spacing
+        const spacing = 150; // Desired minimum spacing
 
         hares.forEach(o => {
           if (o === this) return;
@@ -1421,11 +1422,22 @@ class Animal {
         });
 
         // Add boundary repulsion (treat edges as neighbors)
-        const edgePush = 0.5;
-        if (this.x < spacing) forceX += (1 - this.x / spacing) * edgePush;
-        if (this.x > FIELD_WIDTH - spacing) forceX -= (1 - (FIELD_WIDTH - this.x) / spacing) * edgePush;
-        if (this.y < spacing) forceY += (1 - this.y / spacing) * edgePush;
-        if (this.y > FIELD_HEIGHT - spacing) forceY -= (1 - (FIELD_HEIGHT - this.y) / spacing) * edgePush;
+        const edgePush = 1.0;
+        const boundaryPadding = 20;
+        const spriteSize = 64;
+        
+        if (this.x < spacing + boundaryPadding) {
+          forceX += (1 - (this.x - boundaryPadding) / spacing) * edgePush;
+        }
+        if (this.x > (FIELD_WIDTH - boundaryPadding - spriteSize) - spacing) {
+          forceX -= (1 - ((FIELD_WIDTH - boundaryPadding - spriteSize) - this.x) / spacing) * edgePush;
+        }
+        if (this.y < spacing + boundaryPadding) {
+          forceY += (1 - (this.y - boundaryPadding) / spacing) * edgePush;
+        }
+        if (this.y > (FIELD_HEIGHT - boundaryPadding - spriteSize) - spacing) {
+          forceY -= (1 - ((FIELD_HEIGHT - boundaryPadding - spriteSize) - this.y) / spacing) * edgePush;
+        }
 
         if (count > 0 || Math.abs(forceX) > 0.1 || Math.abs(forceY) > 0.1) {
           this.vx = (this.vx * 0.9) + (forceX * 0.2);
@@ -1445,8 +1457,20 @@ class Animal {
 
     if (this.state !== 'idle' && this.state !== 'death') this.updateDir();
     this.x += this.vx; this.y += this.vy;
-    if (this.x < 0) { this.x = 0; this.vx *= -1; } else if (this.x > FIELD_WIDTH) { this.x = FIELD_WIDTH; this.vx *= -1; }
-    if (this.y < 0) { this.y = 0; this.vy *= -1; } else if (this.y > FIELD_HEIGHT) { this.y = FIELD_HEIGHT; this.vy *= -1; }
+    
+    // Hard constraints with padding to keep sprites fully inside the boundary box
+    const padding = 20;
+    const spriteSize = 64;
+    if (this.x < padding) { 
+      this.x = padding; this.vx *= -1; 
+    } else if (this.x > FIELD_WIDTH - padding - spriteSize) { 
+      this.x = FIELD_WIDTH - padding - spriteSize; this.vx *= -1; 
+    }
+    if (this.y < padding) { 
+      this.y = padding; this.vy *= -1; 
+    } else if (this.y > FIELD_HEIGHT - padding - spriteSize) { 
+      this.y = FIELD_HEIGHT - padding - spriteSize; this.vy *= -1; 
+    }
     
     // Post-game override for killer death state
     if (gameState.isFinished && this.rabbit.id === killerId && gameState.wasSuccess) {
@@ -1532,7 +1556,7 @@ class Animal {
     const sx = (this.x - camera.x) * camera.zoom, sy = (this.y - camera.y) * camera.zoom, sz = FRAME_SIZE * 2 * camera.zoom;
     if (sx < -sz * 4 || sx > canvas.width + sz * 4 || sy < -sz * 4 || sy > canvas.height + sz * 4) return;
 
-    if (selectedHare === this) {
+    if (selectedHare === this && !gameState.isFinished) {
       const textAlpha = Math.sin(Date.now() / 200) * 0.3 + 0.7;
       ctx.fillStyle = `rgba(68, 255, 68, ${textAlpha})`;
       ctx.font = `bold ${Math.max(10, Math.floor(10 * camera.zoom))}px monospace`;
@@ -1622,7 +1646,7 @@ class Animal {
       });
     }
     const clue = activeClues.get(this.rabbit.id);
-    if (clue) {
+    if (clue && !gameState.isFinished) {
       // Partial scaling for bubbles: they stay larger when zoomed out
       const isHovered = hoveredBubbleId === this.rabbit.id;
       const bubbleScale = (camera.zoom * 0.4 + 0.6) * (isHovered ? 1.2 : 1.0);
@@ -3403,6 +3427,15 @@ function init() {
       showStatsModal();
     });
   });
+
+  document.getElementById('play-again-ui').addEventListener('click', () => {
+    document.getElementById('limit-modal').style.display = 'flex';
+  });
+
+  document.getElementById('close-limit-btn').addEventListener('click', () => {
+    document.getElementById('limit-modal').style.display = 'none';
+  });
+
   document.getElementById('close-stats-btn').addEventListener('click', () => {
     document.getElementById('stats-modal').style.display = 'none';
     document.getElementById('stats-cheat-input').style.display = 'none';
@@ -3519,6 +3552,10 @@ function init() {
   });
 
   document.getElementById('help-btn').addEventListener('click', () => {
+    if (gameState.isFinished) {
+      showStatsModal();
+      return;
+    }
     introStep = 0;
     if (introScrollHintTimeout) { clearTimeout(introScrollHintTimeout); introScrollHintTimeout = null; }
     const scrollContainer = document.getElementById('intro-scroll-container');
@@ -3887,29 +3924,31 @@ function loop() {
     ctx.beginPath(); ctx.moveTo(barMinX, screenMidY); ctx.lineTo(barMaxX, screenMidY); ctx.stroke();
     
     // 4. Record "X" buttons for each relationship in this union
-    ps.forEach(p => {
-      cs.forEach(c => {
-        if (selectedHare === p || selectedHare === c) {
-          const px = (p.x - camera.x + FRAME_SIZE) * camera.zoom;
-          const py = (p.y - camera.y + FRAME_SIZE) * camera.zoom;
-          const cx = (c.x - camera.x + FRAME_SIZE) * camera.zoom;
-          const cy = (c.y - camera.y + FRAME_SIZE) * camera.zoom;
-          
-          let bx, by;
-          if (selectedHare === p) {
-            // Place on the child's vertical stem, 50% of the way to the child
-            bx = cx;
-            by = screenMidY + (cy - screenMidY) * 0.5;
-          } else {
-            // Place on the parent's vertical stem, 50% of the way to the parent
-            bx = px;
-            by = screenMidY + (py - screenMidY) * 0.5;
-          }
+    if (!gameState.isFinished) {
+      ps.forEach(p => {
+        cs.forEach(c => {
+          if (selectedHare === p || selectedHare === c) {
+            const px = (p.x - camera.x + FRAME_SIZE) * camera.zoom;
+            const py = (p.y - camera.y + FRAME_SIZE) * camera.zoom;
+            const cx = (c.x - camera.x + FRAME_SIZE) * camera.zoom;
+            const cy = (c.y - camera.y + FRAME_SIZE) * camera.zoom;
+            
+            let bx, by;
+            if (selectedHare === p) {
+              // Place on the child's vertical stem, 50% of the way to the child
+              bx = cx;
+              by = screenMidY + (cy - screenMidY) * 0.5;
+            } else {
+              // Place on the parent's vertical stem, 50% of the way to the parent
+              bx = px;
+              by = screenMidY + (py - screenMidY) * 0.5;
+            }
 
-          xButtons.push({ x: bx, y: by, pId: p.rabbit.id, cId: c.rabbit.id });
-        }
+            xButtons.push({ x: bx, y: by, pId: p.rabbit.id, cId: c.rabbit.id });
+          }
+        });
       });
-    });
+    }
 
     ctx.restore();
   });
@@ -3928,10 +3967,12 @@ function loop() {
   updateUI();
   
   // 4. Draw recorded "X" buttons on TOP of animals/labels
-  xButtons.forEach(btn => {
-    const isHovered = hoveredXButton === btn;
-    drawPixelX(ctx, btn.x, btn.y, camera.zoom, isHovered);
-  });
+  if (!gameState.isFinished) {
+    xButtons.forEach(btn => {
+      const isHovered = hoveredXButton === btn;
+      drawPixelX(ctx, btn.x, btn.y, camera.zoom, isHovered);
+    });
+  }
   
   // Render notifications/rich text
   for (let i = notifications.length - 1; i >= 0; i--) {

@@ -309,7 +309,7 @@ a {
   font-family: 'Courier New', Courier, monospace;
   z-index: 100;
   transition: height 0.3s ease;
-  height: 60px; /* Base height for 2 lines */
+  height: 95px; /* Base height for 4 lines */
   display: flex;
   flex-direction: column;
   box-shadow: 0 -4px 20px rgba(0,0,0,0.5);
@@ -319,7 +319,7 @@ a {
 
 @media (max-width: 600px) {
   #transcript-container {
-    height: calc(60px + var(--safe-bottom) + env(safe-area-inset-bottom));
+    height: calc(95px + var(--safe-bottom) + env(safe-area-inset-bottom));
   }
 }
 
@@ -337,7 +337,7 @@ a {
   overflow: hidden;
   white-space: normal;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 4;
   -webkit-box-orient: vertical;
   flex-grow: 1;
   font-size: 14px;

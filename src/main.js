@@ -2839,13 +2839,13 @@ function toggleTranscript() {
   
   isTranscriptOpen = !isTranscriptOpen;
   if (isTranscriptOpen) {
-    container.style.height = '200px';
+    container.style.height = '250px';
     list.style.display = 'block';
     toggle.textContent = '▼ CLOSE';
   } else {
-    // Height should match the CSS: 60px + safe area padding
+    // Height should match the CSS: 95px + safe area padding
     const safeBottom = window.innerWidth <= 600 ? 40 : 0;
-    container.style.height = `calc(60px + ${safeBottom}px + env(safe-area-inset-bottom))`;
+    container.style.height = `calc(95px + ${safeBottom}px + env(safe-area-inset-bottom))`;
     list.style.display = 'none';
     toggle.textContent = '▲ OPEN';
   }

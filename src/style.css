@@ -303,11 +303,6 @@ a {
   width: 100%;
   max-width: 600px;
   background-color: #fff9e6; /* Notebook paper color */
-  background-image: 
-    linear-gradient(90deg, transparent 49px, #ff9999 50px, #ff9999 51px, transparent 52px), /* Red margin line */
-    linear-gradient(#d1e5f0 1px, transparent 1px); /* Blue notebook lines */
-  background-size: 100% 24px;
-  background-attachment: local;
   border-top: 4px solid #5d3a1a; /* Dark wood top border */
   border-radius: 12px 12px 0 0;
   color: #2c3e50;
@@ -337,7 +332,10 @@ a {
   align-items: center;
   border-bottom: 1px solid rgba(0,0,0,0.1);
   height: 30px; /* Reduced height */
-  background: transparent; /* Keep unified notebook look */
+  background-image: 
+    linear-gradient(90deg, transparent 49px, #ff9999 50px, #ff9999 51px, transparent 52px), /* Red margin line */
+    linear-gradient(#d1e5f0 1px, transparent 1px); /* Blue notebook lines */
+  background-size: 100% 1.5rem;
   box-sizing: border-box;
   position: relative;
 }
@@ -356,8 +354,12 @@ a {
   padding: 15px 20px calc(20px + var(--safe-bottom) + env(safe-area-inset-bottom)) 60px; /* Left padding for red margin line */
   display: block;
   font-size: 14px; /* Slightly smaller text for better density */
-  line-height: 24px;
-  background: transparent;
+  line-height: 1.5rem; /* Match notebook line height */
+  background-image: 
+    linear-gradient(90deg, transparent 49px, #ff9999 50px, #ff9999 51px, transparent 52px), /* Red margin line */
+    linear-gradient(#d1e5f0 1px, transparent 1px); /* Blue notebook lines */
+  background-size: 100% 1.5rem;
+  background-attachment: local;
   box-sizing: border-box;
   /* Ensure the newest content at the top is what's visible */
   display: flex;
@@ -366,11 +368,12 @@ a {
 }
 
 .transcript-entry {
-  margin-bottom: 24px; /* Match notebook line height for consistent spacing */
+  margin-bottom: 1.5rem; /* Match notebook line height for consistent spacing */
   position: relative;
   padding-left: 15px;
-  min-height: 24px;
+  min-height: 1.5rem;
   border-left: 3px solid transparent;
+  flex-shrink: 0; /* ABSOLUTELY prevent squashing or overlapping */
 }
 
 .transcript-entry:first-child {

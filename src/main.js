@@ -780,7 +780,7 @@ function getRelationshipLabel(common, id1, id2) {
 }
 
 function getDNARelationshipLabel(preciseLabel) {
-  if (!preciseLabel) return "no relation";
+  if (!preciseLabel || preciseLabel.toLowerCase() === "no relation") return "no relation";
   const l = preciseLabel.toLowerCase();
   
   if (l === "self" || l === "match") return "Match";
@@ -1678,6 +1678,89 @@ class Animal {
       ctx.fillText('?', bx + bw / 2, by - bh / 2); 
     }
   }
+}
+
+function drawTutorialGuide() {
+  const tCanvas = document.getElementById('tutorialCanvas');
+  if (!tCanvas) return;
+  const tCtx = tCanvas.getContext('2d');
+  tCtx.clearRect(0, 0, tCanvas.width, tCanvas.height);
+  tCtx.imageSmoothingEnabled = false;
+
+  // Pick a consistent animal for the tutorial (e.g. the first one in the list)
+  const animal = hares[0];
+  if (!animal) return;
+
+  const centerX = tCanvas.width / 2;
+  const centerY = tCanvas.height / 2;
+  const sz = FRAME_SIZE * 3; // Slightly larger for the tutorial
+  const drawX = centerX - sz / 2;
+  const drawY = centerY - sz / 2;
+
+  // 1. Draw the actual sprite with same tinting logic
+  const tintedSpr = getTintedSprite(animal.rabbit, 'idle');
+  if (tintedSpr) {
+    tCtx.drawImage(tintedSpr, 0, 0, FRAME_SIZE, FRAME_SIZE, Math.floor(drawX), Math.floor(drawY), sz, sz);
+  }
+
+  // 2. Draw the Name & Age Tag (matching in-game styles)
+  const fontSize = 14;
+  tCtx.font = `bold ${fontSize}px Arial, sans-serif`;
+  const label = animal.nameLabel;
+  const metrics = tCtx.measureText(label);
+  const padX = 8, padY = 4;
+  const bgW = metrics.width + padX * 2, bgH = fontSize + padY * 2;
+  const bgX = centerX - bgW / 2, bgY = drawY + sz + 10;
+
+  tCtx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+  tCtx.beginPath();
+  tCtx.roundRect(bgX, bgY, bgW, bgH, 6);
+  tCtx.fill();
+
+  tCtx.fillStyle = getHSL(animal.rabbit);
+  tCtx.textAlign = 'center';
+  tCtx.textBaseline = 'top';
+  tCtx.fillText(label, centerX, bgY + padY);
+
+  // 3. Draw a mock DNA Result Tag (using actual in-game Title Case)
+  const relFontSize = 12;
+  tCtx.font = `bold ${relFontSize}px Arial`;
+  const dnaLabel = `🧬 1st Cousin`;
+  const dMetrics = tCtx.measureText(dnaLabel);
+  const dW = dMetrics.width + 16, dH = relFontSize + 10;
+  const dX = centerX - dW / 2, dY = drawY - dH - 12; // Moved up slightly more
+
+  tCtx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+  tCtx.beginPath();
+  tCtx.roundRect(dX, dY, dW, dH, 6);
+  tCtx.fill();
+
+  tCtx.fillStyle = '#44ff44';
+  tCtx.fillText(dnaLabel, centerX, dY + 5);
+
+  // 4. Draw the Speech Bubble
+  const bubbleScale = 1.2;
+  const bw = 30 * bubbleScale, bh = 25 * bubbleScale, r = 5 * bubbleScale;
+  const bx = drawX + sz * 0.9, by = drawY + 25; // Moved down and right to avoid overlap
+  
+  const s = Math.max(0, Math.min(100, animal.rabbit.tint.saturate));
+  const l = Math.max(0, Math.min(100, animal.rabbit.tint.brightness));
+  tCtx.fillStyle = `hsla(${animal.rabbit.tint.hue}, ${s}%, ${l}%, 0.9)`;
+  
+  tCtx.beginPath();
+  tCtx.roundRect(bx, by - bh, bw, bh, r);
+  tCtx.fill();
+  tCtx.beginPath(); 
+  tCtx.moveTo(bx + 5 * bubbleScale, by); 
+  tCtx.lineTo(bx + 15 * bubbleScale, by); 
+  tCtx.lineTo(bx + 10 * bubbleScale, by + 5 * bubbleScale); 
+  tCtx.fill();
+  
+  tCtx.fillStyle = 'white'; 
+  tCtx.textAlign = 'center';
+  tCtx.textBaseline = 'middle';
+  tCtx.font = `bold ${Math.floor(14 * bubbleScale)}px Arial`; 
+  tCtx.fillText('?', bx + bw / 2, by - bh / 2);
 }
 
 // --- UI & Input ---
@@ -2839,14 +2922,15 @@ function toggleTranscript() {
   
   isTranscriptOpen = !isTranscriptOpen;
   if (isTranscriptOpen) {
-    container.style.height = '250px';
-    list.style.display = 'block';
+    container.classList.add('open');
+    container.style.transform = 'translateX(-50%) translateY(0)';
+    list.style.pointerEvents = 'auto';
     toggle.textContent = '▼ CLOSE';
   } else {
-    // Height should match the CSS: 95px + safe area padding
-    const safeBottom = window.innerWidth <= 600 ? 40 : 0;
-    container.style.height = `calc(95px + ${safeBottom}px + env(safe-area-inset-bottom))`;
-    list.style.display = 'none';
+    container.classList.remove('open');
+    // Translate down so only 120px remains visible above the bottom edge
+    container.style.transform = 'translateX(-50%) translateY(130px)';
+    list.style.pointerEvents = 'none';
     toggle.textContent = '▲ OPEN';
   }
 }
@@ -3606,19 +3690,24 @@ function init() {
   const helpBtn = document.getElementById('help-btn');
   if (helpBtn) {
     helpBtn.addEventListener('click', () => {
-      if (gameState.isFinished) {
-        showStatsModal();
-        return;
+      const howToPlayModal = document.getElementById('how-to-play-modal');
+      if (howToPlayModal) {
+        howToPlayModal.style.display = 'flex';
+        drawTutorialGuide();
       }
-      introStep = 0;
-      if (introScrollHintTimeout) { clearTimeout(introScrollHintTimeout); introScrollHintTimeout = null; }
-      const scrollContainer = document.getElementById('intro-scroll-container');
-      if (scrollContainer) {
-        scrollContainer.scrollTop = 0;
-        scrollContainer.dataset.hasScrolled = 'false';
+    });
+  }
+
+  const closeHowBtn = document.getElementById('close-how-btn');
+  const howToPlayModal = document.getElementById('how-to-play-modal');
+  if (closeHowBtn && howToPlayModal) {
+    closeHowBtn.addEventListener('click', () => {
+      howToPlayModal.style.display = 'none';
+    });
+    howToPlayModal.addEventListener('click', (e) => {
+      if (e.target === howToPlayModal) {
+        howToPlayModal.style.display = 'none';
       }
-      showIntro(false); // Help button always shows the briefing intro
-      saveGame();
     });
   }
 
@@ -4046,7 +4135,8 @@ function loop() {
     
     // Allow room for transcript at bottom
     const transcriptEl = document.getElementById('transcript-container');
-    const bottomLimit = canvas.height - (transcriptEl ? transcriptEl.offsetHeight : 40) - 20;
+    const visibleTranscriptHeight = isTranscriptOpen ? 250 : 120;
+    const bottomLimit = canvas.height - visibleTranscriptHeight - 20;
     cY = Math.min(cY, bottomLimit);
     
     // Simple rich text drawing for canvas

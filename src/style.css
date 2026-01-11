@@ -299,38 +299,47 @@ a {
   position: absolute;
   bottom: 0;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translateX(-50%) translateY(130px); /* Start tucked down so only 120px is visible */
   width: 100%;
   max-width: 600px;
-  background: #fff9e6; /* Notebook paper color */
+  background-color: #fff9e6; /* Notebook paper color */
+  background-image: 
+    linear-gradient(90deg, transparent 49px, #ff9999 50px, #ff9999 51px, transparent 52px), /* Red margin line */
+    linear-gradient(#d1e5f0 1px, transparent 1px); /* Blue notebook lines */
+  background-size: 100% 24px;
+  background-attachment: local;
   border-top: 4px solid #5d3a1a; /* Dark wood top border */
   border-radius: 12px 12px 0 0;
   color: #2c3e50;
   font-family: 'Courier New', Courier, monospace;
   z-index: 100;
-  transition: height 0.3s ease;
-  height: 95px; /* Base height for 4 lines */
+  transition: transform 0.3s ease;
+  height: 250px; /* Fixed full height, we slide it instead of resizing */
   display: flex;
   flex-direction: column;
   box-shadow: 0 -4px 20px rgba(0,0,0,0.5);
   box-sizing: border-box;
-  padding-bottom: calc(var(--safe-bottom) + env(safe-area-inset-bottom)) !important;
+  padding-bottom: 0 !important;
+  overflow: visible; /* Allow portrait to sit outside the container */
 }
 
 @media (max-width: 600px) {
   #transcript-container {
-    height: calc(95px + var(--safe-bottom) + env(safe-area-inset-bottom));
+    /* No longer overriding height here, transform handles it */
   }
 }
 
 #transcript-header {
-  padding: 10px 20px;
+  padding: 10px 15px 10px 60px; /* Left padding matches red margin line, small right padding */
   cursor: pointer;
   display: flex;
   justify-content: space-between;
   align-items: center;
   border-bottom: 1px solid rgba(0,0,0,0.1);
-  min-height: 50px;
+  height: 116px; /* Fixed height for 4 lines of text + padding */
+  background: transparent;
+  box-sizing: border-box;
+  position: relative;
 }
 
 #latest-clue {
@@ -341,33 +350,33 @@ a {
   -webkit-box-orient: vertical;
   flex-grow: 1;
   font-size: 14px;
-  line-height: 1.2;
+  line-height: 24px; /* Align with notebook lines */
   color: #2c3e50;
   font-weight: bold;
+  padding-right: 10px; /* Text can now go almost all the way to the right edge */
 }
 
 #transcript-toggle {
-  margin-left: 15px;
+  position: absolute;
+  right: 15px;
+  top: 15px;
   font-size: 12px;
   opacity: 0.6;
   width: 65px; /* Fixed width to prevent layout shift */
   text-align: right;
   flex-shrink: 0;
+  z-index: 5;
 }
 
 #transcript-list {
-  flex-grow: 1;
+  height: 134px; /* Remaining space in the 250px container */
   overflow-y: auto;
-  padding: 20px 20px 20px 60px; /* Left padding for red margin line */
-  display: none;
+  padding: 20px 20px calc(20px + var(--safe-bottom) + env(safe-area-inset-bottom)) 60px; /* Left padding for red margin line, bottom for safe area */
+  display: block; /* Keep visible during transitions */
   font-size: 16px;
   line-height: 24px;
-  background-image: 
-    linear-gradient(90deg, transparent 49px, #ff9999 50px, #ff9999 51px, transparent 52px), /* Red margin line */
-    linear-gradient(#d1e5f0 1px, transparent 1px); /* Blue notebook lines */
-  background-size: 100% 24px;
-  background-attachment: local;
-  background-color: #fff9e6;
+  background: transparent;
+  box-sizing: border-box;
 }
 
 .transcript-entry {
@@ -421,7 +430,8 @@ a {
   image-rendering: pixelated;
   box-shadow: 0 4px 12px rgba(0,0,0,0.5);
   cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  /* Use same transition as parent for transform to prevent bouncing/lag */
+  transition: transform 0.3s ease, top 0.3s ease, left 0.3s ease, opacity 0.3s ease;
   z-index: 110;
 }
 
@@ -431,6 +441,11 @@ a {
     left: -148px;
     top: auto;
     bottom: 0;
+  }
+  
+  /* Counter the parent's slide-down when closed so portrait stays on screen */
+  #transcript-container:not(.open) #portrait-box {
+    transform: translateY(-130px);
   }
 }
 

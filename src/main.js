@@ -2393,7 +2393,7 @@ function showGameOver(isWin) {
       let spriteNeckY = 16;
       if (killer.species === 'Grouse') spriteNeckY = 14; // Raise neck line (chop less shoulder)
       else if (killer.species === 'Deer') spriteNeckY = 10; // Deer has a very high neck
-      else if (killer.species === 'Boar') spriteNeckY = 15;
+      else if (killer.species === 'Boar') spriteNeckY = 19;
 
       // Calculate bodyY such that the sprite's neck aligns with the guillotine's neckY
       const bodyY = neckY - (spriteNeckY * 2);

@@ -2103,9 +2103,20 @@ function updateTranscriptUI(newEntry, speakerId) {
         const id = parseInt(span.getAttribute('data-id'));
         const hare = hares.find(h => h.rabbit.id === id);
         if (hare) {
-          // Center camera on the animal
-          camera.x = hare.x + FRAME_SIZE - (canvas.width / camera.zoom) / 2;
-          camera.y = hare.y + FRAME_SIZE - (canvas.height / camera.zoom) / 2;
+          const vw = canvas.width / camera.zoom;
+          const vh = canvas.height / camera.zoom;
+          
+          // Calculate the visible height of the game world (excluding the Case Log at the bottom)
+          const visibleTranscriptHeight = isTranscriptOpen ? 250 : 120;
+          const worldUIHeight = visibleTranscriptHeight / camera.zoom;
+          const visibleWorldHeight = vh - worldUIHeight;
+
+          // Center horizontally
+          camera.x = hare.x + FRAME_SIZE - vw / 2;
+          
+          // Center vertically in the visible portion of the screen
+          camera.y = hare.y + FRAME_SIZE - visibleWorldHeight / 2;
+          
           constrainCamera();
 
           // Don't auto-select, just highlight them briefly
@@ -2906,13 +2917,11 @@ function toggleTranscript() {
   if (isTranscriptOpen) {
     container.classList.add('open');
     container.style.transform = 'translateX(-50%) translateY(0)';
-    list.style.pointerEvents = 'auto';
     toggle.textContent = '▼ CLOSE CASE LOG';
   } else {
     container.classList.remove('open');
     // Translate down so only 120px remains visible above the bottom edge
     container.style.transform = 'translateX(-50%) translateY(130px)';
-    list.style.pointerEvents = 'none';
     toggle.textContent = '▲ OPEN CASE LOG';
   }
 }
@@ -3321,7 +3330,19 @@ function init() {
           highlightedAnimalIds.clear();
         }
         selectedHare = null;
-      } else selectedHare = clicked;
+      } else {
+        selectedHare = clicked;
+        
+        // Center the camera on the selected animal, accounting for UI
+        const vw = canvas.width / camera.zoom;
+        const vh = canvas.height / camera.zoom;
+        const visibleTranscriptHeight = isTranscriptOpen ? 250 : 120;
+        const visibleWorldHeight = vh - (visibleTranscriptHeight / camera.zoom);
+        
+        camera.x = clicked.x + FRAME_SIZE - vw / 2;
+        camera.y = clicked.y + FRAME_SIZE - visibleWorldHeight / 2;
+        constrainCamera();
+      }
       updateUI(); return true;
     }
     return false;
@@ -3773,28 +3794,18 @@ function init() {
 function constrainCamera() {
   const vw = canvas.width / camera.zoom, vh = canvas.height / camera.zoom;
   
-  // Padding values in world units (scaled by zoom)
-  const padSide = 300 / camera.zoom;
-  const padTop = 150 / camera.zoom;
-  const padBottom = 400 / camera.zoom; // Extra space for transcript UI
+  // Define fixed padding in world units to allow centering animals at edges.
+  // We allow the camera to see up to half a screen width/height past the edge.
+  const padX = vw / 2;
+  const padY = vh / 2;
 
-  // Horizontal constraint
-  const minX = -padSide;
-  const maxX = FIELD_WIDTH + padSide - vw;
-  if (vw > FIELD_WIDTH + padSide * 2) {
-    camera.x = (FIELD_WIDTH - vw) / 2;
-  } else {
-    camera.x = Math.max(minX, Math.min(maxX, camera.x));
-  }
+  const minX = -padX;
+  const maxX = FIELD_WIDTH - vw + padX;
+  const minY = -padY;
+  const maxY = FIELD_HEIGHT - vh + padY;
 
-  // Vertical constraint
-  const minY = -padTop;
-  const maxY = FIELD_HEIGHT + padBottom - vh;
-  if (vh > FIELD_HEIGHT + padTop + padBottom) {
-    camera.y = (FIELD_HEIGHT - vh) / 2;
-  } else {
-    camera.y = Math.max(minY, Math.min(maxY, camera.y));
-  }
+  camera.x = Math.max(minX, Math.min(maxX, camera.x));
+  camera.y = Math.max(minY, Math.min(maxY, camera.y));
 }
 
 function loop() {

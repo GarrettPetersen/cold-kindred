@@ -362,10 +362,11 @@ a {
   /* Ensure the newest content at the top is what's visible */
   display: flex;
   flex-direction: column;
+  pointer-events: auto; /* Always allow interaction, even when parent is translated */
 }
 
 .transcript-entry {
-  margin-bottom: 15px; /* Tighter spacing */
+  margin-bottom: 24px; /* Match notebook line height for consistent spacing */
   position: relative;
   padding-left: 15px;
   min-height: 24px;

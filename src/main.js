@@ -2067,7 +2067,6 @@ function updateUI() {
 function updateTranscriptUI(newEntry, speakerId) {
   const container = document.getElementById('transcript-container');
   const list = document.getElementById('transcript-list');
-  const latest = document.getElementById('latest-clue');
   
   function parseText(txt) {
     return txt.replace(/\[\[(\d+):(.*?)\]\]/g, (match, id, name) => {
@@ -2081,26 +2080,6 @@ function updateTranscriptUI(newEntry, speakerId) {
     const speakerPart = speaker ? `<span class="animal-mention" data-id="${speaker.id}" style="color: ${getHSL(speaker)}; cursor: pointer;">${speaker.firstName}</span>: ` : "";
     const parsedText = parseText(newEntry);
     
-    latest.innerHTML = speaker ? `Case Log: ${speakerPart}${parsedText}` : `Case Log: ${parsedText}`;
-
-    // Make mentions in the "latest clue" header clickable too
-    latest.querySelectorAll('.animal-mention').forEach(span => {
-      span.addEventListener('click', e => {
-        e.stopPropagation(); // Don't toggle transcript
-        const id = parseInt(span.getAttribute('data-id'));
-        const hare = hares.find(h => h.rabbit.id === id);
-        if (hare) {
-          camera.x = hare.x + FRAME_SIZE - (canvas.width / camera.zoom) / 2;
-          camera.y = hare.y + FRAME_SIZE - (canvas.height / camera.zoom) / 2;
-          constrainCamera();
-
-          highlightedAnimalIds.clear();
-          highlightedAnimalIds.add(id);
-          updateUI();
-        }
-      });
-    });
-
     // Trigger portrait animation
     portraitAnim.active = true;
     portraitAnim.timer = 0;
@@ -2113,7 +2092,9 @@ function updateTranscriptUI(newEntry, speakerId) {
       entryEl.classList.add('system-message');
     }
     entryEl.innerHTML = `${speakerPart}${parsedText}`;
-    list.appendChild(entryEl);
+    
+    // Prepend to make it reverse chronological (newest at top)
+    list.prepend(entryEl);
 
     // Add click listeners for animal mentions
     entryEl.querySelectorAll('.animal-mention').forEach(span => {
@@ -2135,7 +2116,8 @@ function updateTranscriptUI(newEntry, speakerId) {
       });
     });
 
-    list.scrollTop = list.scrollHeight;
+    // When a new clue comes in, scroll to top so it's visible
+    list.scrollTop = 0;
   }
 }
 
@@ -2925,13 +2907,13 @@ function toggleTranscript() {
     container.classList.add('open');
     container.style.transform = 'translateX(-50%) translateY(0)';
     list.style.pointerEvents = 'auto';
-    toggle.textContent = '▼ CLOSE';
+    toggle.textContent = '▼ CLOSE CASE LOG';
   } else {
     container.classList.remove('open');
     // Translate down so only 120px remains visible above the bottom edge
     container.style.transform = 'translateX(-50%) translateY(130px)';
     list.style.pointerEvents = 'none';
-    toggle.textContent = '▲ OPEN';
+    toggle.textContent = '▲ OPEN CASE LOG';
   }
 }
 

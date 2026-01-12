@@ -2107,7 +2107,8 @@ function updateTranscriptUI(newEntry, speakerId) {
           const vh = canvas.height / camera.zoom;
           
           // Calculate the visible height of the game world (excluding the Case Log at the bottom)
-          const visibleTranscriptHeight = isTranscriptOpen ? 250 : 120;
+          const transcriptEl = document.getElementById('transcript-container');
+          const visibleTranscriptHeight = isTranscriptOpen ? (transcriptEl.offsetHeight) : 120;
           const worldUIHeight = visibleTranscriptHeight / camera.zoom;
           const visibleWorldHeight = vh - worldUIHeight;
 
@@ -2920,8 +2921,8 @@ function toggleTranscript() {
     toggle.textContent = '▼ CLOSE CASE LOG';
   } else {
     container.classList.remove('open');
-    // Translate down so only 120px remains visible above the bottom edge
-    container.style.transform = 'translateX(-50%) translateY(130px)';
+    // Use calc to slide down so exactly 120px remains visible
+    container.style.transform = 'translateX(-50%) translateY(calc(100% - 120px))';
     toggle.textContent = '▲ OPEN CASE LOG';
   }
 }
@@ -3336,7 +3337,8 @@ function init() {
         // Center the camera on the selected animal, accounting for UI
         const vw = canvas.width / camera.zoom;
         const vh = canvas.height / camera.zoom;
-        const visibleTranscriptHeight = isTranscriptOpen ? 250 : 120;
+        const transcriptEl = document.getElementById('transcript-container');
+        const visibleTranscriptHeight = isTranscriptOpen ? (transcriptEl.offsetHeight) : 120;
         const visibleWorldHeight = vh - (visibleTranscriptHeight / camera.zoom);
         
         camera.x = clicked.x + FRAME_SIZE - vw / 2;
@@ -3537,9 +3539,51 @@ function init() {
   document.querySelectorAll('.open-stats-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.preventDefault();
+      // Hide other modals that might be open
+      const modals = ['how-to-play-modal', 'limit-modal', 'intro-modal', 'about-modal', 'privacy-modal'];
+      modals.forEach(m => { const el = document.getElementById(m); if (el) el.style.display = 'none'; });
       showStatsModal();
     });
   });
+
+  // About Modal
+  document.querySelectorAll('.open-about-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const modals = ['how-to-play-modal', 'limit-modal', 'intro-modal', 'stats-modal', 'privacy-modal'];
+      modals.forEach(m => { const el = document.getElementById(m); if (el) el.style.display = 'none'; });
+      const aboutModal = document.getElementById('about-modal');
+      if (aboutModal) aboutModal.style.display = 'flex';
+    });
+  });
+
+  // Privacy Modal
+  document.querySelectorAll('.open-privacy-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const modals = ['how-to-play-modal', 'limit-modal', 'intro-modal', 'stats-modal', 'about-modal'];
+      modals.forEach(m => { const el = document.getElementById(m); if (el) el.style.display = 'none'; });
+      const privacyModal = document.getElementById('privacy-modal');
+      if (privacyModal) privacyModal.style.display = 'flex';
+    });
+  });
+
+  // Close Buttons for new modals
+  const closeAboutBtn = document.getElementById('close-about-btn');
+  if (closeAboutBtn) {
+    closeAboutBtn.addEventListener('click', () => {
+      const aboutModal = document.getElementById('about-modal');
+      if (aboutModal) aboutModal.style.display = 'none';
+    });
+  }
+
+  const closePrivacyBtn = document.getElementById('close-privacy-btn');
+  if (closePrivacyBtn) {
+    closePrivacyBtn.addEventListener('click', () => {
+      const privacyModal = document.getElementById('privacy-modal');
+      if (privacyModal) privacyModal.style.display = 'none';
+    });
+  }
 
   const playAgainUI = document.getElementById('play-again-ui');
   if (playAgainUI) {
@@ -4128,7 +4172,7 @@ function loop() {
     
     // Allow room for transcript at bottom
     const transcriptEl = document.getElementById('transcript-container');
-    const visibleTranscriptHeight = isTranscriptOpen ? 250 : 120;
+    const visibleTranscriptHeight = isTranscriptOpen ? (transcriptEl.offsetHeight) : 120;
     const bottomLimit = canvas.height - visibleTranscriptHeight - 20;
     cY = Math.min(cY, bottomLimit);
     
@@ -4164,6 +4208,17 @@ function loop() {
   }
 
   drawPortrait();
+  // Check for deep links (e.g. ?page=privacy)
+  const urlParams = new URLSearchParams(window.location.search);
+  const page = urlParams.get('page');
+  if (page === 'privacy') {
+    const privacyModal = document.getElementById('privacy-modal');
+    if (privacyModal) privacyModal.style.display = 'flex';
+  } else if (page === 'about') {
+    const aboutModal = document.getElementById('about-modal');
+    if (aboutModal) aboutModal.style.display = 'flex';
+  }
+
   requestAnimationFrame(loop);
 }
 

@@ -63,11 +63,11 @@
             </div>
           </div>
 
-          <div style="margin-top: 40px; padding-bottom: 20px; display: flex; gap: 20px; justify-content: center; flex-wrap: wrap;">
-            <a href="/about.html" style="color: white; text-decoration: underline; opacity: 0.6; font-size: 14px;">About</a>
+        <div style="margin-top: 40px; padding-bottom: 20px; display: flex; gap: 20px; justify-content: center; flex-wrap: wrap;">
+            <a href="#" class="open-about-btn" style="color: white; text-decoration: underline; opacity: 0.6; font-size: 14px;">About</a>
             <a href="#" class="open-stats-btn" style="color: white; text-decoration: underline; opacity: 0.6; font-size: 14px;">Player Stats</a>
-            <a href="/privacy.html" style="color: white; text-decoration: underline; opacity: 0.6; font-size: 14px;">Privacy Policy</a>
-          </div>
+            <a href="#" class="open-privacy-btn" style="color: white; text-decoration: underline; opacity: 0.6; font-size: 14px;">Privacy Policy</a>
+        </div>
         </div>
       </div>
 
@@ -193,9 +193,9 @@
         <div id="game-over-msg" style="font-size: 18px; line-height: 1.6; margin-bottom: 40px; min-height: 100px; color: #ccc; text-align: center; width: 100%;"></div>
         
         <div style="margin-top: 40px; padding-bottom: 20px; display: flex; gap: 20px; justify-content: center; flex-wrap: wrap;">
-            <a href="/about.html" style="color: white; text-decoration: underline; opacity: 0.6; font-size: 14px;">About</a>
+            <a href="#" class="open-about-btn" style="color: white; text-decoration: underline; opacity: 0.6; font-size: 14px;">About</a>
             <a href="#" class="open-stats-btn" style="color: white; text-decoration: underline; opacity: 0.6; font-size: 14px;">Player Stats</a>
-            <a href="/privacy.html" style="color: white; text-decoration: underline; opacity: 0.6; font-size: 14px;">Privacy Policy</a>
+            <a href="#" class="open-privacy-btn" style="color: white; text-decoration: underline; opacity: 0.6; font-size: 14px;">Privacy Policy</a>
         </div>
         </div>
       </div>
@@ -241,9 +241,9 @@
         <button id="close-limit-btn" style="background: white; color: black; border: none; padding: 12px 40px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 16px; letter-spacing: 1px;">UNDERSTOOD</button>
 
         <div style="margin-top: 40px; display: flex; gap: 20px; justify-content: center; flex-wrap: wrap;">
-          <a href="/about.html" style="color: white; text-decoration: underline; opacity: 0.6; font-size: 14px;">About</a>
+          <a href="#" class="open-about-btn" style="color: white; text-decoration: underline; opacity: 0.6; font-size: 14px;">About</a>
           <a href="#" class="open-stats-btn" style="color: white; text-decoration: underline; opacity: 0.6; font-size: 14px;">Player Stats</a>
-          <a href="/privacy.html" style="color: white; text-decoration: underline; opacity: 0.6; font-size: 14px;">Privacy Policy</a>
+          <a href="#" class="open-privacy-btn" style="color: white; text-decoration: underline; opacity: 0.6; font-size: 14px;">Privacy Policy</a>
         </div>
       </div>
     </div>
@@ -299,9 +299,60 @@
         </div>
 
         <div style="margin-top: 30px; padding-top: 20px; border-top: 1px dashed rgba(93, 58, 26, 0.2); display: flex; gap: 20px; justify-content: center; flex-wrap: wrap;">
-          <a href="/about.html" style="color: #5d3a1a; text-decoration: underline; opacity: 0.7; font-size: 14px;">About</a>
+          <a href="#" class="open-about-btn" style="color: #5d3a1a; text-decoration: underline; opacity: 0.7; font-size: 14px;">About</a>
           <a href="#" class="open-stats-btn" style="color: #5d3a1a; text-decoration: underline; opacity: 0.7; font-size: 14px;">Player Stats</a>
-          <a href="/privacy.html" style="color: #5d3a1a; text-decoration: underline; opacity: 0.7; font-size: 14px;">Privacy Policy</a>
+          <a href="#" class="open-privacy-btn" style="color: #5d3a1a; text-decoration: underline; opacity: 0.7; font-size: 14px;">Privacy Policy</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- About Modal -->
+    <div id="about-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); color: #2c3e50; z-index: 1100; font-family: 'Courier New', Courier, monospace; flex-direction: column; align-items: center; justify-content: center; pointer-events: auto;">
+      <div style="background-color: #fff9e6; max-width: 600px; width: 90%; max-height: 85vh; overflow-y: auto; padding: 40px 30px 30px 60px; position: relative; border-radius: 12px; box-shadow: 0 10px 50px rgba(0,0,0,0.8); background-image: linear-gradient(90deg, transparent 49px, #ff9999 50px, #ff9999 51px, transparent 52px), linear-gradient(#d1e5f0 1px, transparent 1px); background-size: 100% 1.75rem; line-height: 1.75rem; background-attachment: local; box-sizing: border-box;">
+        <h2 style="color: #5d3a1a; margin-top: 0; margin-bottom: 20px; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid #5d3a1a; display: inline-block;">ABOUT THE GAME</h2>
+        
+        <p>Welcome to <strong>mystery.farm</strong>, a daily genealogical murder mystery.</p>
+
+        <h3 style="font-size: 18px; color: #5d3a1a; margin-top: 30px;">THE CONCEPT</h3>
+        <p>Every day at midnight, a new crime is committed on the farm. As the lead detective, your job is to reconstruct the family tree of the residents using DNA evidence and witness testimonies to identify the killer.</p>
+
+        <h3 style="font-size: 18px; color: #5d3a1a; margin-top: 30px;">INSPIRATION</h3>
+        <p>This game was inspired by the real-life investigation of the Golden State Killer. Investigators found two 3rd cousins of the killer, and then traced their geneaology to a shared ancestor. Then they worked their way down the family tree from that ancestor to find the one person who could have committed the murders.</p>
+
+        <p>The first draft of the game was a realistic murder mystery, but we later simplified it into this puzzle format using cute pixel art animals. "Why not?" we thought, and made it a cute animal murder mystery.</p>
+
+        <h3 style="font-size: 18px; color: #5d3a1a; margin-top: 30px;">THE CREATOR</h3>
+        <p>I am a solo developer who loves puzzle games. My first game was <a href="https://connecdoku.com" style="color: #5d3a1a; text-decoration: underline;">Connecdoku</a>, a word game with elements of NYT Connections and Sudoku.</p>
+
+        <p>You can find me on X at <a href="https://x.com/garrettpetersen" style="color: #5d3a1a; text-decoration: underline;">@GarrettPetersen</a>.</p>
+
+        <div style="text-align: center; margin-top: 30px;">
+          <button id="close-about-btn" style="background: #5d3a1a; color: #fff9e6; border: none; padding: 10px 30px; border-radius: 4px; cursor: pointer; font-weight: bold; font-family: inherit; font-size: 16px;">BACK</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Privacy Modal -->
+    <div id="privacy-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); color: #2c3e50; z-index: 1100; font-family: 'Courier New', Courier, monospace; flex-direction: column; align-items: center; justify-content: center; pointer-events: auto;">
+      <div style="background-color: #fff9e6; max-width: 600px; width: 90%; max-height: 85vh; overflow-y: auto; padding: 40px 30px 30px 60px; position: relative; border-radius: 12px; box-shadow: 0 10px 50px rgba(0,0,0,0.8); background-image: linear-gradient(90deg, transparent 49px, #ff9999 50px, #ff9999 51px, transparent 52px), linear-gradient(#d1e5f0 1px, transparent 1px); background-size: 100% 1.75rem; line-height: 1.75rem; background-attachment: local; box-sizing: border-box;">
+        <h2 style="color: #5d3a1a; margin-top: 0; margin-bottom: 20px; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid #5d3a1a; display: inline-block;">PRIVACY POLICY</h2>
+        
+        <p>Last Updated: January 5, 2026</p>
+
+        <h3 style="font-size: 18px; color: #5d3a1a; margin-top: 30px;">1. Data Collection</h3>
+        <p>We do <strong>not</strong> collect any personal information. The game does not require an account or any identifying information to play.</p>
+
+        <h3 style="font-size: 18px; color: #5d3a1a; margin-top: 30px;">2. Local Storage</h3>
+        <p>The game uses your device's <strong>Local Storage</strong> to save your progress and statistics. This data stays on your device and is never sent to our servers.</p>
+
+        <h3 style="font-size: 18px; color: #5d3a1a; margin-top: 30px;">3. Third-Party Services</h3>
+        <p>The game does not use any third-party tracking, analytics, or advertising services.</p>
+
+        <h3 style="font-size: 18px; color: #5d3a1a; margin-top: 30px;">4. Children's Privacy</h3>
+        <p>Because we do not collect any personal information, the game is safe for players of all ages.</p>
+
+        <div style="text-align: center; margin-top: 30px;">
+          <button id="close-privacy-btn" style="background: #5d3a1a; color: #fff9e6; border: none; padding: 10px 30px; border-radius: 4px; cursor: pointer; font-weight: bold; font-family: inherit; font-size: 16px;">BACK</button>
         </div>
       </div>
     </div>

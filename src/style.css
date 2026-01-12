@@ -299,7 +299,7 @@ a {
   position: absolute;
   bottom: 0;
   left: 50%;
-  transform: translateX(-50%) translateY(130px); /* Start tucked down so only 120px is visible */
+  transform: translateX(-50%) translateY(calc(50vh - 120px)); /* Start tucked down so only 120px is visible */
   width: 100%;
   max-width: 600px;
   background-color: #fff9e6; /* Notebook paper color */
@@ -309,13 +309,20 @@ a {
   font-family: 'Courier New', Courier, monospace;
   z-index: 100;
   transition: transform 0.3s ease;
-  height: 250px; /* Fixed full height, we slide it instead of resizing */
+  height: 50vh; /* Half the screen height */
   display: flex;
   flex-direction: column;
   box-shadow: 0 -4px 20px rgba(0,0,0,0.5);
   box-sizing: border-box;
   padding-bottom: 0 !important;
   overflow: visible; /* Allow portrait to sit outside the container */
+}
+
+@media (max-height: 240px) {
+  #transcript-container {
+    height: 100vh; /* Full screen if the screen is tiny */
+    transform: translateX(-50%) translateY(calc(100vh - 120px));
+  }
 }
 
 @media (max-width: 600px) {
@@ -338,6 +345,7 @@ a {
   background-size: 100% 1.5rem;
   box-sizing: border-box;
   position: relative;
+  flex-shrink: 0;
 }
 
 #transcript-toggle {
@@ -349,7 +357,7 @@ a {
 }
 
 #transcript-list {
-  height: 220px; /* Remaining space in the 250px container */
+  flex-grow: 1; /* Take remaining space */
   overflow-y: auto;
   padding: 15px 20px calc(20px + var(--safe-bottom) + env(safe-area-inset-bottom)) 60px; /* Left padding for red margin line */
   display: block;
@@ -443,7 +451,7 @@ a {
   
   /* Counter the parent's slide-down when closed so portrait stays on screen */
   #transcript-container:not(.open) #portrait-box {
-    transform: translateY(-130px);
+    transform: translateY(calc(50vh - 120px));
   }
 }
 

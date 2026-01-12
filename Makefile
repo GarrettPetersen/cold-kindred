@@ -10,6 +10,7 @@ build-ios:
 	@cp assets/animations/*.png public/assets/animations/ 2>/dev/null || true
 	@cp assets/detectives/*.png public/assets/detectives/ 2>/dev/null || true
 	@cp assets/items/*.png public/assets/items/ 2>/dev/null || true
+	@cp about.html privacy.html public/ 2>/dev/null || true
 	@echo "Building web assets..."
 	npm run build
 	@echo "Syncing with iOS project..."
@@ -23,6 +24,7 @@ build-android:
 	@cp assets/animations/*.png public/assets/animations/ 2>/dev/null || true
 	@cp assets/detectives/*.png public/assets/detectives/ 2>/dev/null || true
 	@cp assets/items/*.png public/assets/items/ 2>/dev/null || true
+	@cp about.html privacy.html public/ 2>/dev/null || true
 	@echo "Building web assets..."
 	npm run build
 	@echo "Syncing with Android project..."
@@ -36,6 +38,7 @@ build-all:
 	@cp assets/animations/*.png public/assets/animations/ 2>/dev/null || true
 	@cp assets/detectives/*.png public/assets/detectives/ 2>/dev/null || true
 	@cp assets/items/*.png public/assets/items/ 2>/dev/null || true
+	@cp about.html privacy.html public/ 2>/dev/null || true
 	@echo "Building web assets..."
 	npm run build
 	@echo "Syncing with iOS and Android projects..."

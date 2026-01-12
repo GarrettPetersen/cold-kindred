@@ -24,18 +24,22 @@ const FRAME_SIZE = 32;
 const CURRENT_YEAR = 2025;
 
 // --- Seeded Random ---
-function getDailySeed() {
+const IS_NATIVE = typeof window !== 'undefined' && window.Capacitor && window.Capacitor.getPlatform() !== 'web';
+const MAX_CASES_PER_DAY = IS_NATIVE ? 3 : 1;
+
+function getDailySeed(caseIdx = 0) {
   const now = new Date();
   const dateStr = now.toLocaleDateString('en-CA'); // YYYY-MM-DD
+  const seedStr = dateStr + "-" + caseIdx;
   let hash = 0;
-  for (let i = 0; i < dateStr.length; i++) {
-    hash = (hash << 5) - hash + dateStr.charCodeAt(i);
+  for (let i = 0; i < seedStr.length; i++) {
+    hash = (hash << 5) - hash + seedStr.charCodeAt(i);
     hash |= 0;
   }
-  return { seed: Math.abs(hash), dateStr };
+  return { seed: Math.abs(hash), dateStr, caseIdx };
 }
 
-const { seed, dateStr: currentDateStr } = getDailySeed();
+let { seed, dateStr: currentDateStr, caseIdx: currentCaseIdx } = getDailySeed(0);
 let rngState = seed;
 function random() {
   rngState = (rngState * 1664525 + 1013904223) % 4294967296;
@@ -70,6 +74,37 @@ const FEMALE_NAMES = ['Mary', 'Patricia', 'Jennifer', 'Linda', 'Elizabeth', 'Bar
 
 // --- Asset loading ---
 const SPECIES = ['Hare', 'Boar', 'Deer', 'Fox', 'Grouse'];
+
+const TRANSITION_LINES = {
+  fox: [
+    "One mystery down, another waiting in the rain. A detective's work is never done.",
+    "The city never sleeps, and neither do the killers. Let's see what's next on the docket.",
+    "Another case, another dollar. Let's hope this one has a cleaner ending.",
+    "My coffee's cold and my hat's wet, but the trail is still warm.",
+    "The shadows are getting longer. Better wrap this up before the sun goes down."
+  ],
+  hare: [
+    "The game is afoot! There is no time to waste on trivialities.",
+    "One must always be prepared for the next intellectual challenge.",
+    "The facts are out there, waiting to be woven into a tapestry of truth.",
+    "My mind rebels at stagnation. Give me problems, give me work!",
+    "It is a capital mistake to theorize before one has data. Onward to the next scene."
+  ],
+  boarot: [
+    "Ah, the little gray cells... they are hungry for more exercise!",
+    "Order and method, mon ami. We shall approach this next mystery with both.",
+    "One solved, yet the world is still full of disorder. We must correct this.",
+    "Precision is the key. Let us not rush, but let us not linger either.",
+    "A busy day, yes, but for the mind of Hercule Boarot, it is merely a warm-up."
+  ],
+  marmot: [
+    "It's surprising how much one can learn just by watching the neighbors.",
+    "A busy day in the village! So many secrets waiting to be uncovered.",
+    "One always finds that one thing leads quite naturally to another.",
+    "The knitting will have to wait. There's a much more interesting puzzle to solve.",
+    "Dear me, another mystery? Well, I suppose someone has to set things right."
+  ]
+};
 const sprites = {};
 const grassSprites = [];
 const detectiveSprites = {
@@ -92,9 +127,9 @@ const detectiveSprites = {
 let assetsLoaded = 0;
 const TOTAL_ASSETS = SPECIES.length * 4 + 6 + 14;
 
-function onAssetLoad() { 
+function onAssetLoad() {
   assetsLoaded++;
-  
+
   // Show loading progress on canvas
   ctx.fillStyle = '#151515';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -140,10 +175,10 @@ detectiveSprites.police_badge.src = '/assets/items/police_badge.png';
 
 SPECIES.forEach(s => {
   sprites[s] = { idle: new Image(), walk: new Image(), run: new Image(), death: new Image() };
-  
+
   const walkFile = s === 'Fox' ? 'Fox_walk_with_shadow.png' : `${s}_Walk_with_shadow.png`;
   const runFile = s === 'Grouse' ? 'Grouse_Flight_with_shadow.png' : `${s}_Run_with_shadow.png`;
-  
+
   ['idle', 'walk', 'run', 'death'].forEach(type => {
     sprites[s][type].onload = onAssetLoad;
     sprites[s][type].onerror = onAssetLoad;
@@ -179,10 +214,10 @@ const badgeCache = new Map();
 function getBadgeSprite(rankIndex) {
   if (rankIndex === 0) return null; // Recruit has no badge
   if (badgeCache.has(rankIndex)) return badgeCache.get(rankIndex);
-  
+
   const base = detectiveSprites.police_badge;
   if (!base || !base.complete) return null;
-  
+
   const r = RANKS[rankIndex];
   const canvas = document.createElement('canvas');
   canvas.width = 64; canvas.height = 64;
@@ -190,7 +225,7 @@ function getBadgeSprite(rankIndex) {
   bCtx.imageSmoothingEnabled = false;
   bCtx.filter = `hue-rotate(${r.hue}deg) saturate(${r.sat}%) brightness(${r.bri}%)`;
   bCtx.drawImage(base, 0, 0);
-  
+
   badgeCache.set(rankIndex, canvas);
   return canvas;
 }
@@ -233,7 +268,7 @@ function renderStaticLayer() {
   const sCtx = staticCanvas.getContext('2d');
   sCtx.imageSmoothingEnabled = false;
   sCtx.clearRect(0, 0, FIELD_WIDTH, FIELD_HEIGHT);
-  
+
   // Draw world grid
   sCtx.strokeStyle = 'rgba(255,255,255,0.05)';
   sCtx.lineWidth = 1;
@@ -259,20 +294,21 @@ function renderStaticLayer() {
   });
 }
 
-let gameState = { 
-  isFinished: false, 
-  wasSuccess: false, 
-  startTime: null, 
-  endTime: null, 
-  detective: null, 
+let gameState = {
+  isFinished: false,
+  wasSuccess: false,
+  startTime: null,
+  endTime: null,
+  detective: null,
   introFinished: false,
   hasClickedClue: false,
   hasCreatedConnection: false,
   hint1Shown: false,
-    hint2Shown: false,
-    isMidGameChange: false,
-    statsUpdated: false
-  };
+  hint2Shown: false,
+  isMidGameChange: false,
+  statsUpdated: false,
+  caseIndex: 0
+};
 
 let portraitAnim = {
   active: false,
@@ -326,15 +362,15 @@ function drawRankProgress(ctx, centerX, y, wins, forceRank = null) {
   const rank = forceRank || getRank(wins);
   const nextRank = (rank.index < RANKS.length - 1) ? RANKS[rank.index + 1] : null;
   if (!nextRank) return 0;
-  
+
   const totalNeeded = nextRank.minWins - rank.minWins;
   const currentInTier = wins - rank.minWins;
-  
+
   // Dynamically adjust scale based on density
   let boxSize = 8;
   let gap = 4;
   let cols = 10;
-  
+
   if (totalNeeded > 100) {
     boxSize = 4;
     gap = 2;
@@ -344,19 +380,19 @@ function drawRankProgress(ctx, centerX, y, wins, forceRank = null) {
     gap = 3;
     cols = 20;
   }
-  
+
   const rows = Math.ceil(totalNeeded / cols);
   const gridW = cols * boxSize + (cols - 1) * gap;
   const startX = centerX - gridW / 2;
-  
+
   ctx.imageSmoothingEnabled = false;
-  
+
   for (let i = 0; i < totalNeeded; i++) {
     const col = i % cols;
     const row = Math.floor(i / cols);
     const x = startX + col * (boxSize + gap);
     const yPos = y + row * (boxSize + gap);
-    
+
     ctx.fillStyle = (i < currentInTier) ? '#44ff44' : 'rgba(255,255,255,0.15)';
     ctx.fillRect(Math.floor(x), Math.floor(yPos), boxSize, boxSize);
   }
@@ -369,14 +405,14 @@ function showStatsModal() {
   const pCanvas = document.getElementById('statsProgressCanvas');
   const rankLabel = document.getElementById('stats-rank-badge-label');
   const winsCount = document.getElementById('stats-wins-count');
-  
+
   const stats = getStats();
   const wins = stats.lifetimeWins || 0;
   const rank = getRank(wins);
-  
+
   winsCount.textContent = wins;
   rankLabel.textContent = rank.title;
-  
+
   const ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, 128, 128);
   ctx.imageSmoothingEnabled = false;
@@ -384,11 +420,11 @@ function showStatsModal() {
   if (badge) {
     ctx.drawImage(badge, 0, 0, 64, 64, 0, 0, 128, 128);
   }
-  
+
   const pCtx = pCanvas.getContext('2d');
   pCtx.clearRect(0, 0, pCanvas.width, pCanvas.height);
   drawRankProgress(pCtx, pCanvas.width / 2, 0, wins);
-  
+
   modal.style.display = 'flex';
 }
 
@@ -408,13 +444,14 @@ function calculateStreaks() {
   if (dates.length === 0) return { win: 0, att: 0, maxWin: 0, maxAtt: 0 };
 
   let currWin = 0, currAtt = 0, maxWin = 0, maxAtt = 0;
-  
+
   // Calculate historical maxes (need oldest to newest for this)
   const cronDates = [...dates].reverse();
   let tempWin = 0, tempAtt = 0;
   for (let i = 0; i < cronDates.length; i++) {
-    const res = stats.history[cronDates[i]];
-    
+    const dayData = stats.history[cronDates[i]];
+    const dayResults = Array.isArray(dayData) ? dayData : [dayData];
+
     // Check for gap relative to previous entry
     if (i > 0) {
       const dPrev = new Date(cronDates[i - 1]);
@@ -424,11 +461,18 @@ function calculateStreaks() {
         tempAtt = 0;
       }
     }
-    
-    tempAtt++;
-    maxAtt = Math.max(maxAtt, tempAtt);
-    
-    if (res.status === 'success') {
+
+    const isAttempt = dayResults.some(r => r && r.status && r.status !== 'incomplete');
+    const isWin = dayResults.some(r => r && r.status === 'success');
+
+    if (isAttempt) {
+      tempAtt++;
+      maxAtt = Math.max(maxAtt, tempAtt);
+    } else {
+      tempAtt = 0;
+    }
+
+    if (isWin) {
       tempWin++;
       maxWin = Math.max(maxWin, tempWin);
     } else {
@@ -440,8 +484,12 @@ function calculateStreaks() {
   const today = currentDateStr;
   let lastDateFound = null;
   let winStreakBroken = false;
+  let attStreakBroken = false;
 
   for (const ds of dates) {
+    const dayData = stats.history[ds];
+    const dayResults = Array.isArray(dayData) ? dayData : [dayData];
+
     if (lastDateFound) {
       const d1 = new Date(ds);
       const d2 = new Date(lastDateFound);
@@ -453,13 +501,27 @@ function calculateStreaks() {
       if ((dToday - dPlay) / 86400000 > 1.5) break;
     }
 
-    currAtt++;
-    if (stats.history[ds].status === 'success' && !winStreakBroken) {
-      currWin++;
-    } else {
-      winStreakBroken = true;
+    const isAttempt = dayResults.some(r => r && r.status && r.status !== 'incomplete');
+    const isWin = dayResults.some(r => r && r.status === 'success');
+
+    if (!attStreakBroken) {
+      if (isAttempt) {
+        currAtt++;
+      } else if (ds !== today) {
+        attStreakBroken = true;
+      }
     }
-    lastDateFound = ds;
+
+    if (!winStreakBroken) {
+      if (isWin) {
+        currWin++;
+      } else if (ds !== today) {
+        winStreakBroken = true;
+      }
+    }
+
+    if (isAttempt) lastDateFound = ds;
+    if (winStreakBroken && attStreakBroken) break;
   }
 
   return { win: currWin, att: currAtt, maxWin, maxAtt };
@@ -483,6 +545,7 @@ function saveGame() {
     hint2Shown: gameState.hint2Shown,
     isMidGameChange: gameState.isMidGameChange,
     statsUpdated: gameState.statsUpdated,
+    caseIndex: gameState.caseIndex,
     globallyIssuedClueIds: Array.from(globallyIssuedClueIds),
     clueQueueIds: clueQueue.map(c => c.id),
     testedAnimals: rabbits.filter(r => r.isTested).map(r => ({ id: r.id, rel: r.dnaRelation, pct: r.dnaMatchPct })),
@@ -495,12 +558,22 @@ function saveGame() {
   } else {
     localStorage.removeItem('mysteryFarm_detective');
   }
-  
+
   if (gameState.isFinished && !gameState.statsUpdated) {
     const stats = getStats();
-    
-    // Avoid double-counting if today is already in history
-    if (stats.history[currentDateStr] && (stats.history[currentDateStr].status === 'success' || stats.history[currentDateStr].status === 'failure')) {
+
+    // Initialize history for today if it doesn't exist
+    if (!stats.history[currentDateStr]) stats.history[currentDateStr] = [];
+
+    // Support migration from old single-object format to array format
+    if (!Array.isArray(stats.history[currentDateStr])) {
+      stats.history[currentDateStr] = [stats.history[currentDateStr]];
+    }
+
+    const dayResults = stats.history[currentDateStr];
+
+    // Avoid double-counting if this specific case index is already in history
+    if (dayResults[gameState.caseIndex] && (dayResults[gameState.caseIndex].status === 'success' || dayResults[gameState.caseIndex].status === 'failure')) {
       gameState.statsUpdated = true;
       return;
     }
@@ -509,11 +582,13 @@ function saveGame() {
     if (gameState.startTime && gameState.endTime) {
       solveTime = gameState.endTime - gameState.startTime;
     }
-    stats.history[currentDateStr] = {
+
+    dayResults[gameState.caseIndex] = {
       status: gameState.wasSuccess ? 'success' : 'failure',
       solveTime: solveTime,
       dnaTestsUsed: 3 - dnaTestsRemaining
     };
+
     if (gameState.wasSuccess) {
       stats.lifetimeWins = (stats.lifetimeWins || 0) + 1;
     }
@@ -530,17 +605,17 @@ function loadGame() {
 
   const saved = localStorage.getItem('mysteryFarm_current');
   if (!saved) return false;
-  
+
   const data = JSON.parse(saved);
   if (data.date !== currentDateStr) {
     const stats = getStats();
     if (!stats.history[data.date]) {
-      stats.history[data.date] = { status: 'incomplete' };
+      stats.history[data.date] = [{ status: 'incomplete' }];
       saveStats(stats);
     }
     return false;
   }
-  
+
   // Clear the transcript UI before re-hydrating
   const list = document.getElementById('transcript-list');
   if (list) list.innerHTML = '';
@@ -550,7 +625,13 @@ function loadGame() {
   dnaTestsRemaining = data.dnaTestsRemaining ?? 3;
   playerConnections = data.playerConnections || [];
   caseLog = data.caseLog || [];
-  
+  gameState.caseIndex = data.caseIndex || 0;
+
+  // Update seed and RNG for the loaded case index
+  const loadedSeed = getDailySeed(gameState.caseIndex);
+  rngState = loadedSeed.seed;
+  currentCaseIdx = gameState.caseIndex;
+
   // Clean up the detective string
   const dataDet = (data.detective && data.detective !== "null") ? data.detective : null;
   const prefDet = (savedDet && savedDet !== "null") ? savedDet : null;
@@ -567,7 +648,7 @@ function loadGame() {
   gameState.isMidGameChange = data.isMidGameChange || false;
   gameState.statsUpdated = data.statsUpdated || (data.isFinished && data.date === currentDateStr) || false;
   globallyIssuedClueIds = new Set(data.globallyIssuedClueIds || []);
-  
+
   if (data.testedAnimals) {
     data.testedAnimals.forEach(ta => {
       const rabbit = rabbits.find(r => r.id === ta.id);
@@ -578,7 +659,7 @@ function loadGame() {
       }
     });
   }
-  
+
   if (data.clueQueueIds) {
     clueQueue = data.clueQueueIds.map(id => cluePool.find(c => c.id === id)).filter(Boolean);
   }
@@ -595,7 +676,7 @@ function loadGame() {
   }
 
   highlightedAnimalIds = new Set(data.highlightedAnimalIds || []);
-  
+
   caseLog.forEach(entry => {
     const splitIdx = entry.indexOf(': ');
     if (splitIdx === -1) {
@@ -614,19 +695,19 @@ function loadGame() {
   });
   if (tCount) tCount.textContent = dnaTestsRemaining;
   updateTreeDiagram();
-  
+
   return true;
 }
 
 const camera = { x: 0, y: 0, zoom: 1.0, minZoom: 0.1, maxZoom: 3.0 };
-const input = { 
-  isDragging: false, 
-  lastMouseX: 0, 
-  lastMouseY: 0, 
-  startX: 0, 
+const input = {
+  isDragging: false,
+  lastMouseX: 0,
+  lastMouseY: 0,
+  startX: 0,
   startY: 0,
   hasMoved: false,
-  lastTouchDist: 0 
+  lastTouchDist: 0
 };
 
 class AnimalRecord {
@@ -656,7 +737,7 @@ function getAncestors(id) {
     const { id: currId, dist } = queue.shift();
     if (visited.has(currId) && visited.get(currId) <= dist) continue;
     visited.set(currId, dist);
-    
+
     if (dist > 0) ancestors.set(currId, dist);
     if (dist >= 8) continue;
 
@@ -682,7 +763,7 @@ function kinship(a, b) {
   if (!a || !b) return 0;
   const key = a < b ? `${a}-${b}` : `${b}-${a}`;
   if (kinshipMemo.has(key)) return kinshipMemo.get(key);
-  
+
   const ra = rabbits.find(r => r.id === a);
   const rb = rabbits.find(r => r.id === b);
   if (!ra || !rb) return 0;
@@ -700,14 +781,14 @@ function kinship(a, b) {
       res = 0.5 * (kinship(a, rb.fatherId) + kinship(a, rb.motherId));
     }
   }
-  
+
   kinshipMemo.set(key, res);
   return res;
 }
 
 function getRelationshipLabel(common, id1, id2) {
   if (!common || common.length === 0) return null;
-  
+
   // 1. SAFETY OVERRIDE: Check for absolute direct parentage first
   const r1 = rabbits.find(r => r.id === id1);
   const r2 = rabbits.find(r => r.id === id2);
@@ -721,10 +802,10 @@ function getRelationshipLabel(common, id1, id2) {
   const closest = common.reduce((min, c) => {
     const n_min = Math.min(min.dist1, min.dist2) - 1;
     const n_c = Math.min(c.dist1, c.dist2) - 1;
-    
+
     if (n_c < n_min) return c; // -1 (Direct) beats 0 (Uncle)
     if (n_c > n_min) return min;
-    
+
     const rem_min = Math.abs(min.dist1 - min.dist2);
     const rem_c = Math.abs(c.dist1 - c.dist2);
     if (rem_c < rem_min) return c;
@@ -735,7 +816,7 @@ function getRelationshipLabel(common, id1, id2) {
   const dist2 = closest.dist2;
   const n = Math.min(dist1, dist2) - 1;
   const removed = Math.abs(dist1 - dist2);
-  
+
   if (n === -1) {
     if (dist1 === 0 && dist2 === 0) return "self";
     if (dist1 === 0) { // Killer is the ancestor
@@ -752,7 +833,7 @@ function getRelationshipLabel(common, id1, id2) {
     }
     return "direct relative";
   }
-  if (n < 0) return null; 
+  if (n < 0) return null;
   if (n === 0) {
     if (dist1 === 1 && dist2 === 1) return "sibling";
     const p1 = rabbits.find(r => r.id === id1);
@@ -782,23 +863,23 @@ function getRelationshipLabel(common, id1, id2) {
 function getDNARelationshipLabel(preciseLabel) {
   if (!preciseLabel || preciseLabel.toLowerCase() === "no relation") return "no relation";
   const l = preciseLabel.toLowerCase();
-  
+
   if (l === "self" || l === "match") return "Match";
   if (l === "parent" || l === "child" || l === "parent or child") return "Parent or Child";
   if (l === "sibling" || l === "full sibling") return "Full Sibling";
   if (l === "grandparent" || l === "grandchild" || l === "grandparent or grandchild") return "Grandparent or Grandchild";
   if (l === "uncle" || l === "aunt" || l === "nephew" || l === "niece" || l.includes("aunt, uncle, niece, or nephew")) return "Aunt, Uncle, Niece, or Nephew";
-  
+
   // Grouping based on shared DNA percentage
   if (l.includes("1st cousin") && !l.includes("removed")) return "1st Cousin or Great-Grandparent";
   if (l.includes("great-grandparent")) return "1st Cousin or Great-Grandparent";
-  if (l.includes("gr-grandparent") || l.includes("gr-grandchild") || 
-      l.includes("gr-uncle") || l.includes("gr-aunt") || l.includes("gr-nephew") || l.includes("gr-niece")) {
+  if (l.includes("gr-grandparent") || l.includes("gr-grandchild") ||
+    l.includes("gr-uncle") || l.includes("gr-aunt") || l.includes("gr-nephew") || l.includes("gr-niece")) {
     return "1st Cousin or Great-Grandparent";
   }
-  
+
   if (l.includes("2nd cousin") || l.includes("1st cousin once removed")) return "2nd Cousin or 1st Cousin Once Removed";
-  
+
   return "Distant Relative";
 }
 
@@ -812,7 +893,7 @@ function getPath(startId, targetId) {
     visited.add(currId);
     const curr = rabbits.find(r => r.id === currId);
     if (!curr) break;
-    
+
     // Explicitly check if the target is one of the parents
     if (curr.fatherId === targetId) {
       path.push({ parentId: curr.fatherId, childId: currId });
@@ -855,7 +936,7 @@ function updateNecessaryConnections() {
 function generateCluePool(additive = false) {
   const newClues = additive ? [...cluePool] : [];
   const existing = new Set(newClues.map(c => JSON.stringify(c.conn)));
-  
+
   function addRawClue(conn, type, speakerId = null, groupId = null) {
     // Normalize symmetric connections to prevent duplicates
     if (conn.type === 'couple') {
@@ -869,7 +950,7 @@ function generateCluePool(additive = false) {
     const connStr = JSON.stringify(conn);
     if (existing.has(connStr)) return;
     if (newClues.length >= rabbits.length * 0.9) return;
-    
+
     const stableId = `clue_${newClues.length}`;
     newClues.push({ id: stableId, conn, type, speakerId, groupId, isRead: false });
     existing.add(connStr);
@@ -878,7 +959,7 @@ function generateCluePool(additive = false) {
   necessaryConnections.forEach(conn => {
     const connStr = JSON.stringify(conn);
     if (existing.has(connStr)) return;
-    
+
     const p = rabbits.find(r => r.id === conn.parentId);
     const c = rabbits.find(r => r.id === conn.childId);
     if (!p || !c) return;
@@ -930,14 +1011,14 @@ function generateCluePool(additive = false) {
 
   const allConns = [];
   rabbits.forEach(r => { if (r.fatherId) allConns.push({ parentId: r.fatherId, childId: r.id }); if (r.motherId) allConns.push({ parentId: r.motherId, childId: r.id }); });
-  
+
   // Include EVERY parent-child connection in the pool as flavor clues
   allConns.forEach(conn => {
     // Extra clues also biased toward first-person
     const sid = random() < 0.7 ? (random() < 0.5 ? conn.parentId : conn.childId) : null;
     addRawClue(conn, 'extra', sid);
   });
-  
+
   cluePool = newClues;
 
   // Prioritize clues involving the two starting DNA relatives
@@ -952,7 +1033,7 @@ function generateCluePool(additive = false) {
       if (conn.type === 'grandparent' && (dnaRelIds.includes(conn.gp) || dnaRelIds.includes(conn.gc))) return true;
       return false;
     });
-    
+
     if (prioritized.length > 0) {
       const queuedIds = new Set();
       for (let i = 0; i < 2; i++) {
@@ -982,7 +1063,7 @@ function generateClueText(clue, speakerId) {
     const r = rabbits.find(rb => rb.id === id);
     return `[[${id}:${r.firstName}]]`;
   };
-  
+
   if (clue.conn.type === 'couple') {
     const p1 = rabbits.find(r => r.id === clue.conn.p1);
     const p2 = rabbits.find(r => r.id === clue.conn.p2);
@@ -993,19 +1074,19 @@ function generateClueText(clue, speakerId) {
       `${mark(p1.id)} and ${mark(p2.id)} are definitely building a nest together.`
     ]);
   }
-  
+
   if (clue.conn.type === 'sibling') {
     const a = rabbits.find(r => r.id === clue.conn.a);
     const b = rabbits.find(r => r.id === clue.conn.b);
     const bRole = b.sex === 'M' ? 'brother' : 'sister';
     if (speakerId === a.id) return pick([
-      `${mark(b.id)} is my ${bRole}.`, 
-      `Have you seen my ${bRole}, ${mark(b.id)}?`, 
+      `${mark(b.id)} is my ${bRole}.`,
+      `Have you seen my ${bRole}, ${mark(b.id)}?`,
       `I grew up with ${mark(b.id)}.`,
       `${mark(b.id)} belongs to my family.`
     ]);
     if (speakerId === b.id) return pick([
-      `${mark(a.id)} is my ${a.sex === 'M' ? 'brother' : 'sister'}.`, 
+      `${mark(a.id)} is my ${a.sex === 'M' ? 'brother' : 'sister'}.`,
       `I'm looking for my ${a.sex === 'M' ? 'brother' : 'sister'}, ${mark(a.id)}.`,
       `${mark(a.id)} belongs to my family.`
     ]);
@@ -1030,14 +1111,43 @@ function generateClueText(clue, speakerId) {
   const cPoss = c.sex === 'M' ? 'his' : 'her';
 
   if (speakerId === c.id) return pick([
-    `${mark(p.id)} is my ${pRole}.`, 
-    `Have you seen my ${pRoleShort}, ${mark(p.id)}?`, 
+    `${mark(p.id)} is my ${pRole}.`,
+    `Have you seen my ${pRoleShort}, ${mark(p.id)}?`,
     `I believe ${mark(p.id)} is my ${pRoleShort}.`,
     `${mark(p.id)} belongs to my family.`
   ]);
   if (speakerId === p.id) return pick([`${mark(c.id)} is my ${cRole}.`, `I'm looking for my ${cRoleShort}, ${mark(c.id)}.`, `${mark(c.id)} belongs to my family.`]);
-  
+
   return pick([`${mark(p.id)} is ${mark(c.id)}'s ${pRoleShort}.`, `${mark(c.id)} is ${mark(p.id)}'s ${cRole}.`, `I saw ${mark(c.id)} with ${cPoss} ${pRoleShort}, ${mark(p.id)}.`]);
+}
+
+function showTransitionModal(onBegin) {
+  const modal = document.getElementById('transition-modal');
+  const canvas = document.getElementById('transitionCanvas');
+  const textContainer = document.getElementById('transition-text');
+  const startBtn = document.getElementById('transition-start-btn');
+  if (!modal || !canvas || !textContainer || !startBtn) return;
+
+  const det = gameState.detective || 'fox';
+  const lines = TRANSITION_LINES[det] || TRANSITION_LINES.fox;
+  const line = lines[Math.floor(Math.random() * lines.length)];
+
+  textContainer.textContent = `"${line}"`;
+
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, 128, 128);
+  ctx.imageSmoothingEnabled = false;
+  const spr = detectiveSprites[det];
+  if (spr && spr.complete) {
+    ctx.drawImage(spr, 0, 0, 64, 64, 0, 0, 128, 128);
+  }
+
+  modal.style.display = 'flex';
+
+  startBtn.onclick = () => {
+    modal.style.display = 'none';
+    onBegin();
+  };
 }
 
 // --- Simulation ---
@@ -1048,19 +1158,19 @@ function runSimulation() {
   const usedNames = new Set();
   const mPool = shuffle([...new Set(MALE_NAMES)]);
   const fPool = shuffle([...new Set(FEMALE_NAMES)]);
-  
+
   // Pick victim before populating the world
   const vSex = random() < 0.5 ? 'M' : 'F';
   const vPool = vSex === 'M' ? mPool : fPool;
   const vName = vPool.pop();
   usedNames.add(vName);
-  victim = { 
-    name: vName, 
-    species: pick(SPECIES), 
+  victim = {
+    name: vName,
+    species: pick(SPECIES),
     sex: vSex,
     tint: { hue: random() * 360, saturate: 70 + random() * 30, brightness: 70 + random() * 20 }
   };
-  
+
   const g0 = [];
   // Founders - 14 (7 pairs) to ensure a more robust population tree
   for (let i = 0; i < 14; i++) {
@@ -1077,7 +1187,7 @@ function runSimulation() {
     const next = [];
     let ms = shuffle(prev.filter(r => r.sex === 'M'));
     let fs = shuffle(prev.filter(r => r.sex === 'F'));
-    
+
     // Pairing logic to avoid ALL shared parents (full and half siblings) and parent/child
     const usedF = new Set();
     const pairs = [];
@@ -1101,23 +1211,23 @@ function runSimulation() {
       const { m, f } = pair;
       // Slightly higher average children (1.8 -> 2.1)
       const children = (random() < 0.4) ? 3 : (random() < 0.7 ? 2 : 1);
-        let firstSex = random() < 0.5 ? 'M' : 'F';
-        
-        for (let c = 0; c < children; c++) {
-          const pool = (c === 0) ? (firstSex === 'M' ? mPool : fPool) : 
+      let firstSex = random() < 0.5 ? 'M' : 'F';
+
+      for (let c = 0; c < children; c++) {
+        const pool = (c === 0) ? (firstSex === 'M' ? mPool : fPool) :
           (c === 1) ? (firstSex === 'M' ? fPool : mPool) :
-                       (random() < 0.5 ? mPool : fPool);
-          
-          if (pool.length === 0) continue;
-          const sex = (pool === mPool) ? 'M' : 'F';
-          const name = pool.pop();
-          usedNames.add(name);
-          
-          let bYear = f.birthYear + 20 + Math.floor(random() * 20);
-          if (bYear >= CURRENT_YEAR) bYear = CURRENT_YEAR - 1 - Math.floor(random() * 5);
-          const child = new AnimalRecord(name, sex, bYear, gen, random() < 0.5 ? m.species : f.species, m.id, f.id);
-          next.push(child); rabbits.push(child);
-        }
+            (random() < 0.5 ? mPool : fPool);
+
+        if (pool.length === 0) continue;
+        const sex = (pool === mPool) ? 'M' : 'F';
+        const name = pool.pop();
+        usedNames.add(name);
+
+        let bYear = f.birthYear + 20 + Math.floor(random() * 20);
+        if (bYear >= CURRENT_YEAR) bYear = CURRENT_YEAR - 1 - Math.floor(random() * 5);
+        const child = new AnimalRecord(name, sex, bYear, gen, random() < 0.5 ? m.species : f.species, m.id, f.id);
+        next.push(child); rabbits.push(child);
+      }
     });
 
     // Population Stabilizer: If a generation is too small, have some pairs have "surprise" extra children
@@ -1145,7 +1255,7 @@ function runSimulation() {
   // Determine generation weights based on population size (favoring larger ones)
   const genCounts = {};
   rabbits.forEach(r => genCounts[r.generation] = (genCounts[r.generation] || 0) + 1);
-  
+
   const weightedGens = [];
   // Use generations 2, 3, and 4 as candidates
   for (let g = 2; g <= 4; g++) {
@@ -1153,7 +1263,7 @@ function runSimulation() {
     // Add the generation ID to the lottery 'count' number of times
     for (let i = 0; i < count; i++) weightedGens.push(g);
   }
-  
+
   // Pick a generation from the lottery (probabilistic, not deterministic)
   const selectedGen = weightedGens.length > 0 ? pick(weightedGens) : 3;
 
@@ -1161,14 +1271,14 @@ function runSimulation() {
   const potentialCands = rabbits.filter(r => r.generation === selectedGen);
   const speciesCamouflage = {};
   potentialCands.forEach(r => speciesCamouflage[r.species] = (speciesCamouflage[r.species] || 0) + 1);
-  
+
   const cands = shuffle(potentialCands).sort((a, b) => {
     // 80% chance to prioritize species camouflage, 20% total chaos
     if (random() < 0.8) return (speciesCamouflage[b.species] || 0) - (speciesCamouflage[a.species] || 0);
     return 0;
   });
   let found = false;
-  
+
   // Try to find a killer who has at least 2 cousins
   for (const cand of cands) {
     const killer = cand;
@@ -1176,7 +1286,7 @@ function runSimulation() {
       .map(r => {
         const common = getCommonAncestors(killer.id, r.id);
         const label = getRelationshipLabel(common, killer.id, r.id);
-        
+
         let n = -1;
         if (common.length > 0) {
           const closest = common.reduce((min, c) => {
@@ -1188,10 +1298,10 @@ function runSimulation() {
           }, common[0]);
           n = Math.min(closest.dist1, closest.dist2) - 1;
         }
-        
+
         // Safety override: exclude only direct parent/child (n=-1)
         if (killer.fatherId === r.id || killer.motherId === r.id || r.fatherId === killer.id || r.motherId === killer.id) n = -1;
-        
+
         return { r, common, label, n };
       })
       .filter(e => e.label && e.n >= 0); // Include uncles/grandparents (n=0)
@@ -1203,15 +1313,15 @@ function runSimulation() {
       // 2. Fallback to n >= 1 (1st cousin+)
       if (relatives.length < 2) relatives = allRel.filter(e => e.n >= 1);
       // 3. Final fallback to n >= 0 (Uncles, Grandparents)
-      if (relatives.length < 2) relatives = allRel; 
+      if (relatives.length < 2) relatives = allRel;
 
       // Sort relatives by distance to killer (highest n first)
       relatives.sort((a, b) => b.n - a.n);
-      
+
       const sample = relatives.slice(0, 15);
       let bestPair = null;
       let maxDist = -1;
-      
+
       for (let i = 0; i < sample.length; i++) {
         for (let j = i + 1; j < sample.length; j++) {
           const commonBetween = getCommonAncestors(sample[i].r.id, sample[j].r.id);
@@ -1241,7 +1351,7 @@ function runSimulation() {
   if (!found) {
     const killer = cands[0] || rabbits[rabbits.length - 1];
     killerId = killer.id;
-    
+
     // Find the two most distant non-parent relatives, strictly n >= 0
     const others = rabbits.filter(r => r.id !== killerId)
       .map(r => {
@@ -1254,7 +1364,7 @@ function runSimulation() {
       })
       .filter(e => e.n >= 0) // Allow Uncles/Grandparents
       .sort((a, b) => b.n - a.n);
-    
+
     if (others.length >= 2) {
       others.slice(0, 2).forEach(o => {
         o.r.dnaRelation = getDNARelationshipLabel(o.label);
@@ -1314,7 +1424,7 @@ function drawPixelX(ctx, centerX, centerY, scale, isHovered = false) {
   // At zoom 1, pixelSize = 2. At zoom 0.2, pixelSize = 4.
   let pixelSize = Math.max(1, Math.round(2 / Math.pow(scale, 0.4)));
   if (isHovered) pixelSize = Math.round(pixelSize * 1.2); // Grow slightly on hover
-  
+
   const size = 7; // 7x7 grid
   const xGrid = [
     [0, 0, 0, 0, 0, 0, 0],
@@ -1325,10 +1435,10 @@ function drawPixelX(ctx, centerX, centerY, scale, isHovered = false) {
     [0, 1, 0, 0, 0, 1, 0],
     [0, 0, 0, 0, 0, 0, 0]
   ];
-  
+
   const totalSize = size * pixelSize;
   const off = Math.floor(size / 2) * pixelSize;
-  
+
   // Use Math.round to snap to integer coordinates, preventing "lines" between pixels
   const cx = Math.round(centerX);
   const cy = Math.round(centerY);
@@ -1340,7 +1450,7 @@ function drawPixelX(ctx, centerX, centerY, scale, isHovered = false) {
   // 2. Draw solid Red Background Box (single rect prevents internal gaps)
   // Brighter on hover
   ctx.fillStyle = isHovered ? '#ff6666' : '#f44';
-  
+
   // Optional: white glow if hovered
   if (isHovered) {
     ctx.save();
@@ -1401,7 +1511,7 @@ class Animal {
     } else if (!gameState.isFinished) {
       // Voronoi-style Spatial Relaxation (Lloyd's Algorithm variation)
       // Only runs for animals not currently in the family tree
-      if (Date.now() % 4 === 0) { 
+      if (Date.now() % 4 === 0) {
         let forceX = 0, forceY = 0;
         let count = 0;
         const spacing = 150; // Desired minimum spacing
@@ -1410,7 +1520,7 @@ class Animal {
           if (o === this) return;
           const dx = this.x - o.x, dy = this.y - o.y;
           const d2 = dx * dx + dy * dy;
-          
+
           // Influence falls off with distance
           if (d2 < spacing * spacing) {
             const d = Math.sqrt(d2);
@@ -1425,7 +1535,7 @@ class Animal {
         const edgePush = 1.0;
         const boundaryPadding = 20;
         const spriteSize = 64;
-        
+
         if (this.x < spacing + boundaryPadding) {
           forceX += (1 - (this.x - boundaryPadding) / spacing) * edgePush;
         }
@@ -1445,10 +1555,10 @@ class Animal {
         }
       }
 
-      if (this.state !== 'idle') { 
+      if (this.state !== 'idle') {
         const s = this.state === 'walk' ? 1 : 2.5;
-        const curr = Math.sqrt(this.vx * this.vx + this.vy * this.vy); 
-        if (curr > s) { this.vx = (this.vx / curr) * s; this.vy = (this.vy / curr) * s; } 
+        const curr = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+        if (curr > s) { this.vx = (this.vx / curr) * s; this.vy = (this.vy / curr) * s; }
       }
       if (--this.moveTimer <= 0) this.setRandomBehavior();
     } else {
@@ -1457,21 +1567,21 @@ class Animal {
 
     if (this.state !== 'idle' && this.state !== 'death') this.updateDir();
     this.x += this.vx; this.y += this.vy;
-    
+
     // Hard constraints with padding to keep sprites fully inside the boundary box
     const padding = 20;
     const spriteSize = 64;
-    if (this.x < padding) { 
-      this.x = padding; this.vx *= -1; 
-    } else if (this.x > FIELD_WIDTH - padding - spriteSize) { 
-      this.x = FIELD_WIDTH - padding - spriteSize; this.vx *= -1; 
+    if (this.x < padding) {
+      this.x = padding; this.vx *= -1;
+    } else if (this.x > FIELD_WIDTH - padding - spriteSize) {
+      this.x = FIELD_WIDTH - padding - spriteSize; this.vx *= -1;
     }
-    if (this.y < padding) { 
-      this.y = padding; this.vy *= -1; 
-    } else if (this.y > FIELD_HEIGHT - padding - spriteSize) { 
-      this.y = FIELD_HEIGHT - padding - spriteSize; this.vy *= -1; 
+    if (this.y < padding) {
+      this.y = padding; this.vy *= -1;
+    } else if (this.y > FIELD_HEIGHT - padding - spriteSize) {
+      this.y = FIELD_HEIGHT - padding - spriteSize; this.vy *= -1;
     }
-    
+
     // Post-game override for killer death state
     if (gameState.isFinished && this.rabbit.id === killerId && gameState.wasSuccess) {
       // Only show as dead if we've reached our target (or have no target)
@@ -1507,24 +1617,24 @@ class Animal {
       const pulse = Math.sin(Date.now() / 300) * 0.3 + 0.7; // Pulsing effect
       const glowRadius = sz * (0.6 + pulse * 0.2);
 
-    ctx.save();
+      ctx.save();
       // Using a simpler arc fill instead of shadowBlur for better performance
       ctx.globalAlpha = 0.3 * pulse;
       ctx.beginPath();
       ctx.arc(sx + sz / 2, sy + sz / 2, glowRadius, 0, Math.PI * 2);
       ctx.fillStyle = `hsl(${this.rabbit.tint.hue}, 100%, 70%)`;
       ctx.fill();
-    ctx.restore();
+      ctx.restore();
     }
 
     if (selectedHare === this) {
       const pulse = Math.sin(Date.now() / 200) * 0.1 + 0.9;
-      
+
       // Draw pixelated donut on a larger scratch canvas (64x64) to prevent clipping
       pCtx.clearRect(0, 0, 64, 64);
       pCtx.imageSmoothingEnabled = false;
       pCtx.beginPath();
-      
+
       // We center the animal in the 64x64 space. 
       // Animal sprite is 32x32. In 64x64, its base (feet) is at y ≈ 46
       pCtx.ellipse(32, 46, 16 * pulse, 8 * pulse, 0, 0, Math.PI * 2);
@@ -1537,9 +1647,9 @@ class Animal {
       // Draw the 64x64 scratch canvas centered on the animal.
       // Since the scratch is 2x the native sprite size (32), 
       // we draw it at 2x sz to keep pixel sizes consistent.
-      ctx.drawImage(pixelCanvas, 
-        Math.floor(sx - sz / 2), 
-        Math.floor(sy - sz / 2), 
+      ctx.drawImage(pixelCanvas,
+        Math.floor(sx - sz / 2),
+        Math.floor(sy - sz / 2),
         sz * 2, sz * 2
       );
       ctx.restore();
@@ -1565,13 +1675,13 @@ class Animal {
     }
     // Draw Name and Age with high-readability background
     const fontSize = Math.max(11, Math.floor(13 * camera.zoom));
-    ctx.font = `bold ${fontSize}px Arial, sans-serif`; 
+    ctx.font = `bold ${fontSize}px Arial, sans-serif`;
     const label = this.nameLabel;
     // Scale the cached width based on the actual font size being used (accounts for the 11px floor)
     const labelWidth = this.nameWidth * (fontSize / 13);
     const padX = 6 * camera.zoom, padY = 2 * camera.zoom;
     const bgW = labelWidth + padX * 2, bgH = fontSize + padY * 2;
-    
+
     // Stagger height to prevent horizontal overlap in family trees
     const staggerY = (this.rabbit.id % 2 === 0) ? 0 : (fontSize * 0.6);
     const bgX = sx + sz / 2 - bgW / 2, bgY = sy + sz + 5 * camera.zoom + staggerY;
@@ -1584,16 +1694,16 @@ class Animal {
 
     // Text
     ctx.fillStyle = getHSL(this.rabbit);
-    ctx.textAlign = 'center'; 
+    ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
     ctx.fillText(label, sx + sz / 2, bgY + padY);
 
-    if (this.rabbit.dnaRelation) { 
+    if (this.rabbit.dnaRelation) {
       // Use abbreviations and smaller text when zoomed out far
       const isZoomedOut = camera.zoom < 0.5;
       const relFontSize = isZoomedOut ? Math.max(9, Math.floor(11 * camera.zoom * 1.5)) : fontSize;
-      ctx.font = `bold ${relFontSize}px Arial`; 
-      
+      ctx.font = `bold ${relFontSize}px Arial`;
+
       let relationText = this.rabbit.dnaRelation;
       if (isZoomedOut) {
         relationText = relationText
@@ -1607,13 +1717,13 @@ class Animal {
       }
 
       const dnaLabel = `🧬 ${relationText}`;
-      
+
       const words = dnaLabel.split(' ');
       let line = '';
       const lines = [];
       // Ensure a minimum width on screen (60px) so boxes don't get too narrow when zoomed out
       const maxW = Math.max((isZoomedOut ? 120 : 80) * camera.zoom, 60);
-      
+
       for (let n = 0; n < words.length; n++) {
         const testLine = line + words[n] + ' ';
         const metrics = ctx.measureText(testLine);
@@ -1629,7 +1739,7 @@ class Animal {
       const dW = Math.max(...lines.map(l => ctx.measureText(l).width)) + padX * 2;
       const lineH = relFontSize + padY;
       const dH = lines.length * lineH + padY;
-      
+
       // Removed stagger for DNA label (too tall)
       const dX = sx + sz / 2 - dW / 2;
       const dY = Math.max(5, sy - dH - 5 * camera.zoom);
@@ -1650,14 +1760,14 @@ class Animal {
       // Partial scaling for bubbles: they stay larger when zoomed out
       const isHovered = hoveredBubbleId === this.rabbit.id;
       const bubbleScale = (camera.zoom * 0.4 + 0.6) * (isHovered ? 1.2 : 1.0);
-      
+
       const bw = 30 * bubbleScale, bh = 25 * bubbleScale, r = 5 * bubbleScale;
       const bx = sx + sz * 0.8, by = sy - 15 * camera.zoom;
-      
+
       const s = Math.max(0, Math.min(100, this.rabbit.tint.saturate)), l = Math.max(0, Math.min(100, this.rabbit.tint.brightness));
       const brightness = isHovered ? Math.min(100, l + 20) : l;
       ctx.fillStyle = `hsla(${this.rabbit.tint.hue}, ${s}%, ${brightness}%, 0.9)`;
-      
+
       // Add a slight white border if hovered
       if (isHovered) {
         ctx.shadowBlur = 10;
@@ -1667,15 +1777,15 @@ class Animal {
       ctx.beginPath();
       ctx.roundRect(bx, by - bh, bw, bh, r);
       ctx.fill();
-      
+
       ctx.beginPath(); ctx.moveTo(bx + 5 * bubbleScale, by); ctx.lineTo(bx + 15 * bubbleScale, by); ctx.lineTo(bx + 10 * bubbleScale, by + 5 * bubbleScale); ctx.fill();
-      
+
       ctx.shadowBlur = 0; // Reset shadow
-      ctx.fillStyle = 'white'; 
+      ctx.fillStyle = 'white';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.font = `bold ${Math.floor(14 * bubbleScale)}px Arial`; 
-      ctx.fillText('?', bx + bw / 2, by - bh / 2); 
+      ctx.font = `bold ${Math.floor(14 * bubbleScale)}px Arial`;
+      ctx.fillText('?', bx + bw / 2, by - bh / 2);
     }
   }
 }
@@ -1742,24 +1852,24 @@ function drawTutorialGuide() {
   const bubbleScale = 1.2;
   const bw = 30 * bubbleScale, bh = 25 * bubbleScale, r = 5 * bubbleScale;
   const bx = drawX + sz * 0.9, by = drawY + 25; // Moved down and right to avoid overlap
-  
+
   const s = Math.max(0, Math.min(100, animal.rabbit.tint.saturate));
   const l = Math.max(0, Math.min(100, animal.rabbit.tint.brightness));
   tCtx.fillStyle = `hsla(${animal.rabbit.tint.hue}, ${s}%, ${l}%, 0.9)`;
-  
+
   tCtx.beginPath();
   tCtx.roundRect(bx, by - bh, bw, bh, r);
   tCtx.fill();
-  tCtx.beginPath(); 
-  tCtx.moveTo(bx + 5 * bubbleScale, by); 
-  tCtx.lineTo(bx + 15 * bubbleScale, by); 
-  tCtx.lineTo(bx + 10 * bubbleScale, by + 5 * bubbleScale); 
+  tCtx.beginPath();
+  tCtx.moveTo(bx + 5 * bubbleScale, by);
+  tCtx.lineTo(bx + 15 * bubbleScale, by);
+  tCtx.lineTo(bx + 10 * bubbleScale, by + 5 * bubbleScale);
   tCtx.fill();
-  
-  tCtx.fillStyle = 'white'; 
+
+  tCtx.fillStyle = 'white';
   tCtx.textAlign = 'center';
   tCtx.textBaseline = 'middle';
-  tCtx.font = `bold ${Math.floor(14 * bubbleScale)}px Arial`; 
+  tCtx.font = `bold ${Math.floor(14 * bubbleScale)}px Arial`;
   tCtx.fillText('?', bx + bw / 2, by - bh / 2);
 }
 
@@ -1767,7 +1877,7 @@ function drawTutorialGuide() {
 function updateTreeDiagram() {
   const minSpacingX = 80, minSpacingY = 120;
   const preferredSpacingX = 160, preferredSpacingY = 160;
-  
+
   const hareToTree = new Map(), trees = [];
   playerConnections.forEach(c => {
     let tA = hareToTree.get(c.parentId), tB = hareToTree.get(c.childId);
@@ -1793,9 +1903,9 @@ function updateTreeDiagram() {
       childrenMap.get(c.parentId).push(c.childId);
     });
 
-    const walk = (id, l) => { 
-      lvls.set(id, Math.max(lvls.get(id) || 0, l)); 
-      (childrenMap.get(id) || []).forEach(cid => walk(cid, l + 1)); 
+    const walk = (id, l) => {
+      lvls.set(id, Math.max(lvls.get(id) || 0, l));
+      (childrenMap.get(id) || []).forEach(cid => walk(cid, l + 1));
     };
     roots.forEach(r => walk(r, 0));
 
@@ -1815,10 +1925,10 @@ function updateTreeDiagram() {
         }
       });
     }
-    
-    const grps = []; 
+
+    const grps = [];
     lvls.forEach((l, id) => { if (!grps[l]) grps[l] = []; grps[l].push(id); });
-    
+
     // Filter out any holes in grps to prevent crashes in the loops below
     const validGrps = grps.filter(Boolean);
 
@@ -1983,7 +2093,7 @@ function updateTreeDiagram() {
           minTargetX = Math.min(minTargetX, tx);
           maxTargetX = Math.max(maxTargetX, tx);
           h.targetX = tx;
-        h.targetY = startY + l * spy;
+          h.targetY = startY + l * spy;
         }
       });
     });
@@ -2033,10 +2143,14 @@ function updateUI() {
 
   const playAgainUi = document.getElementById('play-again-ui');
   if (gameState.isFinished) {
-    if (playAgainUi) playAgainUi.style.display = 'block';
+    if (playAgainUi) {
+      playAgainUi.style.display = 'block';
+      const hasMoreCases = gameState.caseIndex < MAX_CASES_PER_DAY - 1;
+      playAgainUi.textContent = hasMoreCases ? 'SOLVE ANOTHER CASE' : 'PLAY AGAIN TOMORROW';
+    }
     if (selectedHare) {
-      sPanel.style.display = 'block'; 
-      sName.textContent = `${selectedHare.rabbit.firstName} (${CURRENT_YEAR - selectedHare.rabbit.birthYear})`; 
+      sPanel.style.display = 'block';
+      sName.textContent = `${selectedHare.rabbit.firstName} (${CURRENT_YEAR - selectedHare.rabbit.birthYear})`;
       sSpec.textContent = `${selectedHare.rabbit.species}, ${selectedHare.rabbit.sex === 'M' ? 'Male' : 'Female'}`;
       dnaBtn.style.display = 'none';
       accBtn.style.display = 'none';
@@ -2047,17 +2161,17 @@ function updateUI() {
   if (playAgainUi) playAgainUi.style.display = 'none';
 
   if (selectedHare) {
-    sPanel.style.display = 'block'; 
-    sName.textContent = `${selectedHare.rabbit.firstName} (${CURRENT_YEAR - selectedHare.rabbit.birthYear})`; 
+    sPanel.style.display = 'block';
+    sName.textContent = `${selectedHare.rabbit.firstName} (${CURRENT_YEAR - selectedHare.rabbit.birthYear})`;
     sSpec.textContent = `${selectedHare.rabbit.species}, ${selectedHare.rabbit.sex === 'M' ? 'Male' : 'Female'}`;
     const hint = document.getElementById('selection-hint'); if (hint) hint.style.display = 'block';
     if (dnaTestsRemaining > 0) {
       dnaBtn.style.display = 'block'; accBtn.style.display = 'none';
-      if (selectedHare.rabbit.isTested) { 
-        dnaBtn.disabled = true; 
-        dnaBtn.style.opacity = '0.5'; 
+      if (selectedHare.rabbit.isTested) {
+        dnaBtn.disabled = true;
+        dnaBtn.style.opacity = '0.5';
         const pct = selectedHare.rabbit.dnaMatchPct;
-        dnaBtn.textContent = (pct !== null) ? `${pct}% MATCH` : 'TESTED'; 
+        dnaBtn.textContent = (pct !== null) ? `${pct}% MATCH` : 'TESTED';
       }
       else { dnaBtn.disabled = false; dnaBtn.style.opacity = '1.0'; dnaBtn.textContent = 'DNA TEST'; }
     } else { dnaBtn.style.display = 'none'; accBtn.style.display = 'block'; accBtn.style.opacity = '1.0'; }
@@ -2067,7 +2181,7 @@ function updateUI() {
 function updateTranscriptUI(newEntry, speakerId) {
   const container = document.getElementById('transcript-container');
   const list = document.getElementById('transcript-list');
-  
+
   function parseText(txt) {
     return txt.replace(/\[\[(\d+):(.*?)\]\]/g, (match, id, name) => {
       const r = rabbits.find(rb => rb.id == id);
@@ -2079,11 +2193,11 @@ function updateTranscriptUI(newEntry, speakerId) {
     const speaker = rabbits.find(r => r.id === speakerId);
     const speakerPart = speaker ? `<span class="animal-mention" data-id="${speaker.id}" style="color: ${getHSL(speaker)}; cursor: pointer;">${speaker.firstName}</span>: ` : "";
     const parsedText = parseText(newEntry);
-    
+
     // Trigger portrait animation
     portraitAnim.active = true;
     portraitAnim.timer = 0;
-    
+
     const entryEl = document.createElement('div');
     entryEl.className = 'transcript-entry';
     if (speaker) {
@@ -2092,7 +2206,7 @@ function updateTranscriptUI(newEntry, speakerId) {
       entryEl.classList.add('system-message');
     }
     entryEl.innerHTML = `${speakerPart}${parsedText}`;
-    
+
     // Prepend to make it reverse chronological (newest at top)
     list.prepend(entryEl);
 
@@ -2105,7 +2219,7 @@ function updateTranscriptUI(newEntry, speakerId) {
         if (hare) {
           const vw = canvas.width / camera.zoom;
           const vh = canvas.height / camera.zoom;
-          
+
           // Calculate the visible height of the game world (excluding the Case Log at the bottom)
           const transcriptEl = document.getElementById('transcript-container');
           const visibleTranscriptHeight = isTranscriptOpen ? (transcriptEl.offsetHeight) : 120;
@@ -2114,10 +2228,10 @@ function updateTranscriptUI(newEntry, speakerId) {
 
           // Center horizontally
           camera.x = hare.x + FRAME_SIZE - vw / 2;
-          
+
           // Center vertically in the visible portion of the screen
           camera.y = hare.y + FRAME_SIZE - visibleWorldHeight / 2;
-          
+
           constrainCamera();
 
           // Don't auto-select, just highlight them briefly
@@ -2185,7 +2299,7 @@ function showGameOver(isWin) {
   const gCanvas = document.getElementById('gameOverCanvas');
   if (!gCanvas) return;
   const gCtx = gCanvas.getContext('2d');
-  
+
   // Reset scroll state for this step
   if (scrollContainer) scrollContainer.dataset.hasScrolled = 'false';
 
@@ -2194,7 +2308,7 @@ function showGameOver(isWin) {
     if (!scrollContainer || !scrollHint) return;
     const isScrollable = scrollContainer.scrollHeight > scrollContainer.clientHeight;
     const isAtBottom = scrollContainer.scrollHeight - scrollContainer.scrollTop <= scrollContainer.clientHeight + 20;
-    
+
     if (!isScrollable || isAtBottom || scrollContainer.dataset.hasScrolled === 'true') {
       if (gameOverScrollHintTimeout) {
         clearTimeout(gameOverScrollHintTimeout);
@@ -2243,15 +2357,15 @@ function showGameOver(isWin) {
 
   // Only set endTime if not already finished (prevents overwriting on view-farm re-entry)
   if (!gameState.isFinished) {
-  gameState.isFinished = true;
-  gameState.wasSuccess = isWin;
+    gameState.isFinished = true;
+    gameState.wasSuccess = isWin;
     gameState.endTime = Date.now();
-  saveGame();
+    saveGame();
   }
 
   modal.style.display = 'flex';
   if (gameOverHandle) cancelAnimationFrame(gameOverHandle);
-  
+
   const killer = rabbits.find(r => r.id === killerId);
   if (!killerQuote) {
     const rawQuote = pick(VILLAIN_QUOTES);
@@ -2316,16 +2430,28 @@ function showGameOver(isWin) {
       title.style.color = "#ff4444";
       const innocent = selectedHare ? selectedHare.rabbit : { firstName: "The suspect", species: "animal", tint: { hue: 0, saturate: 0, brightness: 50 } };
       msg.innerHTML = `<span style="color: ${getHSL(innocent)}; font-weight: bold;">${innocent.firstName}</span> was innocent. It was <span style="color: ${getHSL(killer)}; font-weight: bold;">${killer.firstName}</span>!${timeStr}${statsLine}`;
-      
+
       gameOverAnimTimer += 0.1;
       const frame = Math.floor(gameOverAnimTimer) % 6;
       gCtx.save();
       gCtx.filter = `hue-rotate(${killer.tint.hue}deg) saturate(${killer.tint.saturate}%) brightness(${killer.tint.brightness}%)`;
       gCtx.drawImage(sprites[killer.species].walk, frame * 32, 0, 32, 32, centerX - 32, centerY - 32, 64, 64);
       gCtx.restore();
-      
+
       nextBtn.style.display = "none";
       viewFarmBtn.style.display = "block";
+
+      const solveAnotherBtn = document.getElementById('game-over-solve-another');
+      if (solveAnotherBtn) {
+        const hasMoreCases = gameState.caseIndex < MAX_CASES_PER_DAY - 1;
+        solveAnotherBtn.style.display = hasMoreCases ? "block" : "none";
+        solveAnotherBtn.onclick = () => {
+          if (gameOverHandle) cancelAnimationFrame(gameOverHandle);
+          const playAgainBtn = document.getElementById('play-again-ui');
+          if (playAgainBtn) playAgainBtn.click();
+        };
+      }
+
       updateScrollHint();
       gameOverHandle = requestAnimationFrame(gLoop);
       return;
@@ -2334,7 +2460,7 @@ function showGameOver(isWin) {
     if (gameOverStep === 0) {
       title.textContent = "CASE SOLVED!";
       title.style.color = "#44ff44";
-      
+
       const stats = getStats();
       // Use pre-win count for rank display before the promotion screen
       const rank = getRank(isWin ? (stats.lifetimeWins - 1) : stats.lifetimeWins);
@@ -2347,20 +2473,22 @@ function showGameOver(isWin) {
       else if (det === 'marmot') detName = "MISS MARMOT";
 
       msg.innerHTML = `${titlePrefix} ${detName} has found the killer! <span style="color: ${getHSL(killer)}; font-weight: bold;">${killer.firstName}</span> has been apprehended.${timeStr}${statsLine}`;
-      
+
       gCtx.save();
       gCtx.filter = `hue-rotate(${killer.tint.hue}deg) saturate(${killer.tint.saturate}%) brightness(${killer.tint.brightness}%)`;
       gCtx.drawImage(sprites[killer.species].idle, 0, 0, 32, 32, centerX - 32, centerY - 32, 64, 64);
       gCtx.restore();
-      
+
       nextBtn.textContent = "NEXT";
       nextBtn.style.display = "block";
       viewFarmBtn.style.display = "none";
+      const solveAnotherBtn = document.getElementById('game-over-solve-another');
+      if (solveAnotherBtn) solveAnotherBtn.style.display = "none";
       updateScrollHint();
     } else if (gameOverStep === 1) {
       title.textContent = "THE CONFESSION";
       msg.innerHTML = `<span style="color: ${getHSL(killer)}; font-weight: bold;">${killer.firstName}</span>: "${killerQuote}"${timeStr}${statsLine}`;
-      
+
       gCtx.save();
       gCtx.filter = `hue-rotate(${killer.tint.hue}deg) saturate(${killer.tint.saturate}%) brightness(${killer.tint.brightness}%)`;
       gCtx.drawImage(sprites[killer.species].idle, 0, 0, 32, 32, centerX - 32, centerY - 32, 64, 64);
@@ -2368,6 +2496,8 @@ function showGameOver(isWin) {
 
       nextBtn.style.display = "block";
       viewFarmBtn.style.display = "none";
+      const solveAnotherBtn = document.getElementById('game-over-solve-another');
+      if (solveAnotherBtn) solveAnotherBtn.style.display = "none";
       updateScrollHint();
     } else if (gameOverStep === 2) {
       title.textContent = "JUSTICE";
@@ -2375,6 +2505,8 @@ function showGameOver(isWin) {
 
       // Show view-farm button instead of next until execution is finished
       viewFarmBtn.style.display = "none";
+      const solveAnotherBtn = document.getElementById('game-over-solve-another');
+      if (solveAnotherBtn) solveAnotherBtn.style.display = "none";
       updateScrollHint();
 
       const spr = sprites[killer.species].idle;
@@ -2388,6 +2520,7 @@ function showGameOver(isWin) {
       if (killer.species === 'Grouse') spriteNeckY = 14; // Raise neck line (chop less shoulder)
       else if (killer.species === 'Deer') spriteNeckY = 10; // Deer has a very high neck
       else if (killer.species === 'Boar') spriteNeckY = 19;
+      else if (killer.species === 'Fox') spriteNeckY = 22; // Move fox neck line down (was default 16)
 
       // Calculate bodyY such that the sprite's neck aligns with the guillotine's neckY
       const bodyY = neckY - (spriteNeckY * 2);
@@ -2437,7 +2570,7 @@ function showGameOver(isWin) {
       // Draw from spriteNeckY down to the bottom of the sprite (32px)
       gCtx.drawImage(spr, 0, spriteNeckY, 32, 32 - spriteNeckY, bodyX, neckY, 64, (32 - spriteNeckY) * 2);
       gCtx.restore();
-      
+
       // 4. Draw the Slanted Blade (Inside the frame)
       gCtx.fillStyle = '#aaa'; // Metal
       gCtx.beginPath();
@@ -2541,20 +2674,22 @@ function showGameOver(isWin) {
       if (isCut && headPhysics.vx === 0) {
         nextBtn.style.display = "block";
         nextBtn.textContent = "SERVICE RECORD";
+        const solveAnotherBtn = document.getElementById('game-over-solve-another');
+        if (solveAnotherBtn) solveAnotherBtn.style.display = "none";
       }
     } else if (gameOverStep === 3) {
       title.textContent = "SERVICE RECORD";
       const stats = getStats();
       const winsBefore = stats.lifetimeWins - 1;
       const winsAfter = stats.lifetimeWins;
-      
+
       const rankBefore = getRank(winsBefore);
       const rankAfter = getRank(winsAfter);
       const promoted = rankAfter.index > rankBefore.index;
-      
+
       const isPromotedState = promoted && gameOverAnimTimer > 120;
       let currentWins = (gameOverAnimTimer > 60) ? winsAfter : winsBefore;
-      
+
       if (promoted && gameOverAnimTimer === 120) {
         triggerHaptic();
       }
@@ -2579,7 +2714,7 @@ function showGameOver(isWin) {
       if (badge) {
         gCtx.drawImage(badge, 0, 0, 64, 64, Math.floor(startX), Math.floor(drawY), 128, 128);
       }
-      
+
       if (isPromotedState) {
         const spr = detectiveSprites[gameState.detective + '_celebration'];
         if (spr && spr.complete) {
@@ -2612,7 +2747,7 @@ function showGameOver(isWin) {
       const titlePrefix = rank.title.charAt(0) + rank.title.slice(1).toLowerCase();
 
       msg.innerHTML = `Justice is served. The farm is safe once again.<br><br><b>${titlePrefix} ${detName}</b> has cracked the case!${timeStr}${statsLine}`;
-      
+
       const spr = detectiveSprites[det + '_celebration'];
       if (spr && spr.complete) {
         gCtx.save();
@@ -2643,18 +2778,30 @@ function showGameOver(isWin) {
           gCtx.drawImage(baseSpr, 0, 0, 64, 64, centerX - 48, centerY - 48, 96, 96);
           gCtx.restore();
         } else {
-      gCtx.font = "40px Arial";
-      gCtx.textAlign = "center";
-      gCtx.fillText("🏆", centerX, centerY);
+          gCtx.font = "40px Arial";
+          gCtx.textAlign = "center";
+          gCtx.fillText("🏆", centerX, centerY);
         }
       }
-      
+
       gameOverAnimTimer += 1;
       nextBtn.style.display = "none";
       viewFarmBtn.style.display = "block";
+
+      const solveAnotherBtn = document.getElementById('game-over-solve-another');
+      if (solveAnotherBtn) {
+        const hasMoreCases = gameState.caseIndex < MAX_CASES_PER_DAY - 1;
+        solveAnotherBtn.style.display = hasMoreCases ? "block" : "none";
+        solveAnotherBtn.onclick = () => {
+          if (gameOverHandle) cancelAnimationFrame(gameOverHandle);
+          const playAgainBtn = document.getElementById('play-again-ui');
+          if (playAgainBtn) playAgainBtn.click();
+        };
+      }
+
       updateScrollHint();
     }
-    
+
     gameOverHandle = requestAnimationFrame(gLoop);
   }
   gLoop();
@@ -2664,16 +2811,16 @@ function drawAnimalPreview(canvasId, nameId, animal) {
   const canvas = document.getElementById(canvasId);
   const nameDiv = document.getElementById(nameId);
   if (!canvas || !nameDiv) return;
-  
+
   const ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.imageSmoothingEnabled = false;
-  
+
   const tintedSpr = getTintedSprite(animal.rabbit || animal, 'idle');
   if (tintedSpr) {
     ctx.drawImage(tintedSpr, 0, 0, 32, 32, 0, 0, 64, 64);
   }
-  
+
   const rabbit = animal.rabbit || animal;
   nameDiv.textContent = `${rabbit.firstName} (${CURRENT_YEAR - rabbit.birthYear})`;
   nameDiv.style.color = getHSL(rabbit);
@@ -2690,7 +2837,7 @@ function showDNAModal(animal) {
   const resultText = document.getElementById('dna-result-text');
   const doneBtn = document.getElementById('dna-done-btn');
   const progressBar = document.getElementById('dna-progress-bar');
-  
+
   const confirmStep = document.getElementById('dna-confirm-step');
   const animStep = document.getElementById('dna-anim-step');
   const confirmText = document.getElementById('dna-confirm-text');
@@ -2706,7 +2853,7 @@ function showDNAModal(animal) {
   animStep.style.display = 'none';
   resultBox.style.display = 'none';
   progressBar.style.width = '0%';
-  
+
   drawAnimalPreview('dna-confirm-canvas', 'dna-confirm-name', animal);
   confirmText.textContent = `Are you sure you want to test ${animal.rabbit.firstName}'s DNA? This will use 1 of your remaining DNA tests.`;
 
@@ -2729,10 +2876,10 @@ function showDNAModal(animal) {
 
   function startDNAAnimation() {
     title.textContent = "ANALYZING DNA...";
-    
+
     isKiller = animal.rabbit.id === killerId;
     isDnaSuccess = isKiller;
-    
+
     // 1. Build ancestor maps including the individuals themselves (dist 0)
     const a1 = getAncestors(killerId);
     a1.set(killerId, 0);
@@ -2756,12 +2903,12 @@ function showDNAModal(animal) {
 
     // 4. Calculate Relationship Label
     rel = getRelationshipLabel(mrcas.filter(c => c.dist1 > 0 || c.dist2 > 0), killerId, animal.rabbit.id);
-    
+
     // 5. Calculate match percentage
-    kinshipMemo.clear(); 
+    kinshipMemo.clear();
     const k = kinship(killerId, animal.rabbit.id);
     matchPct = isKiller ? 100 : parseFloat((k * 200).toFixed(3));
-    
+
     if (isKiller) {
       dnaResultText = `100% MATCH DETECTED!\n${animal.rabbit.firstName} is the killer!`;
     } else {
@@ -2793,7 +2940,9 @@ function showDNAModal(animal) {
 
       // Draw detective in lab coat
       if (labSpr && labSpr.complete) {
-        dCtx.drawImage(labSpr, centerX - 96, centerY - 48, 96, 96);
+        // Draw at 2x scale (192x192) to match other detective portraits (which are 64px source -> 128px screen)
+        // Positioned on the left of the new 300px wide canvas
+        dCtx.drawImage(labSpr, 0, 0, 96, 96, 10, 4, 192, 192);
       }
 
       // Draw DNA animation
@@ -2801,7 +2950,8 @@ function showDNAModal(animal) {
         const frame = Math.floor((dnaAnimTimer % 60) / (60 / 16));
         const sx = (frame % 4) * 64;
         const sy = Math.floor(frame / 4) * 64;
-        dCtx.drawImage(dnaSpr, sx, sy, 64, 64, centerX + 16, centerY - 32, 64, 64);
+        // Draw at 2x scale (128x128) to match the detective's pixel size
+        dCtx.drawImage(dnaSpr, sx, sy, 64, 64, 210, 36, 128, 128);
       }
     } else {
       // Phase 2: Show Result
@@ -2810,21 +2960,24 @@ function showDNAModal(animal) {
       resultBox.style.display = 'block';
       resultText.textContent = dnaResultText;
 
-      // Draw animal tested in the lab
+      // Draw animal tested in the lab - center on the new 350px canvas
       const spr = sprites[animal.rabbit.species].idle;
+      const centerX350 = dCanvas.width / 2;
+      const centerY200 = dCanvas.height / 2;
+
       dCtx.save();
       dCtx.filter = `hue-rotate(${animal.rabbit.tint.hue}deg) saturate(${animal.rabbit.tint.saturate}%) brightness(${animal.rabbit.tint.brightness}%)`;
-      dCtx.drawImage(spr, 0, 0, 32, 32, centerX - 32, centerY - 32, 64, 64);
+      dCtx.drawImage(spr, 0, 0, 32, 32, centerX350 - 32, centerY200 - 32, 64, 64);
       dCtx.restore();
 
       // Show result indicators (matching farm screen style)
       dCtx.textAlign = 'center';
-      
+
       // Top Label (DNA connection)
       const fuzzyRel = getDNARelationshipLabel(isKiller ? "self" : rel);
       const dnaLabel = `🧬 ${fuzzyRel}`;
       dCtx.font = "bold 14px Arial";
-      
+
       const words = dnaLabel.split(' ');
       let line = '';
       const lines = [];
@@ -2844,17 +2997,17 @@ function showDNAModal(animal) {
       const lineH = 18;
       const dH = lines.length * lineH + 6;
       const dW = Math.max(...lines.map(l => dCtx.measureText(l).width)) + 12;
-      const dY = centerY - 65;
+      const dY = centerY200 - 65;
 
       dCtx.fillStyle = 'rgba(0, 0, 0, 0.6)';
       dCtx.beginPath();
-      dCtx.roundRect(centerX - dW / 2, dY - dH, dW, dH, 4);
+      dCtx.roundRect(centerX350 - dW / 2, dY - dH, dW, dH, 4);
       dCtx.fill();
-      
+
       dCtx.fillStyle = '#44ff44';
       dCtx.textBaseline = 'middle';
       lines.forEach((l, i) => {
-        dCtx.fillText(l.trim(), centerX, dY - dH + (i + 0.5) * lineH + 3);
+        dCtx.fillText(l.trim(), centerX350, dY - dH + (i + 0.5) * lineH + 3);
       });
 
       // Bottom Label (Name)
@@ -2863,11 +3016,11 @@ function showDNAModal(animal) {
       const nW = nMetrics.width + 12, nH = 20;
       dCtx.fillStyle = 'rgba(0, 0, 0, 0.6)';
       dCtx.beginPath();
-      dCtx.roundRect(centerX - nW / 2, centerY + 40, nW, nH, 4);
+      dCtx.roundRect(centerX350 - nW / 2, centerY200 + 40, nW, nH, 4);
       dCtx.fill();
       dCtx.fillStyle = getHSL(animal.rabbit);
-      dCtx.fillText(nameLabel, centerX, centerY + 55);
-      
+      dCtx.fillText(nameLabel, centerX350, centerY200 + 55);
+
       cancelAnimationFrame(dnaHandle);
       return;
     }
@@ -2879,7 +3032,7 @@ function showDNAModal(animal) {
   doneBtn.onclick = () => {
     modal.style.display = 'none';
     if (dnaHandle) cancelAnimationFrame(dnaHandle);
-    
+
     // Finalize the test in the game state
     animal.rabbit.isTested = true;
     animal.rabbit.dnaMatchPct = matchPct;
@@ -2913,7 +3066,7 @@ function toggleTranscript() {
   const container = document.getElementById('transcript-container');
   const list = document.getElementById('transcript-list');
   const toggle = document.getElementById('transcript-toggle');
-  
+
   isTranscriptOpen = !isTranscriptOpen;
   if (isTranscriptOpen) {
     container.classList.add('open');
@@ -2961,71 +3114,71 @@ let dnaAnimTimer = 0;
 let dnaTargetAnimal = null;
 let dnaResultText = "";
 let isDnaSuccess = false;
-  function showIntro(isMidGameChangeParam = false) {
-    gameState.isMidGameChange = isMidGameChangeParam;
-    const modal = document.getElementById('intro-modal');
-    if (!modal) return;
-    const scrollContainer = document.getElementById('intro-scroll-container');
-    const scrollHint = document.getElementById('intro-scroll-hint');
-    const title = document.getElementById('intro-title');
-    const textContainer = document.getElementById('intro-text');
-    const btn = document.getElementById('intro-next');
-    const iCanvas = document.getElementById('introCanvas');
-    if (!iCanvas) return;
-    const iCtx = iCanvas.getContext('2d');
-    const charSelection = document.getElementById('character-selection');
-    
-    // Reset scroll state for this step
-    if (scrollContainer) scrollContainer.dataset.hasScrolled = 'false';
+function showIntro(isMidGameChangeParam = false) {
+  gameState.isMidGameChange = isMidGameChangeParam;
+  const modal = document.getElementById('intro-modal');
+  if (!modal) return;
+  const scrollContainer = document.getElementById('intro-scroll-container');
+  const scrollHint = document.getElementById('intro-scroll-hint');
+  const title = document.getElementById('intro-title');
+  const textContainer = document.getElementById('intro-text');
+  const btn = document.getElementById('intro-next');
+  const iCanvas = document.getElementById('introCanvas');
+  if (!iCanvas) return;
+  const iCtx = iCanvas.getContext('2d');
+  const charSelection = document.getElementById('character-selection');
 
-    modal.style.display = 'flex';
-    updateScrollHint(); // Initial check
+  // Reset scroll state for this step
+  if (scrollContainer) scrollContainer.dataset.hasScrolled = 'false';
 
-    // Function to check if scrolling is needed and show/hide hint
-    function updateScrollHint() {
-      if (!modal || !scrollContainer || !scrollHint || modal.style.display === 'none') return;
-      const isScrollable = scrollContainer.scrollHeight > scrollContainer.clientHeight;
-      const isAtBottom = scrollContainer.scrollHeight - scrollContainer.scrollTop <= scrollContainer.clientHeight + 20;
-      
-      if (!isScrollable || isAtBottom || scrollContainer.dataset.hasScrolled === 'true') {
-        if (introScrollHintTimeout) {
-          clearTimeout(introScrollHintTimeout);
+  modal.style.display = 'flex';
+  updateScrollHint(); // Initial check
+
+  // Function to check if scrolling is needed and show/hide hint
+  function updateScrollHint() {
+    if (!modal || !scrollContainer || !scrollHint || modal.style.display === 'none') return;
+    const isScrollable = scrollContainer.scrollHeight > scrollContainer.clientHeight;
+    const isAtBottom = scrollContainer.scrollHeight - scrollContainer.scrollTop <= scrollContainer.clientHeight + 20;
+
+    if (!isScrollable || isAtBottom || scrollContainer.dataset.hasScrolled === 'true') {
+      if (introScrollHintTimeout) {
+        clearTimeout(introScrollHintTimeout);
+        introScrollHintTimeout = null;
+      }
+      scrollHint.style.display = 'none';
+    } else {
+      // Only start timer if not already running
+      if (!introScrollHintTimeout) {
+        introScrollHintTimeout = setTimeout(() => {
+          if (scrollContainer.dataset.hasScrolled === 'false') scrollHint.style.display = 'block';
           introScrollHintTimeout = null;
-        }
-        scrollHint.style.display = 'none';
-      } else {
-        // Only start timer if not already running
-        if (!introScrollHintTimeout) {
-          introScrollHintTimeout = setTimeout(() => {
-            if (scrollContainer.dataset.hasScrolled === 'false') scrollHint.style.display = 'block';
-            introScrollHintTimeout = null;
-          }, 2000);
-        }
+        }, 2000);
       }
     }
+  }
 
-    if (scrollHint) {
-      scrollHint.onclick = () => {
-        if (scrollContainer) {
-          scrollContainer.scrollTo({ top: scrollContainer.scrollHeight, behavior: 'smooth' });
-          scrollContainer.dataset.hasScrolled = 'true';
-        }
-        scrollHint.style.display = 'none';
-      };
-    }
-
-    // Attach scroll listener once
-    if (scrollContainer && !scrollContainer.dataset.listenerAttached) {
-      scrollContainer.addEventListener('scroll', () => {
+  if (scrollHint) {
+    scrollHint.onclick = () => {
+      if (scrollContainer) {
+        scrollContainer.scrollTo({ top: scrollContainer.scrollHeight, behavior: 'smooth' });
         scrollContainer.dataset.hasScrolled = 'true';
-        if (introScrollHintTimeout) clearTimeout(introScrollHintTimeout);
-        if (scrollHint) scrollHint.style.display = 'none';
-      });
-      scrollContainer.dataset.listenerAttached = 'true';
-    }
-  
+      }
+      scrollHint.style.display = 'none';
+    };
+  }
+
+  // Attach scroll listener once
+  if (scrollContainer && !scrollContainer.dataset.listenerAttached) {
+    scrollContainer.addEventListener('scroll', () => {
+      scrollContainer.dataset.hasScrolled = 'true';
+      if (introScrollHintTimeout) clearTimeout(introScrollHintTimeout);
+      if (scrollHint) scrollHint.style.display = 'none';
+    });
+    scrollContainer.dataset.listenerAttached = 'true';
+  }
+
   if (introHandle) cancelAnimationFrame(introHandle);
-  
+
   const killer = rabbits.find(r => r.id === killerId);
   const relatives = rabbits.filter(r => r.dnaRelation).map(r => ({
     ...r,
@@ -3042,7 +3195,7 @@ let isDnaSuccess = false;
     iCtx.fillStyle = '#151515';
     iCtx.fillRect(0, 0, iCanvas.width, iCanvas.height);
     iCtx.imageSmoothingEnabled = false;
-    
+
     const centerX = iCanvas.width / 2;
     const centerY = iCanvas.height / 2;
 
@@ -3081,143 +3234,183 @@ let isDnaSuccess = false;
       const step = needsSelection ? introStep - 1 : introStep;
 
       if (step === 0) {
-      title.textContent = "A HEINOUS CRIME";
-      textContainer.innerHTML = `<span style="color: ${getHSL(victim)}; font-weight: bold;">${victim.name}</span> the ${victim.species.replace('_', ' ')} was found dead in the clover field.${consentText}`;
-      
-      // Animate victim death (play once and stay)
-      introAnimTimer += 0.08;
-      const frame = Math.min(5, Math.floor(introAnimTimer));
-      const spr = sprites[victim.species].death;
-      // Draw at 2x size on the higher res canvas
-      iCtx.save();
-      iCtx.filter = `hue-rotate(${victim.tint.hue}deg) saturate(${victim.tint.saturate}%) brightness(${victim.tint.brightness}%)`;
-      iCtx.drawImage(spr, frame * 32, 0, 32, 32, centerX - 32, centerY - 32, 64, 64);
-      iCtx.restore();
-      btn.textContent = "NEXT";
-      } else if (step === 1) {
-      title.textContent = "MURDER MOST FOUL!";
-      textContainer.textContent = `DNA testing on the murder weapon reveals that the killer is a ${killer.sex === 'M' ? 'male' : 'female'} ${killer.species.replace('_', ' ')}.`;
-      
-      // Silhouette of killer
-      const spr = sprites[killer.species].idle;
-      iCtx.save();
-      // Light background circle for silhouette
-      iCtx.fillStyle = 'rgba(255,255,255,0.1)';
-      iCtx.beginPath();
-      iCtx.arc(centerX, centerY, 60, 0, Math.PI * 2);
-      iCtx.fill();
-      
-      iCtx.filter = 'brightness(0)';
-      iCtx.drawImage(spr, 0, 0, 32, 32, centerX - 32, centerY - 32, 64, 64);
-      iCtx.restore();
-      
-      // Red question mark
-      iCtx.fillStyle = '#ff4444';
-      iCtx.font = 'bold 48px Arial';
-      iCtx.textAlign = 'center';
-      iCtx.textBaseline = 'middle';
-      iCtx.fillText('?', centerX, centerY - 5);
-      btn.textContent = "NEXT";
-      } else if (step === 2) {
-      title.textContent = "DNA EVIDENCE";
-      textContainer.textContent = "The killer has two distant relatives in the DNA database.";
-        updateScrollHint();
-      
-      // Draw two relatives side-by-side
-      relatives.forEach((rel, idx) => {
-        const rx = idx === 0 ? centerX - 110 : centerX + 45; // Spread them slightly more
-        const ry = centerY - 10;
-        
-        // DNA text ABOVE (matching game UI) - with wrapping
-        iCtx.fillStyle = '#44ff44';
-        iCtx.font = 'bold 11px Arial';
-        iCtx.textAlign = 'center';
-        
-        const label = `🧬 ${rel.dnaRelation}`;
-        const words = label.split(' ');
-        let line = '';
-        const lines = [];
-        const maxWidth = 125; // Slightly wider for fuzzy labels
-        
-        for (let n = 0; n < words.length; n++) {
-          const testLine = line + words[n] + ' ';
-          const metrics = iCtx.measureText(testLine);
-          if (metrics.width > maxWidth && n > 0) {
-            lines.push(line);
-            line = words[n] + ' ';
-          } else {
-            line = testLine;
-          }
-        }
-        lines.push(line);
+        title.textContent = "A HEINOUS CRIME";
+        textContainer.innerHTML = `<span style="color: ${getHSL(victim)}; font-weight: bold;">${victim.name}</span> the ${victim.species.replace('_', ' ')} was found dead in the clover field.${consentText}`;
 
-        lines.forEach((l, i) => {
-          iCtx.fillText(l.trim(), rx + 32, ry - 15 - (lines.length - 1 - i) * 14);
-        });
-
-        // Sprite at 2x
+        // Animate victim death (play once and stay)
+        introAnimTimer += 0.08;
+        const frame = Math.min(5, Math.floor(introAnimTimer));
+        const spr = sprites[victim.species].death;
+        // Draw at 2x size on the higher res canvas
         iCtx.save();
-        iCtx.filter = `hue-rotate(${rel.tint.hue}deg) saturate(${rel.tint.saturate}%) brightness(${rel.tint.brightness}%)`;
-        iCtx.drawImage(sprites[rel.species].idle, 0, 0, 32, 32, rx, ry, 64, 64);
+        iCtx.filter = `hue-rotate(${victim.tint.hue}deg) saturate(${victim.tint.saturate}%) brightness(${victim.tint.brightness}%)`;
+        iCtx.drawImage(spr, frame * 32, 0, 32, 32, centerX - 32, centerY - 32, 64, 64);
         iCtx.restore();
-        
-        // Name BELOW
-        iCtx.fillStyle = getHSL(rel);
-        iCtx.font = 'bold 14px monospace';
+        btn.textContent = "NEXT";
+      } else if (step === 1) {
+        title.textContent = "MURDER MOST FOUL!";
+        textContainer.textContent = `DNA testing on the murder weapon reveals that the killer is a ${killer.sex === 'M' ? 'male' : 'female'} ${killer.species.replace('_', ' ')}.`;
+
+        // Silhouette of killer
+        const spr = sprites[killer.species].idle;
+        iCtx.save();
+        // Light background circle for silhouette
+        iCtx.fillStyle = 'rgba(255,255,255,0.1)';
+        iCtx.beginPath();
+        iCtx.arc(centerX, centerY, 60, 0, Math.PI * 2);
+        iCtx.fill();
+
+        iCtx.filter = 'brightness(0)';
+        iCtx.drawImage(spr, 0, 0, 32, 32, centerX - 32, centerY - 32, 64, 64);
+        iCtx.restore();
+
+        // Red question mark
+        iCtx.fillStyle = '#ff4444';
+        iCtx.font = 'bold 48px Arial';
         iCtx.textAlign = 'center';
-        iCtx.fillText(rel.firstName, rx + 32, ry + 80);
-      });
-      btn.textContent = "NEXT";
+        iCtx.textBaseline = 'middle';
+        iCtx.fillText('?', centerX, centerY - 5);
+        btn.textContent = "NEXT";
+      } else if (step === 2) {
+        title.textContent = "DNA EVIDENCE";
+        textContainer.textContent = "The killer has two distant relatives in the DNA database.";
+        updateScrollHint();
+
+        // Draw two relatives side-by-side
+        relatives.forEach((rel, idx) => {
+          const rx = idx === 0 ? centerX - 110 : centerX + 45; // Spread them slightly more
+          const ry = centerY - 10;
+
+          // DNA text ABOVE (matching game UI) - with wrapping
+          iCtx.fillStyle = '#44ff44';
+          iCtx.font = 'bold 11px Arial';
+          iCtx.textAlign = 'center';
+
+          const label = `🧬 ${rel.dnaRelation}`;
+          const words = label.split(' ');
+          let line = '';
+          const lines = [];
+          const maxWidth = 125; // Slightly wider for fuzzy labels
+
+          for (let n = 0; n < words.length; n++) {
+            const testLine = line + words[n] + ' ';
+            const metrics = iCtx.measureText(testLine);
+            if (metrics.width > maxWidth && n > 0) {
+              lines.push(line);
+              line = words[n] + ' ';
+            } else {
+              line = testLine;
+            }
+          }
+          lines.push(line);
+
+          lines.forEach((l, i) => {
+            iCtx.fillText(l.trim(), rx + 32, ry - 15 - (lines.length - 1 - i) * 14);
+          });
+
+          // Sprite at 2x
+          iCtx.save();
+          iCtx.filter = `hue-rotate(${rel.tint.hue}deg) saturate(${rel.tint.saturate}%) brightness(${rel.tint.brightness}%)`;
+          iCtx.drawImage(sprites[rel.species].idle, 0, 0, 32, 32, rx, ry, 64, 64);
+          iCtx.restore();
+
+          // Name BELOW
+          iCtx.fillStyle = getHSL(rel);
+          iCtx.font = 'bold 14px monospace';
+          iCtx.textAlign = 'center';
+          iCtx.fillText(rel.firstName, rx + 32, ry + 80);
+        });
+        btn.textContent = "NEXT";
       } else if (step === 3) {
-      title.textContent = "SOLVE THE CASE";
-      textContainer.innerHTML = "Click the speech bubbles to talk to animals for clues. Use your 3 DNA tests wisely.<br><br>Click one animal and then another to record a parent/child relationship and build your family tree.";
-      
-      // Draw a sample animal with a speech bubble
-      const sample = rabbits.find(r => r.id !== killerId) || rabbits[0];
-      const rx = centerX - 32;
-      const ry = centerY - 20;
+        title.textContent = "SOLVE THE CASE";
+        textContainer.innerHTML = "Click the speech bubbles to talk to animals for clues. Use your 3 DNA tests wisely.<br><br>Click one animal and then another to record a parent/child relationship and build your family tree.";
 
-      iCtx.save();
-      iCtx.filter = `hue-rotate(${sample.tint.hue}deg) saturate(${sample.tint.saturate}%) brightness(${sample.tint.brightness}%)`;
-      iCtx.drawImage(sprites[sample.species].idle, 0, 0, 32, 32, rx, ry, 64, 64);
-      iCtx.restore();
+        // Draw a sample animal with a speech bubble
+        const sample = rabbits.find(r => r.id !== killerId) || rabbits[0];
+        const rx = centerX - 32;
+        const ry = centerY - 20;
 
-      // Speech bubble
-      const bx = rx + 50, by = ry - 10, bw = 30, bh = 25, r = 5;
-      const s = Math.max(0, Math.min(100, sample.tint.saturate)), l = Math.max(0, Math.min(100, sample.tint.brightness));
-      iCtx.fillStyle = `hsla(${sample.tint.hue}, ${s}%, ${l}%, 0.9)`;
-      iCtx.beginPath(); iCtx.moveTo(bx + r, by - bh); iCtx.lineTo(bx + bw - r, by - bh); iCtx.quadraticCurveTo(bx + bw, by - bh, bx + bw, by - bh + r); iCtx.lineTo(bx + bw, by - r); iCtx.quadraticCurveTo(bx + bw, by, bx + bw - r, by); iCtx.lineTo(bx + r, by); iCtx.quadraticCurveTo(bx, by, bx, by - r); iCtx.lineTo(bx, by - bh + r); iCtx.quadraticCurveTo(bx, by - bh, bx + r, by - bh); iCtx.closePath(); iCtx.fill();
-      iCtx.beginPath(); iCtx.moveTo(bx + 5, by); iCtx.lineTo(bx + 15, by); iCtx.lineTo(bx + 10, by + 5); iCtx.fill();
-      iCtx.fillStyle = 'white'; iCtx.font = "bold 14px Arial"; iCtx.textAlign = "center";
-      iCtx.fillText('?', bx + bw / 2, by - bh / 2 + 5);
+        iCtx.save();
+        iCtx.filter = `hue-rotate(${sample.tint.hue}deg) saturate(${sample.tint.saturate}%) brightness(${sample.tint.brightness}%)`;
+        iCtx.drawImage(sprites[sample.species].idle, 0, 0, 32, 32, rx, ry, 64, 64);
+        iCtx.restore();
 
-      btn.textContent = "START INVESTIGATION";
-    } else {
-      modal.style.display = 'none';
-      localStorage.setItem('mysteryFarm_consent', 'true'); // Save consent when they finish the intro
+        // Speech bubble
+        const bx = rx + 50, by = ry - 10, bw = 30, bh = 25, r = 5;
+        const s = Math.max(0, Math.min(100, sample.tint.saturate)), l = Math.max(0, Math.min(100, sample.tint.brightness));
+        iCtx.fillStyle = `hsla(${sample.tint.hue}, ${s}%, ${l}%, 0.9)`;
+        iCtx.beginPath(); iCtx.moveTo(bx + r, by - bh); iCtx.lineTo(bx + bw - r, by - bh); iCtx.quadraticCurveTo(bx + bw, by - bh, bx + bw, by - bh + r); iCtx.lineTo(bx + bw, by - r); iCtx.quadraticCurveTo(bx + bw, by, bx + bw - r, by); iCtx.lineTo(bx + r, by); iCtx.quadraticCurveTo(bx, by, bx, by - r); iCtx.lineTo(bx, by - bh + r); iCtx.quadraticCurveTo(bx, by - bh, bx + r, by - bh); iCtx.closePath(); iCtx.fill();
+        iCtx.beginPath(); iCtx.moveTo(bx + 5, by); iCtx.lineTo(bx + 15, by); iCtx.lineTo(bx + 10, by + 5); iCtx.fill();
+        iCtx.fillStyle = 'white'; iCtx.font = "bold 14px Arial"; iCtx.textAlign = "center";
+        iCtx.fillText('?', bx + bw / 2, by - bh / 2 + 5);
+
+        btn.textContent = "START INVESTIGATION";
+      } else {
+        modal.style.display = 'none';
+        localStorage.setItem('mysteryFarm_consent', 'true'); // Save consent when they finish the intro
         gameState.introFinished = true;
         if (!gameState.startTime) {
           gameState.startTime = Date.now();
           saveGame();
         }
-      introStep = 0;
-      introAnimTimer = 0;
-      return;
+        introStep = 0;
+        introAnimTimer = 0;
+        return;
       }
     }
-    
+
     introHandle = requestAnimationFrame(introLoop);
   }
-  
+
   introLoop();
 }
 
 function init() {
+  // 1. Determine what case index we are on before running simulation
+  const saved = localStorage.getItem('mysteryFarm_current');
+  let savedData = saved ? JSON.parse(saved) : null;
+
+  if (savedData && savedData.date === currentDateStr) {
+    gameState.caseIndex = savedData.caseIndex || 0;
+  } else {
+    // If no save or old save, find the first available case index for today
+    const stats = getStats();
+    let nextIdx = 0;
+    if (stats.history[currentDateStr]) {
+      // Migrate old format to array if needed
+      if (!Array.isArray(stats.history[currentDateStr])) {
+        stats.history[currentDateStr] = [stats.history[currentDateStr]];
+      }
+
+      const dayResults = stats.history[currentDateStr];
+      // Find first index that is not success or failure
+      for (let i = 0; i < MAX_CASES_PER_DAY; i++) {
+        if (!dayResults[i] || (dayResults[i].status !== 'success' && dayResults[i].status !== 'failure')) {
+          nextIdx = i;
+          break;
+        }
+      }
+      // If all cases are done, stay on the last one
+      if (dayResults.length >= MAX_CASES_PER_DAY && dayResults.slice(0, MAX_CASES_PER_DAY).every(r => r && (r.status === 'success' || r.status === 'failure'))) {
+        nextIdx = MAX_CASES_PER_DAY - 1;
+      }
+    }
+    gameState.caseIndex = nextIdx;
+  }
+
+  // 2. Initialize RNG for this case index and populate the world
+  const seedInfo = getDailySeed(gameState.caseIndex);
+  rngState = seedInfo.seed;
+  currentCaseIdx = gameState.caseIndex;
   runSimulation();
-  rabbits.forEach(r => hares.push(new Animal(r)));
-  
-  // Try loading saved game for today
+
+  // 3. Try loading saved game progress (DNA tests, connections, etc.)
+  // This depends on rabbits being already populated by runSimulation()
   const wasLoaded = loadGame();
+
+  // 4. Create visual entities for the animals
+  rabbits.forEach(r => hares.push(new Animal(r)));
+
   updateUI();
 
   // Initialize environment details (same for everyone today)
@@ -3232,7 +3425,7 @@ function init() {
   }
 
   window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; constrainCamera(); });
-  
+
   // Start somewhat zoomed in (1.0 zoom) instead of showing the whole field
   camera.zoom = 1.0;
   camera.x = FIELD_WIDTH / 2 - (canvas.width / camera.zoom) / 2;
@@ -3268,15 +3461,15 @@ function init() {
         // World coordinates for bubble hitbox
         const sz = FRAME_SIZE * 2;
         const bx = h.x + sz * 0.8, by = h.y - (15 * camera.zoom) / camera.zoom; // approximate
-        
+
         // Accurate screen-to-world hitbox check for scaled bubbles
         const sx = (h.x - camera.x) * camera.zoom, sy = (h.y - camera.y) * camera.zoom;
         const ssz = sz * camera.zoom;
         const sbx = sx + ssz * 0.8, sby = sy - 15 * camera.zoom;
-        
-        if (cx >= sbx - 5 && cx <= sbx + bw + 5 && cy >= sby - bh - 5 && cy <= sby + 5) { 
+
+        if (cx >= sbx - 5 && cx <= sbx + bw + 5 && cy >= sby - bh - 5 && cy <= sby + 5) {
           if (!isR) {
-            clue.isRead = true; 
+            clue.isRead = true;
             clue.generatedText = generateClueText(clue, h.rabbit.id);
 
             // Clear previous highlights and set new ones
@@ -3294,10 +3487,10 @@ function init() {
             hideSmartHint();
             saveGame();
           }
-          notifications.push({ text: clue.generatedText, x: cx, y: cy - 20, timer: 360, timerMax: 360, color: '#fff' }); 
+          notifications.push({ text: clue.generatedText, x: cx, y: cy - 20, timer: 360, timerMax: 360, color: '#fff' });
           // Disappear after click
           activeClues.delete(h.rabbit.id);
-          return true; 
+          return true;
         }
       }
     }
@@ -3320,27 +3513,27 @@ function init() {
       if (selectedHare && selectedHare !== clicked) {
         const p = selectedHare.rabbit.birthYear <= clicked.rabbit.birthYear ? selectedHare : clicked, c = p === selectedHare ? clicked : selectedHare;
         if (playerConnections.some(conn => conn.childId === c.rabbit.id && rabbits.find(r => r.id === conn.parentId).sex === p.rabbit.sex)) notifications.push({ text: `${c.rabbit.firstName} already has a ${p.rabbit.sex === 'M' ? 'father' : 'mother'}!`, x: cx, y: cy, timer: 120, timerMax: 120 });
-        else if (!playerConnections.some(conn => conn.parentId === p.rabbit.id && conn.childId === c.rabbit.id)) { 
-          playerConnections.push({ parentId: p.rabbit.id, childId: c.rabbit.id }); 
+        else if (!playerConnections.some(conn => conn.parentId === p.rabbit.id && conn.childId === c.rabbit.id)) {
+          playerConnections.push({ parentId: p.rabbit.id, childId: c.rabbit.id });
           gameState.hasCreatedConnection = true;
           hideSmartHint();
-          updateTreeDiagram(); 
+          updateTreeDiagram();
           saveGame();
-          notifications.push({ text: "Linked!", x: cx, y: cy - 20, timer: 60, timerMax: 60, color: '#44ff44' }); 
+          notifications.push({ text: "Linked!", x: cx, y: cy - 20, timer: 60, timerMax: 60, color: '#44ff44' });
           // Clear highlights when relationships are added
           highlightedAnimalIds.clear();
         }
         selectedHare = null;
       } else {
         selectedHare = clicked;
-        
+
         // Center the camera on the selected animal, accounting for UI
         const vw = canvas.width / camera.zoom;
         const vh = canvas.height / camera.zoom;
         const transcriptEl = document.getElementById('transcript-container');
         const visibleTranscriptHeight = isTranscriptOpen ? (transcriptEl.offsetHeight) : 120;
         const visibleWorldHeight = vh - (visibleTranscriptHeight / camera.zoom);
-        
+
         camera.x = clicked.x + FRAME_SIZE - vw / 2;
         camera.y = clicked.y + FRAME_SIZE - visibleWorldHeight / 2;
         constrainCamera();
@@ -3356,21 +3549,21 @@ function init() {
     updateUI();
   });
 
-  canvas.addEventListener('mousedown', e => { 
-    const p = getPos(e); 
-    input.isDragging = true; 
-    input.startX = p.cx; 
+  canvas.addEventListener('mousedown', e => {
+    const p = getPos(e);
+    input.isDragging = true;
+    input.startX = p.cx;
     input.startY = p.cy;
-    input.lastMouseX = p.cx; 
+    input.lastMouseX = p.cx;
     input.lastMouseY = p.cy;
     input.hasMoved = false;
   });
 
-  window.addEventListener('mousemove', e => { 
+  window.addEventListener('mousemove', e => {
     const p = getPos(e);
     let foundBubble = null;
     let foundX = null;
-    
+
     // Check if hovering over a bubble
     for (const h of hares) {
       const clue = activeClues.get(h.rabbit.id);
@@ -3380,7 +3573,7 @@ function init() {
         const sx = (h.x - camera.x) * camera.zoom, sy = (h.y - camera.y) * camera.zoom;
         const ssz = (FRAME_SIZE * 2) * camera.zoom;
         const sbx = sx + ssz * 0.8, sby = sy - 15 * camera.zoom;
-        
+
         if (p.cx >= sbx - 5 && p.cx <= sbx + bw + 5 && p.cy >= sby - bh - 5 && p.cy <= sby + 5) {
           foundBubble = h.rabbit.id;
           break;
@@ -3399,28 +3592,28 @@ function init() {
         }
       }
     }
-    
+
     if (hoveredBubbleId !== foundBubble || hoveredXButton !== foundX) {
       hoveredBubbleId = foundBubble;
       hoveredXButton = foundX;
       canvas.style.cursor = (hoveredBubbleId || hoveredXButton) ? 'pointer' : 'default';
     }
 
-    if (input.isDragging) { 
+    if (input.isDragging) {
       const dx = e.clientX - input.lastMouseX;
       const dy = e.clientY - input.lastMouseY;
       if (Math.hypot(e.clientX - input.startX, e.clientY - input.startY) > 5) {
         input.hasMoved = true;
       }
-      camera.x -= dx / camera.zoom; 
-      camera.y -= dy / camera.zoom; 
-      input.lastMouseX = e.clientX; 
-      input.lastMouseY = e.clientY; 
-      constrainCamera(); 
-    } 
+      camera.x -= dx / camera.zoom;
+      camera.y -= dy / camera.zoom;
+      input.lastMouseX = e.clientX;
+      input.lastMouseY = e.clientY;
+      constrainCamera();
+    }
   });
 
-  window.addEventListener('mouseup', e => { 
+  window.addEventListener('mouseup', e => {
     if (input.isDragging && !input.hasMoved) {
       const p = getPos(e);
       if (!handleAct(p.x, p.y, p.cx, p.cy)) {
@@ -3428,47 +3621,47 @@ function init() {
         updateUI();
       }
     }
-    input.isDragging = false; 
+    input.isDragging = false;
   });
 
   canvas.addEventListener('wheel', e => { e.preventDefault(); const p = getPos(e), oldZ = camera.zoom; camera.zoom = Math.max(camera.minZoom, Math.min(camera.maxZoom, camera.zoom * Math.pow(1.1, -e.deltaY / 100))); camera.x += (p.x - camera.x) * (1 - oldZ / camera.zoom); camera.y += (p.y - camera.y) * (1 - oldZ / camera.zoom); constrainCamera(); }, { passive: false });
 
-  canvas.addEventListener('touchstart', e => { 
-    e.preventDefault(); 
-    if (e.touches.length === 1) { 
-      const p = getPos(e); 
-      input.isDragging = true; 
-      input.startX = p.cx; 
+  canvas.addEventListener('touchstart', e => {
+    e.preventDefault();
+    if (e.touches.length === 1) {
+      const p = getPos(e);
+      input.isDragging = true;
+      input.startX = p.cx;
       input.startY = p.cy;
-      input.lastMouseX = p.cx; 
+      input.lastMouseX = p.cx;
       input.lastMouseY = p.cy;
       input.hasMoved = false;
-    } else if (e.touches.length === 2) { 
-      input.isDragging = false; 
-      input.lastTouchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); 
-    } 
+    } else if (e.touches.length === 2) {
+      input.isDragging = false;
+      input.lastTouchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    }
   }, { passive: false });
 
-  canvas.addEventListener('touchmove', e => { 
-    e.preventDefault(); 
-    if (e.touches.length === 1 && input.isDragging) { 
-      const p = getPos(e); 
+  canvas.addEventListener('touchmove', e => {
+    e.preventDefault();
+    if (e.touches.length === 1 && input.isDragging) {
+      const p = getPos(e);
       const dx = p.cx - input.lastMouseX;
       const dy = p.cy - input.lastMouseY;
       if (Math.hypot(p.cx - input.startX, p.cy - input.startY) > 10) {
         input.hasMoved = true;
       }
-      camera.x -= dx / camera.zoom; 
-      camera.y -= dy / camera.zoom; 
-      input.lastMouseX = p.cx; 
-      input.lastMouseY = p.cy; 
-      constrainCamera(); 
-    } else if (e.touches.length === 2) { 
-      const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY), midX = (e.touches[0].clientX + e.touches[1].clientX) / 2, midY = (e.touches[0].clientY + e.touches[1].clientY) / 2, rect = canvas.getBoundingClientRect(), wx = (midX - rect.left) / camera.zoom + camera.x, wy = (midY - rect.top) / camera.zoom + camera.y, oldZ = camera.zoom; camera.zoom = Math.max(camera.minZoom, Math.min(camera.maxZoom, camera.zoom * (d / input.lastTouchDist))); camera.x += (wx - camera.x) * (1 - oldZ / camera.zoom); camera.y += (wy - camera.y) * (1 - oldZ / camera.zoom); input.lastTouchDist = d; constrainCamera(); 
-    } 
+      camera.x -= dx / camera.zoom;
+      camera.y -= dy / camera.zoom;
+      input.lastMouseX = p.cx;
+      input.lastMouseY = p.cy;
+      constrainCamera();
+    } else if (e.touches.length === 2) {
+      const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY), midX = (e.touches[0].clientX + e.touches[1].clientX) / 2, midY = (e.touches[0].clientY + e.touches[1].clientY) / 2, rect = canvas.getBoundingClientRect(), wx = (midX - rect.left) / camera.zoom + camera.x, wy = (midY - rect.top) / camera.zoom + camera.y, oldZ = camera.zoom; camera.zoom = Math.max(camera.minZoom, Math.min(camera.maxZoom, camera.zoom * (d / input.lastTouchDist))); camera.x += (wx - camera.x) * (1 - oldZ / camera.zoom); camera.y += (wy - camera.y) * (1 - oldZ / camera.zoom); input.lastTouchDist = d; constrainCamera();
+    }
   }, { passive: false });
 
-  canvas.addEventListener('touchend', e => { 
+  canvas.addEventListener('touchend', e => {
     if (input.isDragging && !input.hasMoved) {
       const rect = canvas.getBoundingClientRect();
       const p = { x: (input.lastMouseX - rect.left) / camera.zoom + camera.x, y: (input.lastMouseY - rect.top) / camera.zoom + camera.y, cx: input.lastMouseX, cy: input.lastMouseY };
@@ -3477,8 +3670,8 @@ function init() {
         updateUI();
       }
     }
-    input.isDragging = false; 
-    input.lastTouchDist = 0; 
+    input.isDragging = false;
+    input.lastTouchDist = 0;
   });
   if (dnaBtn) {
     dnaBtn.addEventListener('pointerdown', e => e.stopPropagation());
@@ -3487,28 +3680,28 @@ function init() {
       showDNAModal(selectedHare);
     });
   }
-  
+
   if (accBtn) {
     accBtn.addEventListener('pointerdown', e => e.stopPropagation());
     accBtn.addEventListener('click', e => {
-      e.preventDefault(); 
+      e.preventDefault();
       if (gameState.isFinished || !selectedHare || dnaTestsRemaining > 0) return;
-      
+
       const accModal = document.getElementById('accuse-modal');
       const accText = document.getElementById('accuse-confirm-text');
       const accConfirm = document.getElementById('accuse-confirm-btn');
       const accCancel = document.getElementById('accuse-cancel-btn');
-      
+
       if (!accModal || !accText || !accConfirm || !accCancel) return;
 
       drawAnimalPreview('accuse-confirm-canvas', 'accuse-confirm-name', selectedHare);
       accText.textContent = `Are you absolutely certain ${selectedHare.rabbit.firstName} is the killer? A mistake here will end the investigation.`;
       accModal.style.display = 'flex';
-      
+
       accCancel.onclick = () => {
         accModal.style.display = 'none';
       };
-      
+
       accConfirm.onclick = () => {
         accModal.style.display = 'none';
         showGameOver(selectedHare.rabbit.id === killerId);
@@ -3588,8 +3781,80 @@ function init() {
   const playAgainUI = document.getElementById('play-again-ui');
   if (playAgainUI) {
     playAgainUI.addEventListener('click', () => {
-      const limitModal = document.getElementById('limit-modal');
-      if (limitModal) limitModal.style.display = 'flex';
+      const hasMoreCases = gameState.caseIndex < MAX_CASES_PER_DAY - 1;
+      if (hasMoreCases) {
+        showTransitionModal(() => {
+          // Start next case
+          gameState.caseIndex++;
+          gameState.isFinished = false;
+          gameState.wasSuccess = false;
+          gameState.startTime = null;
+          gameState.endTime = null;
+          gameState.introFinished = false;
+          gameState.hasClickedClue = false;
+          gameState.hasCreatedConnection = false;
+          gameState.statsUpdated = false;
+          gameState.hint1Shown = false;
+          gameState.hint2Shown = false;
+          gameOverStep = 0;
+          introStep = 0;
+          killerQuote = "";
+          gameOverAnimTimer = 0;
+          isDnaSuccess = false;
+
+          // Clear existing state
+          const list = document.getElementById('transcript-list');
+          if (list) list.innerHTML = '';
+          const latest = document.getElementById('latest-clue');
+          if (latest) latest.innerHTML = 'Case Log: No clues yet...';
+
+          // Update seed and restart
+          const seedInfo = getDailySeed(gameState.caseIndex);
+          rngState = seedInfo.seed;
+          currentCaseIdx = gameState.caseIndex;
+
+          // Reset world
+          hares.length = 0;
+          playerConnections = [];
+          caseLog = [];
+          dnaTestsRemaining = 3;
+          activeClues.clear();
+          globallyIssuedClueIds.clear();
+          highlightedAnimalIds.clear();
+
+          runSimulation();
+          rabbits.forEach(r => hares.push(new Animal(r)));
+
+          // Reset transcript UI classes
+          const container = document.getElementById('transcript-container');
+          if (container) container.classList.remove('open');
+          isTranscriptOpen = false;
+          const toggle = document.getElementById('transcript-toggle');
+          if (toggle) toggle.textContent = '▲ OPEN CASE LOG';
+
+          // Hide game over modal if open
+          const gameOverModal = document.getElementById('game-over');
+          if (gameOverModal) gameOverModal.style.display = 'none';
+
+          // Clear view farm state
+          const viewFarmBtn = document.getElementById('game-over-view-farm');
+          if (viewFarmBtn) viewFarmBtn.style.display = 'none';
+
+          updateUI();
+          saveGame();
+
+          // Scroll to top of intro for the new case
+          const scrollContainer = document.getElementById('intro-scroll-container');
+          if (scrollContainer) {
+            scrollContainer.scrollTop = 0;
+            scrollContainer.dataset.hasScrolled = 'false';
+          }
+          showIntro();
+        });
+      } else {
+        const limitModal = document.getElementById('limit-modal');
+        if (limitModal) limitModal.style.display = 'flex';
+      }
     });
   }
 
@@ -3621,7 +3886,7 @@ function init() {
   let statsClickTimer = null;
   const cheatInput = document.getElementById('stats-cheat-input');
   const cheatZone = document.getElementById('stats-cheat-zone');
-  
+
   if (cheatZone && cheatInput) {
     cheatZone.addEventListener('click', () => {
       statsClickCount++;
@@ -3751,12 +4016,26 @@ function init() {
     closeHowBtn.addEventListener('click', () => {
       howToPlayModal.style.display = 'none';
     });
-    howToPlayModal.addEventListener('click', (e) => {
-      if (e.target === howToPlayModal) {
-        howToPlayModal.style.display = 'none';
-      }
-    });
   }
+
+  // Generic Modal Close Logic (Click Outside & Escape Key)
+  const cancelableModals = ['stats-modal', 'how-to-play-modal', 'about-modal', 'privacy-modal', 'limit-modal', 'transition-modal'];
+
+  cancelableModals.forEach(id => {
+    const modal = document.getElementById(id);
+    if (modal) {
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          modal.style.display = 'none';
+          // Extra cleanup for stats modal
+          if (id === 'stats-modal') {
+            const cheatInput = document.getElementById('stats-cheat-input');
+            if (cheatInput) { cheatInput.style.display = 'none'; cheatInput.value = ''; }
+          }
+        }
+      });
+    }
+  });
 
   const transcriptHeader = document.getElementById('transcript-header');
   if (transcriptHeader) {
@@ -3767,11 +4046,30 @@ function init() {
   let cheatBuffer = "";
   window.addEventListener('keyup', e => {
     if (e.key === 'Escape') {
-      selectedHare = null;
-      updateUI();
+      // 1. Close cancelable modals first
+      const cancelableModals = ['stats-modal', 'how-to-play-modal', 'about-modal', 'privacy-modal', 'limit-modal', 'transition-modal'];
+      let modalClosed = false;
+      cancelableModals.forEach(id => {
+        const modal = document.getElementById(id);
+        if (modal && modal.style.display === 'flex') {
+          modal.style.display = 'none';
+          modalClosed = true;
+          // Extra cleanup for stats modal
+          if (id === 'stats-modal') {
+            const cheatInput = document.getElementById('stats-cheat-input');
+            if (cheatInput) { cheatInput.style.display = 'none'; cheatInput.value = ''; }
+          }
+        }
+      });
+
+      // 2. If no modal was closed, deselect current animal
+      if (!modalClosed) {
+        selectedHare = null;
+        updateUI();
+      }
     }
     cheatBuffer = (cheatBuffer + e.key.toLowerCase()).slice(-10);
-    
+
     // "killer" - Reveals the culprit in the log
     if (cheatBuffer.endsWith("killer")) {
       const k = rabbits.find(r => r.id === killerId);
@@ -3779,7 +4077,7 @@ function init() {
       updateTranscriptUI(msg, k.id);
       cheatBuffer = "";
     }
-    
+
     // "reset" - Wipes EVERYTHING and reloads
     if (cheatBuffer.endsWith("reset")) {
       localStorage.removeItem('mysteryFarm_current');
@@ -3831,13 +4129,13 @@ function init() {
     const isActuallyMidGame = (!gameState.detective || gameState.detective === "null") && (gameState.introFinished || gameState.isMidGameChange);
     showIntro(isActuallyMidGame);
   }
-  
+
   loop();
 }
 
 function constrainCamera() {
   const vw = canvas.width / camera.zoom, vh = canvas.height / camera.zoom;
-  
+
   // Define fixed padding in world units to allow centering animals at edges.
   // We allow the camera to see up to half a screen width/height past the edge.
   const padX = vw / 2;
@@ -3862,10 +4160,10 @@ function loop() {
       // This ensures they see their celebration/stats before the new day starts.
       const gameOverModal = document.getElementById('game-over');
       const isGameOverVisible = gameOverModal && gameOverModal.style.display === 'flex';
-      
+
       if (gameState.isFinished && !isGameOverVisible) {
         location.reload();
-        return; 
+        return;
       }
     }
   }
@@ -3874,14 +4172,14 @@ function loop() {
   if (!gameState.isFinished && gameState.introFinished && gameState.startTime) {
     const now = Date.now();
     const timeSinceStart = now - gameState.startTime;
-    
+
     // Hint 1: Click speech bubbles (30s)
     if (!gameState.hasClickedClue && timeSinceStart > 30000 && !gameState.hint1Shown) {
       showSmartHint("Tap the speech bubbles over the animals to find clues!");
       gameState.hint1Shown = true;
       saveGame();
     }
-    
+
     // Hint 2: Create connection (60s)
     if (!gameState.hasCreatedConnection && timeSinceStart > 60000 && !gameState.hint2Shown) {
       showSmartHint("To build the family tree, select an animal, then tap another to link them. The older animal is automatically set as the parent.");
@@ -3899,12 +4197,12 @@ function loop() {
         ...clueQueue.map(c => c.id),
         ...globallyIssuedClueIds
       ]);
-      
+
       // If queue is empty, pick a new clue/group from pool
       if (clueQueue.length === 0) {
         const avail = cluePool.filter(c => {
           if (issuedIds.has(c.id)) return false;
-          
+
           const conn = c.conn;
           if (conn.parentId && conn.childId) {
             if (playerConnections.some(pc => pc.parentId === conn.parentId && pc.childId === conn.childId)) return false;
@@ -3927,7 +4225,7 @@ function loop() {
           // Prioritize necessary clues over extra clues (3:1 weight)
           const necessary = avail.filter(c => c.type === 'necessary');
           const extra = avail.filter(c => c.type === 'extra');
-          
+
           let choice;
           if (necessary.length > 0 && (extra.length === 0 || random() < 0.75)) {
             choice = pick(necessary);
@@ -3975,24 +4273,24 @@ function loop() {
   ctx.fillStyle = '#3e8948';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.imageSmoothingEnabled = false;
-  
+
   // Draw static background layer (grid, grass, and boundaries)
   if (staticCanvas) {
     ctx.drawImage(
-      staticCanvas, 
-      Math.floor(-camera.x * camera.zoom), 
-      Math.floor(-camera.y * camera.zoom), 
-      Math.floor(FIELD_WIDTH * camera.zoom), 
+      staticCanvas,
+      Math.floor(-camera.x * camera.zoom),
+      Math.floor(-camera.y * camera.zoom),
+      Math.floor(FIELD_WIDTH * camera.zoom),
       Math.floor(FIELD_HEIGHT * camera.zoom)
     );
   }
 
-  ctx.save(); 
-  ctx.font = 'bold 24px monospace'; 
-  ctx.fillStyle = 'rgba(255,255,255,0.2)'; 
+  ctx.save();
+  ctx.font = 'bold 24px monospace';
+  ctx.fillStyle = 'rgba(255,255,255,0.2)';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
-  
+
   // Dynamically position below the Help button/Stopwatch to account for iPhone safe areas
   let watermarkY = 75;
   const helpBtn = document.getElementById('help-btn');
@@ -4001,10 +4299,10 @@ function loop() {
     // Use the bottom of the help button + a small margin
     watermarkY = rect.bottom + 5;
   }
-  
+
   ctx.fillText('mystery.farm', 20, watermarkY);
   ctx.restore();
-  
+
   ctx.save();
 
   // Group connections into "Family Units" (Unions)
@@ -4106,7 +4404,7 @@ function loop() {
     const barMinX = Math.min(parentXRange.min, childXRange.min);
     const barMaxX = Math.max(parentXRange.max, childXRange.max);
     ctx.beginPath(); ctx.moveTo(barMinX, screenMidY); ctx.lineTo(barMaxX, screenMidY); ctx.stroke();
-    
+
     // 4. Record "X" buttons for each relationship in this union
     if (!gameState.isFinished) {
       ps.forEach(p => {
@@ -4116,7 +4414,7 @@ function loop() {
             const py = (p.y - camera.y + FRAME_SIZE) * camera.zoom;
             const cx = (c.x - camera.x + FRAME_SIZE) * camera.zoom;
             const cy = (c.y - camera.y + FRAME_SIZE) * camera.zoom;
-            
+
             let bx, by;
             if (selectedHare === p) {
               // Place on the child's vertical stem, 50% of the way to the child
@@ -4139,17 +4437,17 @@ function loop() {
   ctx.restore();
 
   hares.forEach(h => h.update());
-  
+
   // Pass 1: Draw sprites sorted by Y
   hares.slice().sort((a, b) => a.y - b.y).forEach(h => h.drawSprite());
-  
+
   // Pass 2: Draw labels sorted by X ascending (so rightmost labels sit on top)
   // This ensures that the start of every name remains visible even if overlapped.
   hares.slice().sort((a, b) => a.x - b.x).forEach(h => h.drawLabels());
 
   // Update stopwatch display in real-time
   updateUI();
-  
+
   // 4. Draw recorded "X" buttons on TOP of animals/labels
   if (!gameState.isFinished) {
     xButtons.forEach(btn => {
@@ -4157,38 +4455,38 @@ function loop() {
       drawPixelX(ctx, btn.x, btn.y, camera.zoom, isHovered);
     });
   }
-  
+
   // Render notifications/rich text
   for (let i = notifications.length - 1; i >= 0; i--) {
-    const n = notifications[i]; 
-    ctx.font = 'bold 18px Arial'; 
-    ctx.textAlign = 'center'; 
-    ctx.shadowBlur = 4; 
+    const n = notifications[i];
+    ctx.font = 'bold 18px Arial';
+    ctx.textAlign = 'center';
+    ctx.shadowBlur = 4;
     ctx.shadowColor = 'black';
     ctx.globalAlpha = Math.min(1, n.timer / 30);
-    
+
     const maxT = n.timerMax || 360, fO = (maxT - n.timer) * 0.2, tY = n.y - fO;
     let cY = Math.max(40, tY);
-    
+
     // Allow room for transcript at bottom
     const transcriptEl = document.getElementById('transcript-container');
     const visibleTranscriptHeight = isTranscriptOpen ? (transcriptEl.offsetHeight) : 120;
     const bottomLimit = canvas.height - visibleTranscriptHeight - 20;
     cY = Math.min(cY, bottomLimit);
-    
+
     // Simple rich text drawing for canvas
     const text = n.text;
     const cleanText = text.replace(/\[\[\d+:(.*?)\]\]/g, '$1');
     const totalWidth = ctx.measureText(cleanText).width;
-    
+
     // Horizontal clamping
     const padding = 20;
     let currentX = n.x - totalWidth / 2;
     if (currentX < padding) currentX = padding;
     if (currentX + totalWidth > canvas.width - padding) currentX = canvas.width - padding - totalWidth;
-    
+
     const parts = text.split(/(\[\[\d+:.*?\]\])/g);
-    
+
     parts.forEach(part => {
       const match = part.match(/\[\[(\d+):(.*?)\]\]/);
       if (match) {

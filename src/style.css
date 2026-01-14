@@ -542,3 +542,25 @@ a {
   to { top: 100px; opacity: 1; }
 }
 
+/* App Store Badge */
+.app-store-badge {
+  display: inline-block;
+  height: 40px;
+  transition: transform 0.2s;
+  pointer-events: auto;
+}
+
+.app-store-badge:hover {
+  transform: scale(1.05);
+}
+
+.app-store-badge img {
+  height: 100%;
+  width: auto;
+}
+
+/* Visibility Control */
+body.is-native .web-only {
+  display: none !important;
+}
+

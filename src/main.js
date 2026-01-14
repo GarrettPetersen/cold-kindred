@@ -964,11 +964,19 @@ function generateCluePool(additive = false) {
     const c = rabbits.find(r => r.id === conn.childId);
     if (!p || !c) return;
 
+    // Check if c is the only child of p
+    const pChildren = rabbits.filter(r => r.fatherId === p.id || r.motherId === p.id);
+    const isOnlyChild = pChildren.length === 1;
+
     const r = random();
     if (r < 0.5) {
       // Strategy 1: Direct Clue (Highly biased toward first-person)
       const sid = random() < 0.8 ? (random() < 0.5 ? p.id : c.id) : null;
-      addRawClue(conn, 'necessary', sid);
+      if (isOnlyChild && random() < 0.5) {
+        addRawClue({ type: 'onlyChild', parentId: p.id, childId: c.id }, 'necessary', sid);
+      } else {
+        addRawClue(conn, 'necessary', sid);
+      }
     } else if (r < 0.75) {
       // Strategy 2: Spouse/Couple Inference (Speaker is often the child)
       const spouseId = p.sex === 'M' ? c.motherId : c.fatherId;
@@ -976,7 +984,13 @@ function generateCluePool(additive = false) {
       if (spouse) {
         const gid = Math.random().toString(36).substring(2, 7);
         const sid = random() < 0.7 ? c.id : null;
-        addRawClue({ parentId: spouse.id, childId: c.id }, 'necessary', sid, gid);
+        
+        const spouseChildren = rabbits.filter(r => r.fatherId === spouse.id || r.motherId === spouse.id);
+        if (spouseChildren.length === 1 && random() < 0.5) {
+          addRawClue({ type: 'onlyChild', parentId: spouse.id, childId: c.id }, 'necessary', sid, gid);
+        } else {
+          addRawClue({ parentId: spouse.id, childId: c.id }, 'necessary', sid, gid);
+        }
         addRawClue({ type: 'couple', p1: p.id, p2: spouse.id }, 'necessary', null, gid);
       } else {
         addRawClue(conn, 'necessary', c.id);
@@ -991,7 +1005,11 @@ function generateCluePool(additive = false) {
         addRawClue({ parentId: p.id, childId: sib.id }, 'necessary', sid, gid);
         addRawClue({ type: 'sibling', a: c.id, b: sib.id }, 'necessary', sid, gid);
       } else {
-        addRawClue(conn, 'necessary', c.id);
+        if (isOnlyChild && random() < 0.5) {
+          addRawClue({ type: 'onlyChild', parentId: p.id, childId: c.id }, 'necessary', c.id);
+        } else {
+          addRawClue(conn, 'necessary', c.id);
+        }
       }
     } else {
       // Strategy 4: Grandparent Inference (Speaker is often the grandchild)
@@ -1003,7 +1021,11 @@ function generateCluePool(additive = false) {
         addRawClue({ parentId: gp.id, childId: p.id }, 'necessary', null, gid);
         addRawClue({ type: 'grandparent', gp: gp.id, gc: c.id }, 'necessary', sid, gid);
       } else {
-        addRawClue(conn, 'necessary', p.id);
+        if (isOnlyChild && random() < 0.5) {
+          addRawClue({ type: 'onlyChild', parentId: p.id, childId: c.id }, 'necessary', p.id);
+        } else {
+          addRawClue(conn, 'necessary', p.id);
+        }
       }
     }
     addRawClue(conn, 'necessary');
@@ -1016,7 +1038,12 @@ function generateCluePool(additive = false) {
   allConns.forEach(conn => {
     // Extra clues also biased toward first-person
     const sid = random() < 0.7 ? (random() < 0.5 ? conn.parentId : conn.childId) : null;
-    addRawClue(conn, 'extra', sid);
+    const pChildren = rabbits.filter(r => r.fatherId === conn.parentId || r.motherId === conn.parentId);
+    if (pChildren.length === 1 && random() < 0.3) {
+      addRawClue({ type: 'onlyChild', parentId: conn.parentId, childId: conn.childId }, 'extra', sid);
+    } else {
+      addRawClue(conn, 'extra', sid);
+    }
   });
 
   cluePool = newClues;
@@ -1067,11 +1094,29 @@ function generateClueText(clue, speakerId) {
   if (clue.conn.type === 'couple') {
     const p1 = rabbits.find(r => r.id === clue.conn.p1);
     const p2 = rabbits.find(r => r.id === clue.conn.p2);
+    const children = rabbits.filter(r => (r.fatherId === p1.id && r.motherId === p2.id) || (r.fatherId === p2.id && r.motherId === p1.id));
+    const isSingular = children.length === 1;
+
     return pick([
       `${mark(p1.id)} and ${mark(p2.id)} have a family together.`,
-      `I've seen ${mark(p1.id)} and ${mark(p2.id)} with their little ones.`,
+      isSingular 
+        ? `I've seen ${mark(p1.id)} and ${mark(p2.id)} with their little one.`
+        : `I've seen ${mark(p1.id)} and ${mark(p2.id)} with their little ones.`,
       `Aren't ${mark(p1.id)} and ${mark(p2.id)} such a devoted pair of parents?`,
       `${mark(p1.id)} and ${mark(p2.id)} are definitely building a nest together.`
+    ]);
+  }
+
+  if (clue.conn.type === 'onlyChild') {
+    const p = rabbits.find(r => r.id === clue.conn.parentId);
+    const c = rabbits.find(r => r.id === clue.conn.childId);
+    const pRole = p.sex === 'M' ? 'father' : 'mother';
+    const cRole = c.sex === 'M' ? 'son' : 'daughter';
+    if (speakerId === p.id) return `${mark(c.id)} is my only child.`;
+    if (speakerId === c.id) return `I'm ${mark(p.id)}'s only child.`;
+    return pick([
+      `${mark(c.id)} is ${mark(p.id)}'s only child.`,
+      `${mark(p.id)} only has one child, ${mark(c.id)}.`
     ]);
   }
 
@@ -3366,6 +3411,10 @@ function showIntro(isMidGameChangeParam = false) {
 }
 
 function init() {
+  if (IS_NATIVE) {
+    document.body.classList.add('is-native');
+  }
+
   // 1. Determine what case index we are on before running simulation
   const saved = localStorage.getItem('mysteryFarm_current');
   let savedData = saved ? JSON.parse(saved) : null;

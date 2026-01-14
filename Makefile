@@ -6,10 +6,11 @@ all: build-all
 # Build for iOS
 build-ios:
 	@echo "Ensuring all assets are in public folder..."
-	@mkdir -p public/assets/animations public/assets/detectives public/assets/items
+	@mkdir -p public/assets/animations public/assets/detectives public/assets/items public/assets/links
 	@cp assets/animations/*.png public/assets/animations/ 2>/dev/null || true
 	@cp assets/detectives/*.png public/assets/detectives/ 2>/dev/null || true
 	@cp assets/items/*.png public/assets/items/ 2>/dev/null || true
+	@cp assets/links/* public/assets/links/ 2>/dev/null || true
 	@cp about.html privacy.html public/ 2>/dev/null || true
 	@echo "Building web assets..."
 	npm run build
@@ -20,10 +21,11 @@ build-ios:
 # Build for Android
 build-android:
 	@echo "Ensuring all assets are in public folder..."
-	@mkdir -p public/assets/animations public/assets/detectives public/assets/items
+	@mkdir -p public/assets/animations public/assets/detectives public/assets/items public/assets/links
 	@cp assets/animations/*.png public/assets/animations/ 2>/dev/null || true
 	@cp assets/detectives/*.png public/assets/detectives/ 2>/dev/null || true
 	@cp assets/items/*.png public/assets/items/ 2>/dev/null || true
+	@cp assets/links/* public/assets/links/ 2>/dev/null || true
 	@cp about.html privacy.html public/ 2>/dev/null || true
 	@echo "Building web assets..."
 	npm run build
@@ -34,10 +36,11 @@ build-android:
 # Build for both
 build-all:
 	@echo "Ensuring all assets are in public folder..."
-	@mkdir -p public/assets/animations public/assets/detectives public/assets/items
+	@mkdir -p public/assets/animations public/assets/detectives public/assets/items public/assets/links
 	@cp assets/animations/*.png public/assets/animations/ 2>/dev/null || true
 	@cp assets/detectives/*.png public/assets/detectives/ 2>/dev/null || true
 	@cp assets/items/*.png public/assets/items/ 2>/dev/null || true
+	@cp assets/links/* public/assets/links/ 2>/dev/null || true
 	@cp about.html privacy.html public/ 2>/dev/null || true
 	@echo "Building web assets..."
 	npm run build

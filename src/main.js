@@ -623,7 +623,10 @@ function loadGame() {
   if (latest) latest.innerHTML = 'Case Log: No clues yet...';
 
   dnaTestsRemaining = data.dnaTestsRemaining ?? 3;
-  playerConnections = data.playerConnections || [];
+  playerConnections = (data.playerConnections || []).map(conn => ({
+    parentId: Number(conn.parentId),
+    childId: Number(conn.childId)
+  }));
   caseLog = data.caseLog || [];
   gameState.caseIndex = data.caseIndex || 0;
 
@@ -694,7 +697,6 @@ function loadGame() {
     }
   });
   if (tCount) tCount.textContent = dnaTestsRemaining;
-  updateTreeDiagram();
 
   return true;
 }
@@ -984,7 +986,7 @@ function generateCluePool(additive = false) {
       if (spouse) {
         const gid = Math.random().toString(36).substring(2, 7);
         const sid = random() < 0.7 ? c.id : null;
-        
+
         const spouseChildren = rabbits.filter(r => r.fatherId === spouse.id || r.motherId === spouse.id);
         if (spouseChildren.length === 1 && random() < 0.5) {
           addRawClue({ type: 'onlyChild', parentId: spouse.id, childId: c.id }, 'necessary', sid, gid);
@@ -1099,7 +1101,7 @@ function generateClueText(clue, speakerId) {
 
     return pick([
       `${mark(p1.id)} and ${mark(p2.id)} have a family together.`,
-      isSingular 
+      isSingular
         ? `I've seen ${mark(p1.id)} and ${mark(p2.id)} with their little one.`
         : `I've seen ${mark(p1.id)} and ${mark(p2.id)} with their little ones.`,
       `Aren't ${mark(p1.id)} and ${mark(p2.id)} such a devoted pair of parents?`,
@@ -1439,6 +1441,24 @@ function runSimulation() {
   const initialEntry = `Case File: <span style="color: ${getHSL(victim)}; font-weight: bold;">${victim.name} the ${vSpeciesLabel}</span> was found dead. DNA evidence indicates the killer is a ${kSexLabel} ${kSpeciesLabel}.`;
   caseLog.push(initialEntry);
   updateTranscriptUI(initialEntry.replace("Case File: ", ""), null);
+
+  // Add the murder victim to the world as a static, selectable entity
+  // Victim is between 25 and 85 years old to avoid implying child murder
+  const victimAge = 25 + Math.floor(random() * 60);
+  const victimRecord = new AnimalRecord(victim.name, victim.sex, CURRENT_YEAR - victimAge, 0, victim.species);
+  victimRecord.tint = victim.tint;
+  victimRecord.isVictim = true;
+  victimRecord.id = -1; // Use a special ID for the victim
+
+  // Position victim in top or bottom third of the map to avoid family tree overlap
+  const side = random() < 0.5 ? 'top' : 'bottom';
+  const victimY = side === 'top' ? (40 + random() * (FIELD_HEIGHT / 3 - 100)) : (FIELD_HEIGHT * 2 / 3 + 40 + random() * (FIELD_HEIGHT / 3 - 100));
+  const victimX = FIELD_WIDTH / 2 - 32 + (random() - 0.5) * 400; // Centered with some horizontal variation
+
+  victimRecord.initialX = victimX;
+  victimRecord.initialY = victimY;
+
+  rabbits.push(victimRecord);
 }
 
 // --- Sprite Tinting Cache ---
@@ -1522,12 +1542,16 @@ function drawPixelX(ctx, centerX, centerY, scale, isHovered = false) {
 class Animal {
   constructor(record) {
     this.rabbit = record;
-    this.x = random() * FIELD_WIDTH; this.y = random() * FIELD_HEIGHT;
+    this.x = (record.initialX !== undefined) ? record.initialX : (random() * FIELD_WIDTH);
+    this.y = (record.initialY !== undefined) ? record.initialY : (random() * FIELD_HEIGHT);
     this.targetX = null; this.targetY = null;
-    this.state = 'idle'; this.direction = Math.floor(random() * 4);
-    this.frame = 0; this.frameTimer = 0; this.frameSpeed = 0.1;
+    this.state = record.isVictim ? 'death' : 'idle';
+    this.direction = Math.floor(random() * 4);
+    this.frame = record.isVictim ? 5 : 0;
+    this.frameTimer = record.isVictim ? 5 : 0;
+    this.frameSpeed = record.isVictim ? 0 : 0.1;
     this.moveTimer = 0; this.vx = 0; this.vy = 0;
-    this.setRandomBehavior();
+    if (!record.isVictim) this.setRandomBehavior();
 
     // Cache text metrics once
     const tempCtx = document.createElement('canvas').getContext('2d');
@@ -1549,6 +1573,14 @@ class Animal {
     if (deg >= 45 && deg < 135) this.direction = 0; else if (deg >= 225 && deg < 315) this.direction = 1; else if (deg >= 135 && deg < 225) this.direction = 2; else this.direction = 3;
   }
   update() {
+    if (this.rabbit.isVictim) {
+      this.vx = 0;
+      this.vy = 0;
+      this.state = 'death';
+      this.frame = 5;
+      return;
+    }
+
     if (this.targetX !== null) {
       const dx = this.targetX - this.x, dy = this.targetY - this.y, d = Math.sqrt(dx * dx + dy * dy);
       if (d > 5) { this.state = 'run'; this.vx = (dx / d) * 2.5; this.vy = (dy / d) * 2.5; this.updateDir(); }
@@ -1711,7 +1743,7 @@ class Animal {
     const sx = (this.x - camera.x) * camera.zoom, sy = (this.y - camera.y) * camera.zoom, sz = FRAME_SIZE * 2 * camera.zoom;
     if (sx < -sz * 4 || sx > canvas.width + sz * 4 || sy < -sz * 4 || sy > canvas.height + sz * 4) return;
 
-    if (selectedHare === this && !gameState.isFinished) {
+    if (selectedHare === this && !gameState.isFinished && !this.rabbit.isVictim) {
       const textAlpha = Math.sin(Date.now() / 200) * 0.3 + 0.7;
       ctx.fillStyle = `rgba(68, 255, 68, ${textAlpha})`;
       ctx.font = `bold ${Math.max(10, Math.floor(10 * camera.zoom))}px monospace`;
@@ -2012,19 +2044,39 @@ function updateTreeDiagram() {
     const layoutPositions = new Map();
 
     // First pass: Assign initial relative coordinates within each row
-    // Start with a wider initial spread to allow more room for convergence
     validGrps.forEach((ids, l) => {
       ids.forEach((id, i) => {
-        layoutPositions.set(id, { l, i, x: i * 2 });
+        layoutPositions.set(id, { l, i, x: i * 1.5 });
       });
     });
 
     // Second pass: Adjust row X offsets to center parents/children
     // Increase iterations to allow the "spread" to propagate through all 5 generations
-    for (let iter = 0; iter < 12; iter++) {
+    for (let iter = 0; iter < 15; iter++) {
       // Top-down: Move children under parents
       validGrps.forEach((ids, l) => {
         if (l === 0) return;
+
+        // Right-to-left pass (Top-down)
+        for (let i = ids.length - 1; i >= 0; i--) {
+          const id = ids[i];
+          const ps = playerConnections.filter(c => c.childId === id).map(c => c.parentId);
+          if (ps.length > 0) {
+            let avgParentX = 0, pCount = 0;
+            ps.forEach(pid => {
+              const pPos = layoutPositions.get(pid);
+              if (pPos) { avgParentX += pPos.x; pCount++; }
+            });
+            if (pCount > 0) {
+              const idealX = avgParentX / pCount;
+              const currentPos = layoutPositions.get(id);
+              let maxX = (i === ids.length - 1) ? Infinity : layoutPositions.get(ids[i + 1]).x - 1.5;
+              currentPos.x = Math.min(maxX, idealX);
+            }
+          }
+        }
+
+        // Left-to-right pass (Top-down)
         ids.forEach((id, i) => {
           const ps = playerConnections.filter(c => c.childId === id).map(c => c.parentId);
           if (ps.length > 0) {
@@ -2036,7 +2088,6 @@ function updateTreeDiagram() {
             if (pCount > 0) {
               const idealX = avgParentX / pCount;
               const currentPos = layoutPositions.get(id);
-              // Maintain minimum gap from the sibling to the left (1.5 units for better visibility)
               let minX = (i === 0) ? -Infinity : layoutPositions.get(ids[i - 1]).x + 1.5;
               currentPos.x = Math.max(minX, idealX);
             }
@@ -2047,7 +2098,7 @@ function updateTreeDiagram() {
       // Bottom-up: Move parents over children (Upward Pressure)
       for (let l = validGrps.length - 2; l >= 0; l--) {
         const ids = validGrps[l];
-        // Right-to-left pass to allow spreading to the right
+        // Right-to-left pass
         for (let i = ids.length - 1; i >= 0; i--) {
           const id = ids[i];
           const cs = playerConnections.filter(c => c.parentId === id).map(c => c.childId);
@@ -2065,26 +2116,67 @@ function updateTreeDiagram() {
             }
           }
         }
-        // Left-to-right pass to maintain minimum gaps and allow spreading to the left
+        // Left-to-right pass
         for (let i = 0; i < ids.length; i++) {
           const id = ids[i];
-          const currentPos = layoutPositions.get(id);
           const cs = playerConnections.filter(c => c.parentId === id).map(c => c.childId);
-
-          let idealX = currentPos.x;
           if (cs.length > 0) {
             let avgChildX = 0, cCount = 0;
             cs.forEach(cid => {
               const cPos = layoutPositions.get(cid);
               if (cPos) { avgChildX += cPos.x; cCount++; }
             });
-            idealX = avgChildX / cCount;
+            if (cCount > 0) {
+              const idealX = avgChildX / cCount;
+              const currentPos = layoutPositions.get(id);
+              let minX = (i === 0) ? -Infinity : layoutPositions.get(ids[i - 1]).x + 1.5;
+              currentPos.x = Math.max(minX, idealX);
+            }
           }
-
-          let minX = (i === 0) ? -Infinity : layoutPositions.get(ids[i - 1]).x + 1.5;
-          currentPos.x = Math.max(minX, idealX);
         }
       }
+
+      // Greedy Compression Pass: Pull everything together if there's unused space
+      validGrps.forEach((ids) => {
+        // Pull from left to right
+        for (let i = 1; i < ids.length; i++) {
+          const id = ids[i];
+          const currentPos = layoutPositions.get(id);
+          const ps = playerConnections.filter(c => c.childId === id).map(c => c.parentId);
+          const cs = playerConnections.filter(c => c.parentId === id).map(c => c.childId);
+
+          let avgX = 0, count = 0;
+          ps.forEach(pid => { const p = layoutPositions.get(pid); if (p) { avgX += p.x; count++; } });
+          cs.forEach(cid => { const c = layoutPositions.get(cid); if (c) { avgX += c.x; count++; } });
+
+          if (count > 0) {
+            const ideal = avgX / count;
+            if (ideal < currentPos.x) {
+              const minX = layoutPositions.get(ids[i - 1]).x + 1.5;
+              currentPos.x = Math.max(minX, ideal);
+            }
+          }
+        }
+        // Pull from right to left
+        for (let i = ids.length - 2; i >= 0; i--) {
+          const id = ids[i];
+          const currentPos = layoutPositions.get(id);
+          const ps = playerConnections.filter(c => c.childId === id).map(c => c.parentId);
+          const cs = playerConnections.filter(c => c.parentId === id).map(c => c.childId);
+
+          let avgX = 0, count = 0;
+          ps.forEach(pid => { const p = layoutPositions.get(pid); if (p) { avgX += p.x; count++; } });
+          cs.forEach(cid => { const c = layoutPositions.get(cid); if (c) { avgX += c.x; count++; } });
+
+          if (count > 0) {
+            const ideal = avgX / count;
+            if (ideal > currentPos.x) {
+              const maxX = layoutPositions.get(ids[i + 1]).x - 1.5;
+              currentPos.x = Math.min(maxX, ideal);
+            }
+          }
+        }
+      });
     }
 
     // Final pass: Global centering of the whole tree structure
@@ -2131,7 +2223,7 @@ function updateTreeDiagram() {
 
     layout.grps.forEach((ids, l) => {
       ids.forEach(id => {
-        const h = hares.find(ha => ha.rabbit.id === id);
+        const h = hares.find(ha => ha.rabbit.id == id);
         const pos = layout.layoutPositions.get(id);
         if (h && pos) {
           const tx = (currentTreeXOffset + (pos.x - minTreeX)) * spx;
@@ -2196,7 +2288,11 @@ function updateUI() {
     if (selectedHare) {
       sPanel.style.display = 'block';
       sName.textContent = `${selectedHare.rabbit.firstName} (${CURRENT_YEAR - selectedHare.rabbit.birthYear})`;
-      sSpec.textContent = `${selectedHare.rabbit.species}, ${selectedHare.rabbit.sex === 'M' ? 'Male' : 'Female'}`;
+
+      const isDead = selectedHare.rabbit.isVictim || (selectedHare.rabbit.id === killerId && gameState.wasSuccess);
+      const deadLabel = isDead ? '<div style="color: #ff4444; font-weight: bold; margin-top: 4px; font-size: 16px;">DECEASED</div>' : '';
+      sSpec.innerHTML = `${selectedHare.rabbit.species}, ${selectedHare.rabbit.sex === 'M' ? 'Male' : 'Female'}${deadLabel}`;
+
       dnaBtn.style.display = 'none';
       accBtn.style.display = 'none';
       const hint = document.getElementById('selection-hint'); if (hint) hint.style.display = 'none';
@@ -2208,18 +2304,29 @@ function updateUI() {
   if (selectedHare) {
     sPanel.style.display = 'block';
     sName.textContent = `${selectedHare.rabbit.firstName} (${CURRENT_YEAR - selectedHare.rabbit.birthYear})`;
-    sSpec.textContent = `${selectedHare.rabbit.species}, ${selectedHare.rabbit.sex === 'M' ? 'Male' : 'Female'}`;
-    const hint = document.getElementById('selection-hint'); if (hint) hint.style.display = 'block';
-    if (dnaTestsRemaining > 0) {
-      dnaBtn.style.display = 'block'; accBtn.style.display = 'none';
-      if (selectedHare.rabbit.isTested) {
-        dnaBtn.disabled = true;
-        dnaBtn.style.opacity = '0.5';
-        const pct = selectedHare.rabbit.dnaMatchPct;
-        dnaBtn.textContent = (pct !== null) ? `${pct}% MATCH` : 'TESTED';
-      }
-      else { dnaBtn.disabled = false; dnaBtn.style.opacity = '1.0'; dnaBtn.textContent = 'DNA TEST'; }
-    } else { dnaBtn.style.display = 'none'; accBtn.style.display = 'block'; accBtn.style.opacity = '1.0'; }
+
+    const isDead = selectedHare.rabbit.isVictim || (selectedHare.rabbit.id === killerId && gameState.isFinished && gameState.wasSuccess);
+    const deadLabel = isDead ? '<div style="color: #ff4444; font-weight: bold; margin-top: 4px; font-size: 16px;">DECEASED</div>' : '';
+    sSpec.innerHTML = `${selectedHare.rabbit.species}, ${selectedHare.rabbit.sex === 'M' ? 'Male' : 'Female'}${deadLabel}`;
+
+    const hint = document.getElementById('selection-hint');
+    if (selectedHare.rabbit.isVictim) {
+      if (hint) hint.style.display = 'none';
+      dnaBtn.style.display = 'none';
+      accBtn.style.display = 'none';
+    } else {
+      if (hint) hint.style.display = 'block';
+      if (dnaTestsRemaining > 0) {
+        dnaBtn.style.display = 'block'; accBtn.style.display = 'none';
+        if (selectedHare.rabbit.isTested) {
+          dnaBtn.disabled = true;
+          dnaBtn.style.opacity = '0.5';
+          const pct = selectedHare.rabbit.dnaMatchPct;
+          dnaBtn.textContent = (pct !== null) ? `${pct}% MATCH` : 'TESTED';
+        }
+        else { dnaBtn.disabled = false; dnaBtn.style.opacity = '1.0'; dnaBtn.textContent = 'DNA TEST'; }
+      } else { dnaBtn.style.display = 'none'; accBtn.style.display = 'block'; accBtn.style.opacity = '1.0'; }
+    }
   } else sPanel.style.display = 'none';
 }
 
@@ -3460,6 +3567,10 @@ function init() {
   // 4. Create visual entities for the animals
   rabbits.forEach(r => hares.push(new Animal(r)));
 
+  // 5. Position animals correctly in the tree (even if we didn't just load, 
+  // though playerConnections will be empty in that case)
+  updateTreeDiagram();
+
   updateUI();
 
   // Initialize environment details (same for everyone today)
@@ -3815,7 +3926,10 @@ function init() {
   if (closeAboutBtn) {
     closeAboutBtn.addEventListener('click', () => {
       const aboutModal = document.getElementById('about-modal');
-      if (aboutModal) aboutModal.style.display = 'none';
+      if (aboutModal) {
+        aboutModal.style.display = 'none';
+        ensureIntroIfNecessary();
+      }
     });
   }
 
@@ -3823,7 +3937,10 @@ function init() {
   if (closePrivacyBtn) {
     closePrivacyBtn.addEventListener('click', () => {
       const privacyModal = document.getElementById('privacy-modal');
-      if (privacyModal) privacyModal.style.display = 'none';
+      if (privacyModal) {
+        privacyModal.style.display = 'none';
+        ensureIntroIfNecessary();
+      }
     });
   }
 
@@ -3911,7 +4028,10 @@ function init() {
   if (closeLimitBtn) {
     closeLimitBtn.addEventListener('click', () => {
       const limitModal = document.getElementById('limit-modal');
-      if (limitModal) limitModal.style.display = 'none';
+      if (limitModal) {
+        limitModal.style.display = 'none';
+        ensureIntroIfNecessary();
+      }
     });
   }
 
@@ -3926,6 +4046,7 @@ function init() {
           cheatInput.style.display = 'none';
           cheatInput.value = '';
         }
+        ensureIntroIfNecessary();
       }
     });
   }
@@ -4061,9 +4182,18 @@ function init() {
 
   const closeHowBtn = document.getElementById('close-how-btn');
   const howToPlayModal = document.getElementById('how-to-play-modal');
+
+  const ensureIntroIfNecessary = () => {
+    if (!gameState.isFinished && !gameState.startTime) {
+      const isActuallyMidGame = (!gameState.detective || gameState.detective === "null") && (gameState.introFinished || gameState.isMidGameChange);
+      showIntro(isActuallyMidGame);
+    }
+  };
+
   if (closeHowBtn && howToPlayModal) {
     closeHowBtn.addEventListener('click', () => {
       howToPlayModal.style.display = 'none';
+      ensureIntroIfNecessary();
     });
   }
 
@@ -4081,6 +4211,7 @@ function init() {
             const cheatInput = document.getElementById('stats-cheat-input');
             if (cheatInput) { cheatInput.style.display = 'none'; cheatInput.value = ''; }
           }
+          ensureIntroIfNecessary();
         }
       });
     }
@@ -4110,6 +4241,10 @@ function init() {
           }
         }
       });
+
+      if (modalClosed) {
+        ensureIntroIfNecessary();
+      }
 
       // 2. If no modal was closed, deselect current animal
       if (!modalClosed) {
@@ -4307,7 +4442,7 @@ function loop() {
           const c = clueQueue.shift();
           let tid = c.speakerId;
           if (!tid || activeClues.has(tid)) {
-            const free = hares.filter(h => !activeClues.has(h.rabbit.id));
+            const free = hares.filter(h => !activeClues.has(h.rabbit.id) && !h.rabbit.isVictim);
             if (free.length > 0) tid = pick(free).rabbit.id; else tid = null;
           }
           if (tid) {

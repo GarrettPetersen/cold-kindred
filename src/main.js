@@ -3007,7 +3007,7 @@ function showDNAModal(animal) {
   progressBar.style.width = '0%';
 
   drawAnimalPreview('dna-confirm-canvas', 'dna-confirm-name', animal);
-  confirmText.textContent = `Are you sure you want to test ${animal.rabbit.firstName}'s DNA? This will use 1 of your remaining DNA tests.`;
+  confirmText.textContent = `Are you sure you want to test ${animal.rabbit.firstName}'s DNA? This will use 1 of your ${dnaTestsRemaining} remaining DNA tests.`;
 
   if (dnaHandle) cancelAnimationFrame(dnaHandle);
 

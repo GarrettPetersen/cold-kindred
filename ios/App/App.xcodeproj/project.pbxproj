@@ -297,6 +297,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 16;
+				DEVELOPMENT_TEAM = 33PHJFY66Z;
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = mystery.farm;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
@@ -321,6 +322,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 16;
+				DEVELOPMENT_TEAM = 33PHJFY66Z;
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = mystery.farm;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";

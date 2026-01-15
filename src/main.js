@@ -664,12 +664,29 @@ function loadGame() {
   }
 
   if (data.clueQueueIds) {
-    clueQueue = data.clueQueueIds.map(id => cluePool.find(c => c.id === id)).filter(Boolean);
+    const findClue = (id) => {
+      let found = cluePool.find(c => c.id === id);
+      // If pool was expanded in previous session, expand it now to find the clue
+      let limit = 0;
+      while (!found && limit < 10) {
+        generateCluePool(true);
+        found = cluePool.find(c => c.id === id);
+        limit++;
+      }
+      return found;
+    };
+    clueQueue = data.clueQueueIds.map(id => findClue(id)).filter(Boolean);
   }
 
   if (data.activeClueIds) {
     data.activeClueIds.forEach(cData => {
-      const clue = cluePool.find(cp => cp.id === cData.id);
+      let clue = cluePool.find(cp => cp.id === cData.id);
+      let limit = 0;
+      while (!clue && limit < 10) {
+        generateCluePool(true);
+        clue = cluePool.find(cp => cp.id === cData.id);
+        limit++;
+      }
       if (clue) {
         clue.isRead = cData.isRead;
         clue.generatedText = cData.generatedText;
@@ -950,10 +967,14 @@ function generateCluePool(additive = false) {
     }
 
     const connStr = JSON.stringify(conn);
-    if (existing.has(connStr)) return;
-    if (newClues.length >= rabbits.length * 0.9) return;
+    // If not additive, prevent duplicates. If additive, allow a few duplicates per connection for variety.
+    if (!additive && existing.has(connStr)) return;
+    if (additive) {
+      const count = newClues.filter(c => JSON.stringify(c.conn) === connStr).length;
+      if (count >= 3) return; // Cap at 3 different ways to say the same thing
+    }
 
-    const stableId = `clue_${newClues.length}`;
+    const stableId = `clue_${newClues.length}_${Math.floor(random() * 1000)}`;
     newClues.push({ id: stableId, conn, type, speakerId, groupId, isRead: false });
     existing.add(connStr);
   }
@@ -1226,7 +1247,7 @@ function runSimulation() {
     if (pool.length === 0) break;
     const name = pool.pop();
     usedNames.add(name);
-    const r = new AnimalRecord(name, sex, CURRENT_YEAR - 140 + Math.floor(random() * 20), 0, pick(SPECIES));
+    const r = new AnimalRecord(name, sex, CURRENT_YEAR - 150 + Math.floor(random() * 20), 0, pick(SPECIES));
     g0.push(r); rabbits.push(r);
   }
   let prev = g0;
@@ -1236,11 +1257,14 @@ function runSimulation() {
     let fs = shuffle(prev.filter(r => r.sex === 'F'));
 
     // Pairing logic to avoid ALL shared parents (full and half siblings) and parent/child
+    // Also enforce reproductive maturity (age 20+)
     const usedF = new Set();
     const pairs = [];
     for (const m of ms) {
+      if (CURRENT_YEAR - m.birthYear < 20) continue; 
       const f = fs.find(f => {
         if (usedF.has(f.id)) return false;
+        if (CURRENT_YEAR - f.birthYear < 20) return false;
         const mP = [m.fatherId, m.motherId].filter(id => id !== null);
         const fP = [f.fatherId, f.motherId].filter(id => id !== null);
         if (mP.some(id => fP.includes(id))) return false;
@@ -1270,8 +1294,17 @@ function runSimulation() {
         const name = pool.pop();
         usedNames.add(name);
 
-        let bYear = f.birthYear + 20 + Math.floor(random() * 20);
-        if (bYear >= CURRENT_YEAR) bYear = CURRENT_YEAR - 1 - Math.floor(random() * 5);
+        // Parents are 20-35 years older than kids (tighter range to avoid future births)
+        let bYear = f.birthYear + 20 + Math.floor(random() * 15);
+        if (bYear >= CURRENT_YEAR) {
+          // If the child would be born in the future, push them to the most recent possible year
+          // while still trying to maintain as much of a gap as possible.
+          bYear = CURRENT_YEAR - 1 - Math.floor(random() * 3);
+          // Absolute safety: ensure child is at least 15 years younger than parent 
+          // (allowing some flexibility if 20 isn't possible due to CURRENT_YEAR)
+          if (bYear < f.birthYear + 15) bYear = f.birthYear + 15;
+        }
+        
         const child = new AnimalRecord(name, sex, bYear, gen, random() < 0.5 ? m.species : f.species, m.id, f.id);
         next.push(child); rabbits.push(child);
       }
@@ -1289,8 +1322,9 @@ function runSimulation() {
         const sex = (pool === mPool) ? 'M' : 'F';
         const name = pool.pop();
         usedNames.add(name);
-        let bYear = pair.f.birthYear + 25 + Math.floor(random() * 15);
+        let bYear = pair.f.birthYear + 22 + Math.floor(random() * 12);
         if (bYear >= CURRENT_YEAR) bYear = CURRENT_YEAR - 1;
+        if (bYear < pair.f.birthYear + 15) bYear = pair.f.birthYear + 15;
         const bonusChild = new AnimalRecord(name, sex, bYear, gen, random() < 0.5 ? pair.m.species : pair.f.species, pair.m.id, pair.f.id);
         next.push(bonusChild); rabbits.push(bonusChild);
       }
@@ -2015,27 +2049,38 @@ function updateTreeDiagram() {
       // Top-down: Sort children based on average parent position
       for (let l = 1; l < validGrps.length; l++) {
         const order = new Map(); validGrps[l - 1].forEach((id, i) => order.set(id, i));
+        // Capture indices before sorting to ensure stability
+        const prevOrder = new Map(); validGrps[l].forEach((id, i) => prevOrder.set(id, i));
+        
         validGrps[l].sort((a, b) => {
           const getAvg = (id) => {
             const ps = playerConnections.filter(c => c.childId === id).map(c => c.parentId);
             let s = 0, c = 0; ps.forEach(pid => { if (order.has(pid)) { s += order.get(pid); c++; } });
-            // If no parents, keep existing order to avoid bunching at the left
-            return c > 0 ? s / c : validGrps[l].indexOf(id);
+            // If no parents, use previous order to avoid bunching and maintain stability
+            return c > 0 ? s / c : (prevOrder.get(id) || 0);
           };
-          return getAvg(a) - getAvg(b);
+          const valA = getAvg(a);
+          const valB = getAvg(b);
+          if (Math.abs(valA - valB) < 0.001) return a - b; // Ultimate tie-breaker: ID
+          return valA - valB;
         });
       }
       // Bottom-up: Sort parents based on average child position
       for (let l = validGrps.length - 2; l >= 0; l--) {
         const order = new Map(); validGrps[l + 1].forEach((id, i) => order.set(id, i));
+        const prevOrder = new Map(); validGrps[l].forEach((id, i) => prevOrder.set(id, i));
+
         validGrps[l].sort((a, b) => {
           const getAvg = (id) => {
             const cs = playerConnections.filter(c => c.parentId === id).map(c => c.childId);
             let s = 0, c = 0; cs.forEach(cid => { if (order.has(cid)) { s += order.get(cid); c++; } });
-            // If no children, keep existing order
-            return c > 0 ? s / c : validGrps[l].indexOf(id);
+            // If no children, use previous order
+            return c > 0 ? s / c : (prevOrder.get(id) || 0);
           };
-          return getAvg(a) - getAvg(b);
+          const valA = getAvg(a);
+          const valB = getAvg(b);
+          if (Math.abs(valA - valB) < 0.001) return a - b; // Ultimate tie-breaker: ID
+          return valA - valB;
         });
       }
     }
@@ -2046,7 +2091,7 @@ function updateTreeDiagram() {
     // First pass: Assign initial relative coordinates within each row
     validGrps.forEach((ids, l) => {
       ids.forEach((id, i) => {
-        layoutPositions.set(id, { l, i, x: i * 1.5 });
+        layoutPositions.set(id, { l, i, x: i * 2.0 });
       });
     });
 
@@ -2070,7 +2115,7 @@ function updateTreeDiagram() {
             if (pCount > 0) {
               const idealX = avgParentX / pCount;
               const currentPos = layoutPositions.get(id);
-              let maxX = (i === ids.length - 1) ? Infinity : layoutPositions.get(ids[i + 1]).x - 1.5;
+              let maxX = (i === ids.length - 1) ? Infinity : layoutPositions.get(ids[i + 1]).x - 2.0;
               currentPos.x = Math.min(maxX, idealX);
             }
           }
@@ -2088,7 +2133,7 @@ function updateTreeDiagram() {
             if (pCount > 0) {
               const idealX = avgParentX / pCount;
               const currentPos = layoutPositions.get(id);
-              let minX = (i === 0) ? -Infinity : layoutPositions.get(ids[i - 1]).x + 1.5;
+              let minX = (i === 0) ? -Infinity : layoutPositions.get(ids[i - 1]).x + 2.0;
               currentPos.x = Math.max(minX, idealX);
             }
           }
@@ -2111,7 +2156,7 @@ function updateTreeDiagram() {
             if (cCount > 0) {
               const idealX = avgChildX / cCount;
               const currentPos = layoutPositions.get(id);
-              let maxX = (i === ids.length - 1) ? Infinity : layoutPositions.get(ids[i + 1]).x - 1.5;
+              let maxX = (i === ids.length - 1) ? Infinity : layoutPositions.get(ids[i + 1]).x - 2.0;
               currentPos.x = Math.min(maxX, idealX);
             }
           }
@@ -2129,7 +2174,7 @@ function updateTreeDiagram() {
             if (cCount > 0) {
               const idealX = avgChildX / cCount;
               const currentPos = layoutPositions.get(id);
-              let minX = (i === 0) ? -Infinity : layoutPositions.get(ids[i - 1]).x + 1.5;
+              let minX = (i === 0) ? -Infinity : layoutPositions.get(ids[i - 1]).x + 2.0;
               currentPos.x = Math.max(minX, idealX);
             }
           }
@@ -2152,7 +2197,7 @@ function updateTreeDiagram() {
           if (count > 0) {
             const ideal = avgX / count;
             if (ideal < currentPos.x) {
-              const minX = layoutPositions.get(ids[i - 1]).x + 1.5;
+              const minX = layoutPositions.get(ids[i - 1]).x + 2.0;
               currentPos.x = Math.max(minX, ideal);
             }
           }
@@ -2171,7 +2216,7 @@ function updateTreeDiagram() {
           if (count > 0) {
             const ideal = avgX / count;
             if (ideal > currentPos.x) {
-              const maxX = layoutPositions.get(ids[i + 1]).x - 1.5;
+              const maxX = layoutPositions.get(ids[i + 1]).x - 2.0;
               currentPos.x = Math.min(maxX, ideal);
             }
           }
@@ -2204,9 +2249,9 @@ function updateTreeDiagram() {
     forestRawWidth += (maxX - minX) + 2.0; // Spacing between trees
   });
 
-  // Adaptive scaling: Remove the minSpacingX floor to ensure we NEVER run off the map.
-  // We'll allow the graph to squish as much as needed to fit.
-  let spx = Math.min(preferredSpacingX, availableW / Math.max(1, forestRawWidth));
+  // Adaptive scaling: Ensure we have at least 80px per "unit" if possible, but scale down if forest is huge.
+  // However, we never go below 60px to prevent overlapping (2.0 gap * 60px = 120px, which fits 64px sprites).
+  let spx = Math.max(60, Math.min(preferredSpacingX, availableW / Math.max(1, forestRawWidth)));
   let spy = Math.max(minSpacingY * 1.2, Math.min(preferredSpacingY, availableH / Math.max(1, maxTreeHeight)));
 
   // Calculate vertical center of the field
@@ -2237,7 +2282,7 @@ function updateTreeDiagram() {
 
     let minX = Infinity, maxX = -Infinity;
     layout.layoutPositions.forEach(p => { minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x); });
-    currentTreeXOffset += (maxX - minX) + 2.0;
+    currentTreeXOffset += (maxX - minX) + 2.5; // Slightly more spacing between distinct trees
   });
 
   // Final Pass: Shift everything to be perfectly centered in FIELD_WIDTH
@@ -2252,6 +2297,31 @@ function updateTreeDiagram() {
         // 64px sprite + 40px buffer = ~100px safety margin
         h.targetX = Math.max(100, Math.min(FIELD_WIDTH - 164, h.targetX));
       }
+    });
+  }
+
+  // --- LAST RESORT COLLISION PREVENTION ---
+  // If the algorithm still puts animals on top of each other, nudge them apart.
+  const overlapThreshold = 100; // Minimum pixel distance between centers
+  for (let iter = 0; iter < 3; iter++) {
+    hares.forEach(h1 => {
+      if (h1.targetX === null) return;
+      hares.forEach(h2 => {
+        if (h1 === h2 || h2.targetX === null) return;
+        if (Math.abs(h1.targetY - h2.targetY) < 10) { // Same level
+          const dx = h1.targetX - h2.targetX;
+          if (Math.abs(dx) < overlapThreshold) {
+            const push = (overlapThreshold - Math.abs(dx)) / 2 + 1;
+            if (dx >= 0) {
+              h1.targetX += push;
+              h2.targetX -= push;
+            } else {
+              h1.targetX -= push;
+              h2.targetX += push;
+            }
+          }
+        }
+      });
     });
   }
 }
@@ -4384,26 +4454,44 @@ function loop() {
 
       // If queue is empty, pick a new clue/group from pool
       if (clueQueue.length === 0) {
-        const avail = cluePool.filter(c => {
-          if (issuedIds.has(c.id)) return false;
+        const getRelevant = (onlyUnissued) => {
+          return cluePool.filter(c => {
+            if (onlyUnissued && issuedIds.has(c.id)) return false;
+            // Even if re-issuing, don't pick one currently on screen or in queue
+            if (!onlyUnissued && (Array.from(activeClues.values()).some(ac => ac.id === c.id) || clueQueue.some(cq => cq.id === c.id))) return false;
 
-          const conn = c.conn;
-          if (conn.parentId && conn.childId) {
-            if (playerConnections.some(pc => pc.parentId === conn.parentId && pc.childId === conn.childId)) return false;
-          } else if (conn.type === 'couple') {
-            const c1 = playerConnections.filter(pc => pc.parentId === conn.p1).map(pc => pc.childId);
-            const c2 = playerConnections.filter(pc => pc.parentId === conn.p2).map(pc => pc.childId);
-            if (c1.some(id => c2.includes(id))) return false;
-          } else if (conn.type === 'sibling') {
-            const p1 = playerConnections.filter(pc => pc.childId === conn.a).map(pc => pc.parentId);
-            const p2 = playerConnections.filter(pc => pc.childId === conn.b).map(pc => pc.parentId);
-            if (p1.some(id => p2.includes(id))) return false;
-          } else if (conn.type === 'grandparent') {
-            const parents = playerConnections.filter(pc => pc.childId === conn.gc).map(pc => pc.parentId);
-            if (parents.some(pid => playerConnections.some(pc => pc.parentId === conn.gp && pc.childId === pid))) return false;
-          }
-          return true;
-        });
+            const conn = c.conn;
+            if (conn.parentId && conn.childId) {
+              if (playerConnections.some(pc => pc.parentId === conn.parentId && pc.childId === conn.childId)) return false;
+            } else if (conn.type === 'couple') {
+              const c1 = playerConnections.filter(pc => pc.parentId === conn.p1).map(pc => pc.childId);
+              const c2 = playerConnections.filter(pc => pc.parentId === conn.p2).map(pc => pc.childId);
+              if (c1.some(id => c2.includes(id))) return false;
+            } else if (conn.type === 'sibling') {
+              const p1 = playerConnections.filter(pc => pc.childId === conn.a).map(pc => pc.parentId);
+              const p2 = playerConnections.filter(pc => pc.childId === conn.b).map(pc => pc.parentId);
+              if (p1.some(id => p2.includes(id))) return false;
+            } else if (conn.type === 'grandparent') {
+              const parents = playerConnections.filter(pc => pc.childId === conn.gc).map(pc => pc.parentId);
+              if (parents.some(pid => playerConnections.some(pc => pc.parentId === conn.gp && pc.childId === pid))) return false;
+            } else if (conn.type === 'onlyChild') {
+              if (playerConnections.some(pc => pc.parentId === conn.parentId && pc.childId === conn.childId)) return false;
+            }
+            return true;
+          });
+        };
+
+        let avail = getRelevant(true);
+        if (avail.length < 5 && !gameState.isFinished) {
+          // Pool running low on unissued clues? Generate more variations.
+          generateCluePool(true);
+          avail = getRelevant(true);
+        }
+
+        if (avail.length === 0) {
+          // Pool exhausted? Allow re-issuing old clues for unsolved connections
+          avail = getRelevant(false);
+        }
 
         if (avail.length > 0) {
           // Prioritize necessary clues over extra clues (3:1 weight)

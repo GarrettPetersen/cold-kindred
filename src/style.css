@@ -1,3 +1,10 @@
+@font-face {
+  font-family: 'Silkscreen';
+  src: url('../assets/fonts/Silkscreen-Regular.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+
 :root {
   --safe-bottom: 0px;
 }
@@ -23,9 +30,9 @@
 .char-card {
   cursor: pointer;
   background: rgba(255,255,255,0.05);
-  border: 2px solid rgba(255,255,255,0.2);
+  border: 4px solid rgba(255,255,255,0.2);
   padding: 15px;
-  border-radius: 12px;
+  border-radius: 0;
   transition: all 0.2s;
   flex: 0 1 calc(50% - 20px);
   min-width: 140px;
@@ -88,6 +95,7 @@
 
 *, *::before, *::after {
   box-sizing: border-box;
+  image-rendering: pixelated;
 }
 
 body, html {
@@ -102,6 +110,7 @@ body, html {
   -webkit-user-select: none;
   -webkit-touch-callout: none;
   -webkit-tap-highlight-color: transparent;
+  font-family: 'Silkscreen', monospace;
 }
 
 a {
@@ -157,7 +166,7 @@ a {
   left: calc(15px + env(safe-area-inset-left)) !important;
   width: 40px;
   height: 40px;
-  border-radius: 50%;
+  border-radius: 0;
   background: #fff9e6;
   border: 2px solid #5d3a1a;
   color: #2c3e50;
@@ -168,7 +177,7 @@ a {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: 'Courier New', Courier, monospace;
+  font-family: 'Silkscreen', monospace;
   z-index: 150;
   box-shadow: 2px 4px 12px rgba(0,0,0,0.3);
   transition: transform 0.1s;
@@ -184,7 +193,7 @@ a {
   left: calc(65px + env(safe-area-inset-left)) !important;
   height: 40px;
   padding: 0 12px;
-  border-radius: 20px;
+  border-radius: 0;
   background: #fff9e6;
   border: 2px solid #5d3a1a;
   color: #2c3e50;
@@ -193,7 +202,7 @@ a {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: 'Courier New', Courier, monospace;
+  font-family: 'Silkscreen', monospace;
   z-index: 150;
   box-shadow: 2px 4px 12px rgba(0,0,0,0.3);
   pointer-events: none;
@@ -204,13 +213,13 @@ a {
   top: calc(15px + env(safe-area-inset-top)) !important;
   right: calc(15px + env(safe-area-inset-right)) !important;
   pointer-events: none;
-  font-family: 'Courier New', Courier, monospace;
+  font-family: 'Silkscreen', monospace;
 }
 
 #status-panel {
   background: #fff9e6;
   padding: 8px 12px;
-  border-radius: 8px;
+  border-radius: 0;
   border: 2px solid #5d3a1a;
   margin-bottom: 10px;
   width: 160px;
@@ -226,7 +235,7 @@ a {
 #selection-panel {
   background: #fff9e6;
   padding: 12px;
-  border-radius: 8px;
+  border-radius: 0;
   border: 2px solid #5d3a1a;
   pointer-events: auto;
   width: 160px;
@@ -247,10 +256,21 @@ a {
   opacity: 0.7;
 }
 
+.pixel-dna {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  background-image: url('/assets/items/dna.png');
+  background-size: contain;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+  vertical-align: middle;
+}
+
 #selection-hint {
   background: rgba(0,0,0,0.05);
   padding: 8px;
-  border-radius: 4px;
+  border-radius: 0;
   font-size: 12px;
   color: #555;
   margin-bottom: 15px;
@@ -263,7 +283,7 @@ a {
   color: black;
   border: 2px solid #2d8a2d;
   padding: 8px 16px;
-  border-radius: 4px;
+  border-radius: 0;
   cursor: pointer;
   font-weight: bold;
   width: 100%;
@@ -276,7 +296,7 @@ a {
   color: white;
   border: 2px solid #8a2d2d;
   padding: 8px 16px;
-  border-radius: 4px;
+  border-radius: 0;
   cursor: pointer;
   font-weight: bold;
   width: 100%;
@@ -290,15 +310,135 @@ a {
   color: black;
   border: 2px solid #2d8a2d;
   padding: 12px 20px;
-  border-radius: 8px;
+  border-radius: 0;
   cursor: pointer;
   font-weight: bold;
   font-size: 14px;
   width: 160px;
   box-sizing: border-box;
   margin-top: 10px;
-  font-family: 'Courier New', Courier, monospace;
+  font-family: 'Silkscreen', monospace;
   box-shadow: 2px 4px 12px rgba(0,0,0,0.3);
+}
+
+/* Custom Pixel Scrollbar */
+::-webkit-scrollbar {
+  width: 16px;
+}
+::-webkit-scrollbar-track {
+  background: #000;
+}
+::-webkit-scrollbar-thumb {
+  background: #555;
+  border: 4px solid #000;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #777;
+}
+
+/* Notebook Scrollbar */
+#transcript-list::-webkit-scrollbar-track {
+  background: #fff9e6;
+}
+#transcript-list::-webkit-scrollbar-thumb {
+  background: #d1e5f0;
+  border: 4px solid #fff9e6;
+}
+
+.pixel-button {
+  image-rendering: pixelated;
+  border: 4px solid #000 !important;
+  box-shadow: inset -4px -4px 0 rgba(0,0,0,0.2), inset 4px 4px 0 rgba(255,255,255,0.3) !important;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: transform 0.05s;
+}
+
+.pixel-button:active {
+  transform: scale(0.98);
+  box-shadow: inset 4px 4px 0 rgba(0,0,0,0.2), inset -4px -4px 0 rgba(255,255,255,0.3) !important;
+}
+
+.pixel-scroll-hint {
+  display: block;
+  width: 32px;
+  height: 20px;
+  margin: 0 auto;
+  background: 
+    linear-gradient(currentColor, currentColor) 0 0 / 32px 4px no-repeat,
+    linear-gradient(currentColor, currentColor) 4px 4px / 24px 4px no-repeat,
+    linear-gradient(currentColor, currentColor) 8px 8px / 16px 4px no-repeat,
+    linear-gradient(currentColor, currentColor) 12px 12px / 8px 4px no-repeat,
+    linear-gradient(currentColor, currentColor) 14px 16px / 4px 4px no-repeat;
+}
+
+.pixel-hourglass {
+  display: block;
+  width: 40px;
+  height: 50px;
+  margin: 0 auto;
+  position: relative;
+  background: 
+    /* Top and bottom bars */
+    linear-gradient(#888, #888) 0 0 / 40px 5px no-repeat,
+    linear-gradient(#888, #888) 0 45px / 40px 5px no-repeat,
+    /* Frame sides */
+    linear-gradient(#888, #888) 0 5px / 5px 10px no-repeat,
+    linear-gradient(#888, #888) 35px 5px / 5px 10px no-repeat,
+    linear-gradient(#888, #888) 0 35px / 5px 10px no-repeat,
+    linear-gradient(#888, #888) 35px 35px / 5px 10px no-repeat,
+    /* Glass curves */
+    linear-gradient(#fff, #fff) 5px 15px / 5px 5px no-repeat,
+    linear-gradient(#fff, #fff) 30px 15px / 5px 5px no-repeat,
+    linear-gradient(#fff, #fff) 10px 20px / 5px 5px no-repeat,
+    linear-gradient(#fff, #fff) 25px 20px / 5px 5px no-repeat,
+    linear-gradient(#fff, #fff) 15px 25px / 10px 5px no-repeat,
+    linear-gradient(#fff, #fff) 10px 30px / 5px 5px no-repeat,
+    linear-gradient(#fff, #fff) 25px 30px / 5px 5px no-repeat,
+    linear-gradient(#fff, #fff) 5px 35px / 5px 5px no-repeat,
+    linear-gradient(#fff, #fff) 30px 35px / 5px 5px no-repeat,
+    /* Sand (Top) */
+    linear-gradient(#44ff44, #44ff44) 10px 10px / 20px 5px no-repeat,
+    linear-gradient(#44ff44, #44ff44) 15px 15px / 10px 5px no-repeat,
+    /* Sand (Bottom) */
+    linear-gradient(#44ff44, #44ff44) 15px 35px / 10px 5px no-repeat,
+    linear-gradient(#44ff44, #44ff44) 10px 40px / 20px 5px no-repeat;
+}
+
+.pixel-arrow-up {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  background: 
+    linear-gradient(currentColor, currentColor) 4px 0 / 4px 4px no-repeat,
+    linear-gradient(currentColor, currentColor) 2px 4px / 8px 4px no-repeat,
+    linear-gradient(currentColor, currentColor) 0 8px / 12px 4px no-repeat;
+  vertical-align: middle;
+}
+
+.pixel-arrow-dr { /* Down-Right */
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  background: 
+    linear-gradient(currentColor, currentColor) 0 0 / 4px 4px no-repeat,
+    linear-gradient(currentColor, currentColor) 4px 4px / 4px 4px no-repeat,
+    linear-gradient(currentColor, currentColor) 8px 8px / 4px 4px no-repeat,
+    linear-gradient(currentColor, currentColor) 4px 8px / 4px 4px no-repeat,
+    linear-gradient(currentColor, currentColor) 8px 4px / 4px 4px no-repeat;
+}
+
+.pixel-arrow-dl { /* Down-Left */
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  background: 
+    linear-gradient(currentColor, currentColor) 8px 0 / 4px 4px no-repeat,
+    linear-gradient(currentColor, currentColor) 4px 4px / 4px 4px no-repeat,
+    linear-gradient(currentColor, currentColor) 0 8px / 4px 4px no-repeat,
+    linear-gradient(currentColor, currentColor) 4px 8px / 4px 4px no-repeat,
+    linear-gradient(currentColor, currentColor) 0 4px / 4px 4px no-repeat;
 }
 
 #transcript-container {
@@ -310,9 +450,9 @@ a {
   max-width: 600px;
   background-color: #fff9e6; /* Notebook paper color */
   border-top: 4px solid #5d3a1a; /* Dark wood top border */
-  border-radius: 12px 12px 0 0;
+  border-radius: 0;
   color: #2c3e50;
-  font-family: 'Courier New', Courier, monospace;
+  font-family: 'Silkscreen', monospace;
   z-index: 100;
   transition: transform 0.3s ease;
   height: 50vh; /* Half the screen height */
@@ -393,13 +533,13 @@ a {
 .transcript-entry:first-child {
   font-weight: bold; /* Highlight the newest entry */
   background: rgba(93, 58, 26, 0.05);
-  border-radius: 4px;
+  border-radius: 0;
   padding-top: 5px;
   padding-bottom: 5px;
 }
 
 .transcript-entry.system-message {
-  font-style: italic;
+  font-weight: bold;
   opacity: 0.8;
   border-left: 4px solid #ff4444;
 }
@@ -407,7 +547,7 @@ a {
 .animal-mention {
   background: rgba(0, 0, 0, 0.75);
   padding: 0px 6px;
-  border-radius: 4px;
+  border-radius: 0;
   font-weight: bold;
   display: inline-block;
   line-height: 1.4;
@@ -436,8 +576,8 @@ a {
   width: 128px;
   height: 128px;
   background: #000;
-  border: 2px solid rgba(255,255,255,0.3);
-  border-radius: 8px;
+  border: 4px solid rgba(255,255,255,0.3);
+  border-radius: 0;
   overflow: hidden;
   image-rendering: pixelated;
   box-shadow: 0 4px 12px rgba(0,0,0,0.5);
@@ -521,14 +661,14 @@ a {
   left: 50%;
   transform: translateX(-50%);
   background: #fff9e6;
-  border: 2px solid #5d3a1a;
+  border: 4px solid #5d3a1a;
+  box-shadow: inset -4px -4px 0 rgba(0,0,0,0.1), inset 4px 4px 0 rgba(255,255,255,0.5), 0 4px 20px rgba(0,0,0,0.5);
   padding: 15px 20px;
-  border-radius: 12px;
+  border-radius: 0;
   color: #2c3e50;
-  font-family: 'Courier New', Courier, monospace;
+  font-family: 'Silkscreen', monospace;
   font-size: 14px;
   font-weight: bold;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
   z-index: 150;
   max-width: 300px;
   text-align: center;

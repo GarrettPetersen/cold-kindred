@@ -121,26 +121,40 @@ const detectiveSprites = {
   boarot_lab: new Image(),
   marmot_lab: new Image(),
   dna_test: new Image(),
-  police_badge: new Image()
+  police_badge: new Image(),
+  dna_icon: new Image()
 };
 
 let assetsLoaded = 0;
-const TOTAL_ASSETS = SPECIES.length * 4 + 6 + 14;
+const TOTAL_ASSETS = SPECIES.length * 4 + 6 + 15 + 1; // +1 for the font
 
-function onAssetLoad() {
+function onAssetLoad() { 
   assetsLoaded++;
 
   // Show loading progress on canvas
   ctx.fillStyle = '#151515';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.fillStyle = '#fff';
-  ctx.font = '20px monospace';
+  ctx.font = '20px Silkscreen';
   ctx.textAlign = 'center';
   ctx.fillText(`LOADING CASE FILES: ${Math.round((assetsLoaded / TOTAL_ASSETS) * 100)}%`, canvas.width / 2, canvas.height / 2);
 
   if (assetsLoaded === TOTAL_ASSETS) {
     init();
   }
+}
+
+// Wait for the custom font to load
+if (document.fonts) {
+  document.fonts.load('20px Silkscreen').then(() => {
+    onAssetLoad();
+  }).catch(() => {
+    // If font fails, still proceed
+    onAssetLoad();
+  });
+} else {
+  // Fallback for very old browsers
+  setTimeout(onAssetLoad, 500);
 }
 
 // Grass sprites
@@ -153,7 +167,7 @@ for (let i = 1; i <= 6; i++) {
 }
 
 // Detective sprites
-['fox', 'hare', 'boarot', 'marmot', 'fox_celebration', 'hare_celebration', 'boarot_celebration', 'marmot_celebration', 'fox_lab', 'hare_lab', 'boarot_lab', 'marmot_lab', 'dna_test', 'police_badge'].forEach(key => {
+['fox', 'hare', 'boarot', 'marmot', 'fox_celebration', 'hare_celebration', 'boarot_celebration', 'marmot_celebration', 'fox_lab', 'hare_lab', 'boarot_lab', 'marmot_lab', 'dna_test', 'police_badge', 'dna_icon'].forEach(key => {
   detectiveSprites[key].onload = onAssetLoad;
   detectiveSprites[key].onerror = onAssetLoad;
 });
@@ -172,6 +186,7 @@ detectiveSprites.boarot_lab.src = '/assets/detectives/hercule_boarot_lab.png';
 detectiveSprites.marmot_lab.src = '/assets/detectives/miss_marmot_lab.png';
 detectiveSprites.dna_test.src = '/assets/animations/dna_test.png';
 detectiveSprites.police_badge.src = '/assets/items/police_badge.png';
+detectiveSprites.dna_icon.src = '/assets/items/dna.png';
 
 SPECIES.forEach(s => {
   sprites[s] = { idle: new Image(), walk: new Image(), run: new Image(), death: new Image() };
@@ -444,14 +459,14 @@ function calculateStreaks() {
   if (dates.length === 0) return { win: 0, att: 0, maxWin: 0, maxAtt: 0 };
 
   let currWin = 0, currAtt = 0, maxWin = 0, maxAtt = 0;
-
+  
   // Calculate historical maxes (need oldest to newest for this)
   const cronDates = [...dates].reverse();
   let tempWin = 0, tempAtt = 0;
   for (let i = 0; i < cronDates.length; i++) {
     const dayData = stats.history[cronDates[i]];
     const dayResults = Array.isArray(dayData) ? dayData : [dayData];
-
+    
     // Check for gap relative to previous entry
     if (i > 0) {
       const dPrev = new Date(cronDates[i - 1]);
@@ -461,17 +476,17 @@ function calculateStreaks() {
         tempAtt = 0;
       }
     }
-
+    
     const isAttempt = dayResults.some(r => r && r.status && r.status !== 'incomplete');
     const isWin = dayResults.some(r => r && r.status === 'success');
 
     if (isAttempt) {
-      tempAtt++;
-      maxAtt = Math.max(maxAtt, tempAtt);
+    tempAtt++;
+    maxAtt = Math.max(maxAtt, tempAtt);
     } else {
       tempAtt = 0;
     }
-
+    
     if (isWin) {
       tempWin++;
       maxWin = Math.max(maxWin, tempWin);
@@ -506,7 +521,7 @@ function calculateStreaks() {
 
     if (!attStreakBroken) {
       if (isAttempt) {
-        currAtt++;
+    currAtt++;
       } else if (ds !== today) {
         attStreakBroken = true;
       }
@@ -514,10 +529,10 @@ function calculateStreaks() {
 
     if (!winStreakBroken) {
       if (isWin) {
-        currWin++;
+      currWin++;
       } else if (ds !== today) {
-        winStreakBroken = true;
-      }
+      winStreakBroken = true;
+    }
     }
 
     if (isAttempt) lastDateFound = ds;
@@ -558,7 +573,7 @@ function saveGame() {
   } else {
     localStorage.removeItem('mysteryFarm_detective');
   }
-
+  
   if (gameState.isFinished && !gameState.statsUpdated) {
     const stats = getStats();
 
@@ -605,7 +620,7 @@ function loadGame() {
 
   const saved = localStorage.getItem('mysteryFarm_current');
   if (!saved) return false;
-
+  
   const data = JSON.parse(saved);
   if (data.date !== currentDateStr) {
     const stats = getStats();
@@ -615,7 +630,7 @@ function loadGame() {
     }
     return false;
   }
-
+  
   // Clear the transcript UI before re-hydrating
   const list = document.getElementById('transcript-list');
   if (list) list.innerHTML = '';
@@ -662,7 +677,7 @@ function loadGame() {
       }
     });
   }
-
+  
   if (data.clueQueueIds) {
     const findClue = (id) => {
       let found = cluePool.find(c => c.id === id);
@@ -696,7 +711,7 @@ function loadGame() {
   }
 
   highlightedAnimalIds = new Set(data.highlightedAnimalIds || []);
-
+  
   caseLog.forEach(entry => {
     const splitIdx = entry.indexOf(': ');
     if (splitIdx === -1) {
@@ -714,19 +729,19 @@ function loadGame() {
     }
   });
   if (tCount) tCount.textContent = dnaTestsRemaining;
-
+  
   return true;
 }
 
 const camera = { x: 0, y: 0, zoom: 1.0, minZoom: 0.1, maxZoom: 3.0 };
-const input = {
-  isDragging: false,
-  lastMouseX: 0,
-  lastMouseY: 0,
-  startX: 0,
+const input = { 
+  isDragging: false, 
+  lastMouseX: 0, 
+  lastMouseY: 0, 
+  startX: 0, 
   startY: 0,
   hasMoved: false,
-  lastTouchDist: 0
+  lastTouchDist: 0 
 };
 
 class AnimalRecord {
@@ -807,7 +822,7 @@ function kinship(a, b) {
 
 function getRelationshipLabel(common, id1, id2) {
   if (!common || common.length === 0) return null;
-
+  
   // 1. SAFETY OVERRIDE: Check for absolute direct parentage first
   const r1 = rabbits.find(r => r.id === id1);
   const r2 = rabbits.find(r => r.id === id2);
@@ -821,10 +836,10 @@ function getRelationshipLabel(common, id1, id2) {
   const closest = common.reduce((min, c) => {
     const n_min = Math.min(min.dist1, min.dist2) - 1;
     const n_c = Math.min(c.dist1, c.dist2) - 1;
-
+    
     if (n_c < n_min) return c; // -1 (Direct) beats 0 (Uncle)
     if (n_c > n_min) return min;
-
+    
     const rem_min = Math.abs(min.dist1 - min.dist2);
     const rem_c = Math.abs(c.dist1 - c.dist2);
     if (rem_c < rem_min) return c;
@@ -835,7 +850,7 @@ function getRelationshipLabel(common, id1, id2) {
   const dist2 = closest.dist2;
   const n = Math.min(dist1, dist2) - 1;
   const removed = Math.abs(dist1 - dist2);
-
+  
   if (n === -1) {
     if (dist1 === 0 && dist2 === 0) return "self";
     if (dist1 === 0) { // Killer is the ancestor
@@ -852,7 +867,7 @@ function getRelationshipLabel(common, id1, id2) {
     }
     return "direct relative";
   }
-  if (n < 0) return null;
+  if (n < 0) return null; 
   if (n === 0) {
     if (dist1 === 1 && dist2 === 1) return "sibling";
     const p1 = rabbits.find(r => r.id === id1);
@@ -912,7 +927,7 @@ function getPath(startId, targetId) {
     visited.add(currId);
     const curr = rabbits.find(r => r.id === currId);
     if (!curr) break;
-
+    
     // Explicitly check if the target is one of the parents
     if (curr.fatherId === targetId) {
       path.push({ parentId: curr.fatherId, childId: currId });
@@ -955,7 +970,7 @@ function updateNecessaryConnections() {
 function generateCluePool(additive = false) {
   const newClues = additive ? [...cluePool] : [];
   const existing = new Set(newClues.map(c => JSON.stringify(c.conn)));
-
+  
   function addRawClue(conn, type, speakerId = null, groupId = null) {
     // Normalize symmetric connections to prevent duplicates
     if (conn.type === 'couple') {
@@ -982,7 +997,7 @@ function generateCluePool(additive = false) {
   necessaryConnections.forEach(conn => {
     const connStr = JSON.stringify(conn);
     if (existing.has(connStr)) return;
-
+    
     const p = rabbits.find(r => r.id === conn.parentId);
     const c = rabbits.find(r => r.id === conn.childId);
     if (!p || !c) return;
@@ -998,7 +1013,7 @@ function generateCluePool(additive = false) {
       if (isOnlyChild && random() < 0.5) {
         addRawClue({ type: 'onlyChild', parentId: p.id, childId: c.id }, 'necessary', sid);
       } else {
-        addRawClue(conn, 'necessary', sid);
+      addRawClue(conn, 'necessary', sid);
       }
     } else if (r < 0.75) {
       // Strategy 2: Spouse/Couple Inference (Speaker is often the child)
@@ -1012,7 +1027,7 @@ function generateCluePool(additive = false) {
         if (spouseChildren.length === 1 && random() < 0.5) {
           addRawClue({ type: 'onlyChild', parentId: spouse.id, childId: c.id }, 'necessary', sid, gid);
         } else {
-          addRawClue({ parentId: spouse.id, childId: c.id }, 'necessary', sid, gid);
+        addRawClue({ parentId: spouse.id, childId: c.id }, 'necessary', sid, gid);
         }
         addRawClue({ type: 'couple', p1: p.id, p2: spouse.id }, 'necessary', null, gid);
       } else {
@@ -1030,8 +1045,8 @@ function generateCluePool(additive = false) {
       } else {
         if (isOnlyChild && random() < 0.5) {
           addRawClue({ type: 'onlyChild', parentId: p.id, childId: c.id }, 'necessary', c.id);
-        } else {
-          addRawClue(conn, 'necessary', c.id);
+      } else {
+        addRawClue(conn, 'necessary', c.id);
         }
       }
     } else {
@@ -1046,8 +1061,8 @@ function generateCluePool(additive = false) {
       } else {
         if (isOnlyChild && random() < 0.5) {
           addRawClue({ type: 'onlyChild', parentId: p.id, childId: c.id }, 'necessary', p.id);
-        } else {
-          addRawClue(conn, 'necessary', p.id);
+      } else {
+        addRawClue(conn, 'necessary', p.id);
         }
       }
     }
@@ -1056,7 +1071,7 @@ function generateCluePool(additive = false) {
 
   const allConns = [];
   rabbits.forEach(r => { if (r.fatherId) allConns.push({ parentId: r.fatherId, childId: r.id }); if (r.motherId) allConns.push({ parentId: r.motherId, childId: r.id }); });
-
+  
   // Include EVERY parent-child connection in the pool as flavor clues
   allConns.forEach(conn => {
     // Extra clues also biased toward first-person
@@ -1065,10 +1080,10 @@ function generateCluePool(additive = false) {
     if (pChildren.length === 1 && random() < 0.3) {
       addRawClue({ type: 'onlyChild', parentId: conn.parentId, childId: conn.childId }, 'extra', sid);
     } else {
-      addRawClue(conn, 'extra', sid);
+    addRawClue(conn, 'extra', sid);
     }
   });
-
+  
   cluePool = newClues;
 
   // Prioritize clues involving the two starting DNA relatives
@@ -1083,7 +1098,7 @@ function generateCluePool(additive = false) {
       if (conn.type === 'grandparent' && (dnaRelIds.includes(conn.gp) || dnaRelIds.includes(conn.gc))) return true;
       return false;
     });
-
+    
     if (prioritized.length > 0) {
       const queuedIds = new Set();
       for (let i = 0; i < 2; i++) {
@@ -1113,7 +1128,7 @@ function generateClueText(clue, speakerId) {
     const r = rabbits.find(rb => rb.id === id);
     return `[[${id}:${r.firstName}]]`;
   };
-
+  
   if (clue.conn.type === 'couple') {
     const p1 = rabbits.find(r => r.id === clue.conn.p1);
     const p2 = rabbits.find(r => r.id === clue.conn.p2);
@@ -1142,7 +1157,7 @@ function generateClueText(clue, speakerId) {
       `${mark(p.id)} only has one child, ${mark(c.id)}.`
     ]);
   }
-
+  
   if (clue.conn.type === 'sibling') {
     const a = rabbits.find(r => r.id === clue.conn.a);
     const b = rabbits.find(r => r.id === clue.conn.b);
@@ -1185,7 +1200,7 @@ function generateClueText(clue, speakerId) {
     `${mark(p.id)} belongs to my family.`
   ]);
   if (speakerId === p.id) return pick([`${mark(c.id)} is my ${cRole}.`, `I'm looking for my ${cRoleShort}, ${mark(c.id)}.`, `${mark(c.id)} belongs to my family.`]);
-
+  
   return pick([`${mark(p.id)} is ${mark(c.id)}'s ${pRoleShort}.`, `${mark(c.id)} is ${mark(p.id)}'s ${cRole}.`, `I saw ${mark(c.id)} with ${cPoss} ${pRoleShort}, ${mark(p.id)}.`]);
 }
 
@@ -1226,19 +1241,19 @@ function runSimulation() {
   const usedNames = new Set();
   const mPool = shuffle([...new Set(MALE_NAMES)]);
   const fPool = shuffle([...new Set(FEMALE_NAMES)]);
-
+  
   // Pick victim before populating the world
   const vSex = random() < 0.5 ? 'M' : 'F';
   const vPool = vSex === 'M' ? mPool : fPool;
   const vName = vPool.pop();
   usedNames.add(vName);
-  victim = {
-    name: vName,
-    species: pick(SPECIES),
+  victim = { 
+    name: vName, 
+    species: pick(SPECIES), 
     sex: vSex,
     tint: { hue: random() * 360, saturate: 70 + random() * 30, brightness: 70 + random() * 20 }
   };
-
+  
   const g0 = [];
   // Founders - 14 (7 pairs) to ensure a more robust population tree
   for (let i = 0; i < 14; i++) {
@@ -1255,7 +1270,7 @@ function runSimulation() {
     const next = [];
     let ms = shuffle(prev.filter(r => r.sex === 'M'));
     let fs = shuffle(prev.filter(r => r.sex === 'F'));
-
+    
     // Pairing logic to avoid ALL shared parents (full and half siblings) and parent/child
     // Also enforce reproductive maturity (age 20+)
     const usedF = new Set();
@@ -1282,18 +1297,18 @@ function runSimulation() {
       const { m, f } = pair;
       // Slightly higher average children (1.8 -> 2.1)
       const children = (random() < 0.4) ? 3 : (random() < 0.7 ? 2 : 1);
-      let firstSex = random() < 0.5 ? 'M' : 'F';
-
-      for (let c = 0; c < children; c++) {
-        const pool = (c === 0) ? (firstSex === 'M' ? mPool : fPool) :
+        let firstSex = random() < 0.5 ? 'M' : 'F';
+        
+        for (let c = 0; c < children; c++) {
+          const pool = (c === 0) ? (firstSex === 'M' ? mPool : fPool) : 
           (c === 1) ? (firstSex === 'M' ? fPool : mPool) :
-            (random() < 0.5 ? mPool : fPool);
-
-        if (pool.length === 0) continue;
-        const sex = (pool === mPool) ? 'M' : 'F';
-        const name = pool.pop();
-        usedNames.add(name);
-
+                       (random() < 0.5 ? mPool : fPool);
+          
+          if (pool.length === 0) continue;
+          const sex = (pool === mPool) ? 'M' : 'F';
+          const name = pool.pop();
+          usedNames.add(name);
+          
         // Parents are 20-35 years older than kids (tighter range to avoid future births)
         let bYear = f.birthYear + 20 + Math.floor(random() * 15);
         if (bYear >= CURRENT_YEAR) {
@@ -1305,9 +1320,9 @@ function runSimulation() {
           if (bYear < f.birthYear + 15) bYear = f.birthYear + 15;
         }
         
-        const child = new AnimalRecord(name, sex, bYear, gen, random() < 0.5 ? m.species : f.species, m.id, f.id);
-        next.push(child); rabbits.push(child);
-      }
+          const child = new AnimalRecord(name, sex, bYear, gen, random() < 0.5 ? m.species : f.species, m.id, f.id);
+          next.push(child); rabbits.push(child);
+        }
     });
 
     // Population Stabilizer: If a generation is too small, have some pairs have "surprise" extra children
@@ -1336,7 +1351,7 @@ function runSimulation() {
   // Determine generation weights based on population size (favoring larger ones)
   const genCounts = {};
   rabbits.forEach(r => genCounts[r.generation] = (genCounts[r.generation] || 0) + 1);
-
+  
   const weightedGens = [];
   // Use generations 2, 3, and 4 as candidates
   for (let g = 2; g <= 4; g++) {
@@ -1344,7 +1359,7 @@ function runSimulation() {
     // Add the generation ID to the lottery 'count' number of times
     for (let i = 0; i < count; i++) weightedGens.push(g);
   }
-
+  
   // Pick a generation from the lottery (probabilistic, not deterministic)
   const selectedGen = weightedGens.length > 0 ? pick(weightedGens) : 3;
 
@@ -1352,14 +1367,14 @@ function runSimulation() {
   const potentialCands = rabbits.filter(r => r.generation === selectedGen);
   const speciesCamouflage = {};
   potentialCands.forEach(r => speciesCamouflage[r.species] = (speciesCamouflage[r.species] || 0) + 1);
-
+  
   const cands = shuffle(potentialCands).sort((a, b) => {
     // 80% chance to prioritize species camouflage, 20% total chaos
     if (random() < 0.8) return (speciesCamouflage[b.species] || 0) - (speciesCamouflage[a.species] || 0);
     return 0;
   });
   let found = false;
-
+  
   // Try to find a killer who has at least 2 cousins
   for (const cand of cands) {
     const killer = cand;
@@ -1367,7 +1382,7 @@ function runSimulation() {
       .map(r => {
         const common = getCommonAncestors(killer.id, r.id);
         const label = getRelationshipLabel(common, killer.id, r.id);
-
+        
         let n = -1;
         if (common.length > 0) {
           const closest = common.reduce((min, c) => {
@@ -1379,10 +1394,10 @@ function runSimulation() {
           }, common[0]);
           n = Math.min(closest.dist1, closest.dist2) - 1;
         }
-
+        
         // Safety override: exclude only direct parent/child (n=-1)
         if (killer.fatherId === r.id || killer.motherId === r.id || r.fatherId === killer.id || r.motherId === killer.id) n = -1;
-
+        
         return { r, common, label, n };
       })
       .filter(e => e.label && e.n >= 0); // Include uncles/grandparents (n=0)
@@ -1394,15 +1409,15 @@ function runSimulation() {
       // 2. Fallback to n >= 1 (1st cousin+)
       if (relatives.length < 2) relatives = allRel.filter(e => e.n >= 1);
       // 3. Final fallback to n >= 0 (Uncles, Grandparents)
-      if (relatives.length < 2) relatives = allRel;
+      if (relatives.length < 2) relatives = allRel; 
 
       // Sort relatives by distance to killer (highest n first)
       relatives.sort((a, b) => b.n - a.n);
-
+      
       const sample = relatives.slice(0, 15);
       let bestPair = null;
       let maxDist = -1;
-
+      
       for (let i = 0; i < sample.length; i++) {
         for (let j = i + 1; j < sample.length; j++) {
           const commonBetween = getCommonAncestors(sample[i].r.id, sample[j].r.id);
@@ -1432,7 +1447,7 @@ function runSimulation() {
   if (!found) {
     const killer = cands[0] || rabbits[rabbits.length - 1];
     killerId = killer.id;
-
+    
     // Find the two most distant non-parent relatives, strictly n >= 0
     const others = rabbits.filter(r => r.id !== killerId)
       .map(r => {
@@ -1445,7 +1460,7 @@ function runSimulation() {
       })
       .filter(e => e.n >= 0) // Allow Uncles/Grandparents
       .sort((a, b) => b.n - a.n);
-
+    
     if (others.length >= 2) {
       others.slice(0, 2).forEach(o => {
         o.r.dnaRelation = getDNARelationshipLabel(o.label);
@@ -1573,6 +1588,74 @@ function drawPixelX(ctx, centerX, centerY, scale, isHovered = false) {
 }
 
 // --- Animal Sprite ---
+function drawDnaIcon(ctx, x, y, size, color) {
+  const img = detectiveSprites.dna_icon;
+  if (!img || !img.complete) return;
+  ctx.drawImage(img, x, y, size, size);
+}
+
+function drawLabelPlate(ctx, x, y, text, color, fontSize, bgColor = 'rgba(0, 0, 0, 0.75)', borderColor = 'rgba(255, 255, 255, 0.1)', hasDnaIcon = false) {
+  ctx.font = `bold ${fontSize}px Silkscreen`;
+  
+  const iconSize = Math.floor(fontSize * 0.9);
+  const iconGap = 6;
+  let totalWidthText = text;
+  let metrics = ctx.measureText(text);
+  
+  const padX = 8 * (fontSize / 13), padY = 4 * (fontSize / 13);
+  const w = Math.ceil(metrics.width + padX * 2 + (hasDnaIcon ? iconSize + iconGap : 0));
+  const h = Math.ceil(fontSize + padY * 2);
+  const bx = Math.floor(x - w / 2);
+  const by = Math.floor(y);
+
+  ctx.fillStyle = bgColor;
+  ctx.fillRect(bx, by, w, h);
+  ctx.strokeStyle = borderColor;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(bx, by, w, h);
+
+  ctx.fillStyle = color;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  
+  let currentX = bx + padX;
+  if (hasDnaIcon) {
+    drawDnaIcon(ctx, currentX, by + padY + (fontSize - iconSize) / 2, iconSize, '#44ff44');
+    currentX += iconSize + iconGap;
+  }
+  
+  ctx.fillText(text, currentX, by + padY);
+  return { w, h };
+}
+
+function drawSpeechBubble(ctx, x, y, color, scale, isHovered = false) {
+  const bw = Math.floor(30 * scale), bh = Math.floor(25 * scale);
+  const bx = Math.floor(x), by = Math.floor(y);
+
+  ctx.fillStyle = color;
+  if (isHovered) {
+    ctx.shadowBlur = 10;
+    ctx.shadowColor = 'white';
+  }
+
+  // Sharp pixel bubble rectangle
+  ctx.fillRect(bx, by - bh, bw, bh);
+  
+  // Pixelated "tail" drawn with chunky steps
+  const px = Math.max(1, Math.floor(scale * 2)); // Use a "pixel" size that scales
+  const tailX = bx + Math.floor(5 * scale);
+  ctx.fillRect(tailX, by, Math.floor(10 * scale), px);
+  ctx.fillRect(tailX + px, by + px, Math.floor(10 * scale) - px * 2, px);
+  ctx.fillRect(tailX + px * 2, by + px * 2, Math.floor(10 * scale) - px * 4, px);
+
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = 'white';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = `bold ${Math.floor(14 * scale)}px Silkscreen`;
+  ctx.fillText('?', bx + bw / 2, by - bh / 2);
+}
+
 class Animal {
   constructor(record) {
     this.rabbit = record;
@@ -1589,7 +1672,7 @@ class Animal {
 
     // Cache text metrics once
     const tempCtx = document.createElement('canvas').getContext('2d');
-    tempCtx.font = "bold 13px Arial, sans-serif";
+    tempCtx.font = "bold 13px Silkscreen";
     this.nameLabel = `${this.rabbit.firstName} (${CURRENT_YEAR - this.rabbit.birthYear})`;
     this.nameWidth = tempCtx.measureText(this.nameLabel).width;
   }
@@ -1692,7 +1775,7 @@ class Animal {
     } else if (this.y > FIELD_HEIGHT - padding - spriteSize) {
       this.y = FIELD_HEIGHT - padding - spriteSize; this.vy *= -1;
     }
-
+    
     // Post-game override for killer death state
     if (gameState.isFinished && this.rabbit.id === killerId && gameState.wasSuccess) {
       // Only show as dead if we've reached our target (or have no target)
@@ -1723,54 +1806,75 @@ class Animal {
     const isHighlighted = highlightedAnimalIds.has(this.rabbit.id);
     let d = this.direction; if (this.rabbit.species === 'Fox' && this.state === 'run') { if (d === 2) d = 3; else if (d === 3) d = 2; }
 
-    // Draw highlight glow effect for mentioned animals
-    if (isHighlighted) {
-      const pulse = Math.sin(Date.now() / 300) * 0.3 + 0.7; // Pulsing effect
-      const glowRadius = sz * (0.6 + pulse * 0.2);
-
-      ctx.save();
-      // Using a simpler arc fill instead of shadowBlur for better performance
-      ctx.globalAlpha = 0.3 * pulse;
-      ctx.beginPath();
-      ctx.arc(sx + sz / 2, sy + sz / 2, glowRadius, 0, Math.PI * 2);
-      ctx.fillStyle = `hsl(${this.rabbit.tint.hue}, 100%, 70%)`;
-      ctx.fill();
-      ctx.restore();
-    }
-
-    if (selectedHare === this) {
-      const pulse = Math.sin(Date.now() / 200) * 0.1 + 0.9;
-
-      // Draw pixelated donut on a larger scratch canvas (64x64) to prevent clipping
+    // 1. Draw highlight glow effect for mentioned animals (on the pixel-perfect scratch canvas)
+    if (isHighlighted || selectedHare === this) {
       pCtx.clearRect(0, 0, 64, 64);
       pCtx.imageSmoothingEnabled = false;
-      pCtx.beginPath();
 
-      // We center the animal in the 64x64 space. 
-      // Animal sprite is 32x32. In 64x64, its base (feet) is at y ≈ 46
-      pCtx.ellipse(32, 46, 16 * pulse, 8 * pulse, 0, 0, Math.PI * 2);
-      pCtx.strokeStyle = '#44ff44';
-      pCtx.lineWidth = 1;
-      pCtx.stroke();
+      if (isHighlighted) {
+        // Step the pulse into 4 discrete levels for a retro animation feel
+        const rawPulse = Math.sin(Date.now() / 300) * 0.3 + 0.7;
+        const pulse = Math.floor(rawPulse * 4) / 4; 
+        // Radius in "scratch pixels" (even numbers to match 32x32 resolution)
+        const r = Math.floor(12 + pulse * 6) * 2; 
+        const s = Math.floor(r * 0.75 / 2) * 2;
+        const cx = 32, cy = 32;
 
-      ctx.save();
+        pCtx.globalAlpha = 0.5 * pulse; // Increased opacity for better prominence
+        pCtx.fillStyle = `hsl(${this.rabbit.tint.hue}, 100%, 75%)`; // Slightly brighter highlight
+        
+        // Draw octagon using even dimensions to match 32x32 sprite resolution
+        pCtx.fillRect(cx - r/2, cy - s/2, r, s); // Wide
+        pCtx.fillRect(cx - s/2, cy - r/2, s, r); // Tall
+        pCtx.globalAlpha = 1.0;
+      }
+
+      if (selectedHare === this) {
+        const rawPulse = Math.sin(Date.now() / 200) * 0.1 + 0.9;
+        const pulse = Math.floor(rawPulse * 5) / 5;
+        // Ensure dimensions are even to align with the 2x2 pixel grid
+        const r = Math.floor(18 * pulse / 2) * 2; // Slightly larger radius
+        const gap = Math.floor(6 * pulse / 2) * 2; // Slightly larger gap
+        const bx = 32, by = 42; 
+        
+        // Draw a dark shadow behind brackets for high contrast
+        pCtx.strokeStyle = 'rgba(0,0,0,0.5)';
+        pCtx.lineWidth = 4;
+        const drawBrackets = (offset) => {
+          // Top-left
+          pCtx.beginPath(); pCtx.moveTo(bx - r + offset, by - gap + offset); pCtx.lineTo(bx - r + offset, by - r + offset); pCtx.lineTo(bx - gap + offset, by - r + offset); pCtx.stroke();
+          // Top-right
+          pCtx.beginPath(); pCtx.moveTo(bx + gap + offset, by - r + offset); pCtx.lineTo(bx + r + offset, by - r + offset); pCtx.lineTo(bx + r + offset, by - gap + offset); pCtx.stroke();
+          // Bottom-left
+          pCtx.beginPath(); pCtx.moveTo(bx - r + offset, by + gap + offset); pCtx.lineTo(bx - r + offset, by + r + offset); pCtx.lineTo(bx - gap + offset, by + r + offset); pCtx.stroke();
+          // Bottom-right
+          pCtx.beginPath(); pCtx.moveTo(bx + gap + offset, by + r + offset); pCtx.lineTo(bx + r + offset, by + r + offset); pCtx.lineTo(bx + r + offset, by + gap + offset); pCtx.stroke();
+        };
+        drawBrackets(2); // Shadow
+
+        pCtx.strokeStyle = '#44ff44';
+        pCtx.lineWidth = 2; // 2px on 64x64 canvas = 1px on 32x32 sprite resolution
+        drawBrackets(0); // Brackets
+      }
+
+    ctx.save();
       ctx.imageSmoothingEnabled = false;
       // Draw the 64x64 scratch canvas centered on the animal.
-      // Since the scratch is 2x the native sprite size (32), 
-      // we draw it at 2x sz to keep pixel sizes consistent.
+      // Sprite is 32x32, drawn at sz (64*zoom). 
+      // Scratch is 64x64, so it should be drawn at sz*2 (128*zoom) to keep pixel scale 1:1.
       ctx.drawImage(pixelCanvas,
-        Math.floor(sx - sz / 2),
-        Math.floor(sy - sz / 2),
+        Math.floor(sx + sz/2 - sz), 
+        Math.floor(sy + sz/2 - sz),
         sz * 2, sz * 2
       );
-      ctx.restore();
+    ctx.restore();
     }
 
     const tintedSpr = getTintedSprite(this.rabbit, this.state);
     if (tintedSpr) {
       ctx.drawImage(tintedSpr, this.frame * FRAME_SIZE, d * FRAME_SIZE, FRAME_SIZE, FRAME_SIZE, Math.floor(sx), Math.floor(sy), sz, sz);
     }
-    ctx.shadowBlur = 0;
+      ctx.shadowBlur = 0;
   }
 
   drawLabels() {
@@ -1780,40 +1884,20 @@ class Animal {
     if (selectedHare === this && !gameState.isFinished && !this.rabbit.isVictim) {
       const textAlpha = Math.sin(Date.now() / 200) * 0.3 + 0.7;
       ctx.fillStyle = `rgba(68, 255, 68, ${textAlpha})`;
-      ctx.font = `bold ${Math.max(10, Math.floor(10 * camera.zoom))}px monospace`;
+      ctx.font = `bold ${Math.max(10, Math.floor(10 * camera.zoom))}px Silkscreen`;
       ctx.textAlign = 'center';
       ctx.fillText("SELECT RELATIVE", sx + sz / 2, sy - 40 * camera.zoom);
     }
-    // Draw Name and Age with high-readability background
+    // Draw Name and Age Plate
     const fontSize = Math.max(11, Math.floor(13 * camera.zoom));
-    ctx.font = `bold ${fontSize}px Arial, sans-serif`;
-    const label = this.nameLabel;
-    // Scale the cached width based on the actual font size being used (accounts for the 11px floor)
-    const labelWidth = this.nameWidth * (fontSize / 13);
-    const padX = 6 * camera.zoom, padY = 2 * camera.zoom;
-    const bgW = labelWidth + padX * 2, bgH = fontSize + padY * 2;
-
-    // Stagger height to prevent horizontal overlap in family trees
     const staggerY = (this.rabbit.id % 2 === 0) ? 0 : (fontSize * 0.6);
-    const bgX = sx + sz / 2 - bgW / 2, bgY = sy + sz + 5 * camera.zoom + staggerY;
+    const labelY = sy + sz + 5 * camera.zoom + staggerY;
+    drawLabelPlate(ctx, sx + sz / 2, labelY, this.nameLabel, getHSL(this.rabbit), fontSize);
 
-    // Background pill
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-    ctx.beginPath();
-    ctx.roundRect(bgX, bgY, bgW, bgH, 4 * camera.zoom);
-    ctx.fill();
-
-    // Text
-    ctx.fillStyle = getHSL(this.rabbit);
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
-    ctx.fillText(label, sx + sz / 2, bgY + padY);
-
-    if (this.rabbit.dnaRelation) {
+    if (this.rabbit.dnaRelation) { 
       // Use abbreviations and smaller text when zoomed out far
       const isZoomedOut = camera.zoom < 0.5;
       const relFontSize = isZoomedOut ? Math.max(9, Math.floor(11 * camera.zoom * 1.5)) : fontSize;
-      ctx.font = `bold ${relFontSize}px Arial`;
 
       let relationText = this.rabbit.dnaRelation;
       if (isZoomedOut) {
@@ -1827,76 +1911,21 @@ class Animal {
           .replace(/Distant Relative/g, "Distant");
       }
 
-      const dnaLabel = `🧬 ${relationText}`;
-
-      const words = dnaLabel.split(' ');
-      let line = '';
-      const lines = [];
-      // Ensure a minimum width on screen (60px) so boxes don't get too narrow when zoomed out
-      const maxW = Math.max((isZoomedOut ? 120 : 80) * camera.zoom, 60);
-
-      for (let n = 0; n < words.length; n++) {
-        const testLine = line + words[n] + ' ';
-        const metrics = ctx.measureText(testLine);
-        if (metrics.width > maxW && n > 0) {
-          lines.push(line);
-          line = words[n] + ' ';
-        } else {
-          line = testLine;
-        }
-      }
-      lines.push(line);
-
-      const dW = Math.max(...lines.map(l => ctx.measureText(l).width)) + padX * 2;
-      const lineH = relFontSize + padY;
-      const dH = lines.length * lineH + padY;
-
-      // Removed stagger for DNA label (too tall)
-      const dX = sx + sz / 2 - dW / 2;
-      const dY = Math.max(5, sy - dH - 5 * camera.zoom);
-
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-      ctx.beginPath();
-      ctx.roundRect(dX, dY, dW, dH, 4 * camera.zoom);
-      ctx.fill();
-
-      ctx.fillStyle = '#44ff44';
-      ctx.textBaseline = 'top';
-      lines.forEach((l, i) => {
-        ctx.fillText(l.trim(), sx + sz / 2, dY + padY + i * lineH);
-      });
+      const dnaLabel = relationText;
+      const dY = Math.max(5, sy - (relFontSize + 15) * camera.zoom);
+      drawLabelPlate(ctx, sx + sz / 2, dY, dnaLabel, '#44ff44', relFontSize, 'rgba(0, 0, 0, 0.75)', 'rgba(68, 255, 68, 0.2)', true);
     }
+    // Draw Clue Bubble
     const clue = activeClues.get(this.rabbit.id);
     if (clue && !gameState.isFinished) {
-      // Partial scaling for bubbles: they stay larger when zoomed out
       const isHovered = hoveredBubbleId === this.rabbit.id;
       const bubbleScale = (camera.zoom * 0.4 + 0.6) * (isHovered ? 1.2 : 1.0);
-
-      const bw = 30 * bubbleScale, bh = 25 * bubbleScale, r = 5 * bubbleScale;
       const bx = sx + sz * 0.8, by = sy - 15 * camera.zoom;
-
+      
       const s = Math.max(0, Math.min(100, this.rabbit.tint.saturate)), l = Math.max(0, Math.min(100, this.rabbit.tint.brightness));
-      const brightness = isHovered ? Math.min(100, l + 20) : l;
-      ctx.fillStyle = `hsla(${this.rabbit.tint.hue}, ${s}%, ${brightness}%, 0.9)`;
-
-      // Add a slight white border if hovered
-      if (isHovered) {
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = 'white';
-      }
-
-      ctx.beginPath();
-      ctx.roundRect(bx, by - bh, bw, bh, r);
-      ctx.fill();
-
-      ctx.beginPath(); ctx.moveTo(bx + 5 * bubbleScale, by); ctx.lineTo(bx + 15 * bubbleScale, by); ctx.lineTo(bx + 10 * bubbleScale, by + 5 * bubbleScale); ctx.fill();
-
-      ctx.shadowBlur = 0; // Reset shadow
-      ctx.fillStyle = 'white';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.font = `bold ${Math.floor(14 * bubbleScale)}px Arial`;
-      ctx.fillText('?', bx + bw / 2, by - bh / 2);
+      const bubbleColor = `hsla(${this.rabbit.tint.hue}, ${s}%, ${isHovered ? Math.min(100, l + 20) : l}%, 0.9)`;
+      
+      drawSpeechBubble(ctx, bx, by, bubbleColor, bubbleScale, isHovered);
     }
   }
 }
@@ -1924,71 +1953,32 @@ function drawTutorialGuide() {
     tCtx.drawImage(tintedSpr, 0, 0, FRAME_SIZE, FRAME_SIZE, Math.floor(drawX), Math.floor(drawY), sz, sz);
   }
 
-  // 2. Draw the Name & Age Tag (matching in-game styles)
+  // 2. Draw the Name & Age Plate (reusing shared helper)
   const fontSize = 14;
-  tCtx.font = `bold ${fontSize}px Arial, sans-serif`;
-  const label = animal.nameLabel;
-  const metrics = tCtx.measureText(label);
-  const padX = 8, padY = 4;
-  const bgW = metrics.width + padX * 2, bgH = fontSize + padY * 2;
-  const bgX = centerX - bgW / 2, bgY = drawY + sz + 10;
+  const labelY = drawY + sz + 10;
+  drawLabelPlate(tCtx, centerX, labelY, animal.nameLabel, getHSL(animal.rabbit), fontSize);
 
-  tCtx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-  tCtx.beginPath();
-  tCtx.roundRect(bgX, bgY, bgW, bgH, 6);
-  tCtx.fill();
-
-  tCtx.fillStyle = getHSL(animal.rabbit);
-  tCtx.textAlign = 'center';
-  tCtx.textBaseline = 'top';
-  tCtx.fillText(label, centerX, bgY + padY);
-
-  // 3. Draw a mock DNA Result Tag (using actual in-game Title Case)
+  // 3. Draw a mock DNA Result Plate (reusing shared helper)
   const relFontSize = 12;
-  tCtx.font = `bold ${relFontSize}px Arial`;
-  const dnaLabel = `🧬 1st Cousin`;
-  const dMetrics = tCtx.measureText(dnaLabel);
-  const dW = dMetrics.width + 16, dH = relFontSize + 10;
-  const dX = centerX - dW / 2, dY = drawY - dH - 12; // Moved up slightly more
+  const dnaLabel = `1st Cousin`;
+  const dY = drawY - (relFontSize + 15);
+  drawLabelPlate(tCtx, centerX, dY, dnaLabel, '#44ff44', relFontSize, 'rgba(0, 0, 0, 0.75)', 'rgba(68, 255, 68, 0.2)', true);
 
-  tCtx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-  tCtx.beginPath();
-  tCtx.roundRect(dX, dY, dW, dH, 6);
-  tCtx.fill();
-
-  tCtx.fillStyle = '#44ff44';
-  tCtx.fillText(dnaLabel, centerX, dY + 5);
-
-  // 4. Draw the Speech Bubble
+  // 4. Draw the Speech Bubble (reusing shared helper)
   const bubbleScale = 1.2;
-  const bw = 30 * bubbleScale, bh = 25 * bubbleScale, r = 5 * bubbleScale;
-  const bx = drawX + sz * 0.9, by = drawY + 25; // Moved down and right to avoid overlap
+  const bx = drawX + sz * 0.9, by = drawY + 25;
 
-  const s = Math.max(0, Math.min(100, animal.rabbit.tint.saturate));
-  const l = Math.max(0, Math.min(100, animal.rabbit.tint.brightness));
-  tCtx.fillStyle = `hsla(${animal.rabbit.tint.hue}, ${s}%, ${l}%, 0.9)`;
-
-  tCtx.beginPath();
-  tCtx.roundRect(bx, by - bh, bw, bh, r);
-  tCtx.fill();
-  tCtx.beginPath();
-  tCtx.moveTo(bx + 5 * bubbleScale, by);
-  tCtx.lineTo(bx + 15 * bubbleScale, by);
-  tCtx.lineTo(bx + 10 * bubbleScale, by + 5 * bubbleScale);
-  tCtx.fill();
-
-  tCtx.fillStyle = 'white';
-  tCtx.textAlign = 'center';
-  tCtx.textBaseline = 'middle';
-  tCtx.font = `bold ${Math.floor(14 * bubbleScale)}px Arial`;
-  tCtx.fillText('?', bx + bw / 2, by - bh / 2);
+  const s = Math.max(0, Math.min(100, animal.rabbit.tint.saturate)), l = Math.max(0, Math.min(100, animal.rabbit.tint.brightness));
+  const bubbleColor = `hsla(${animal.rabbit.tint.hue}, ${s}%, ${l}%, 0.9)`;
+  
+  drawSpeechBubble(tCtx, bx, by, bubbleColor, bubbleScale, false);
 }
 
 // --- UI & Input ---
 function updateTreeDiagram() {
   const minSpacingX = 80, minSpacingY = 120;
   const preferredSpacingX = 160, preferredSpacingY = 160;
-
+  
   const hareToTree = new Map(), trees = [];
   playerConnections.forEach(c => {
     let tA = hareToTree.get(c.parentId), tB = hareToTree.get(c.childId);
@@ -2014,9 +2004,9 @@ function updateTreeDiagram() {
       childrenMap.get(c.parentId).push(c.childId);
     });
 
-    const walk = (id, l) => {
-      lvls.set(id, Math.max(lvls.get(id) || 0, l));
-      (childrenMap.get(id) || []).forEach(cid => walk(cid, l + 1));
+    const walk = (id, l) => { 
+      lvls.set(id, Math.max(lvls.get(id) || 0, l)); 
+      (childrenMap.get(id) || []).forEach(cid => walk(cid, l + 1)); 
     };
     roots.forEach(r => walk(r, 0));
 
@@ -2036,10 +2026,10 @@ function updateTreeDiagram() {
         }
       });
     }
-
-    const grps = [];
+    
+    const grps = []; 
     lvls.forEach((l, id) => { if (!grps[l]) grps[l] = []; grps[l].push(id); });
-
+    
     // Filter out any holes in grps to prevent crashes in the loops below
     const validGrps = grps.filter(Boolean);
 
@@ -2275,7 +2265,7 @@ function updateTreeDiagram() {
           minTargetX = Math.min(minTargetX, tx);
           maxTargetX = Math.max(maxTargetX, tx);
           h.targetX = tx;
-          h.targetY = startY + l * spy;
+        h.targetY = startY + l * spy;
         }
       });
     });
@@ -2356,8 +2346,8 @@ function updateUI() {
       playAgainUi.textContent = hasMoreCases ? 'SOLVE ANOTHER CASE' : 'PLAY AGAIN TOMORROW';
     }
     if (selectedHare) {
-      sPanel.style.display = 'block';
-      sName.textContent = `${selectedHare.rabbit.firstName} (${CURRENT_YEAR - selectedHare.rabbit.birthYear})`;
+      sPanel.style.display = 'block'; 
+      sName.textContent = `${selectedHare.rabbit.firstName} (${CURRENT_YEAR - selectedHare.rabbit.birthYear})`; 
 
       const isDead = selectedHare.rabbit.isVictim || (selectedHare.rabbit.id === killerId && gameState.wasSuccess);
       const deadLabel = isDead ? '<div style="color: #ff4444; font-weight: bold; margin-top: 4px; font-size: 16px;">DECEASED</div>' : '';
@@ -2386,16 +2376,16 @@ function updateUI() {
       accBtn.style.display = 'none';
     } else {
       if (hint) hint.style.display = 'block';
-      if (dnaTestsRemaining > 0) {
-        dnaBtn.style.display = 'block'; accBtn.style.display = 'none';
+    if (dnaTestsRemaining > 0) {
+      dnaBtn.style.display = 'block'; accBtn.style.display = 'none';
         if (selectedHare.rabbit.isTested) {
           dnaBtn.disabled = true;
           dnaBtn.style.opacity = '0.5';
           const pct = selectedHare.rabbit.dnaMatchPct;
           dnaBtn.textContent = (pct !== null) ? `${pct}% MATCH` : 'TESTED';
         }
-        else { dnaBtn.disabled = false; dnaBtn.style.opacity = '1.0'; dnaBtn.textContent = 'DNA TEST'; }
-      } else { dnaBtn.style.display = 'none'; accBtn.style.display = 'block'; accBtn.style.opacity = '1.0'; }
+      else { dnaBtn.disabled = false; dnaBtn.style.opacity = '1.0'; dnaBtn.textContent = 'DNA TEST'; }
+    } else { dnaBtn.style.display = 'none'; accBtn.style.display = 'block'; accBtn.style.opacity = '1.0'; }
     }
   } else sPanel.style.display = 'none';
 }
@@ -2403,7 +2393,7 @@ function updateUI() {
 function updateTranscriptUI(newEntry, speakerId) {
   const container = document.getElementById('transcript-container');
   const list = document.getElementById('transcript-list');
-
+  
   function parseText(txt) {
     return txt.replace(/\[\[(\d+):(.*?)\]\]/g, (match, id, name) => {
       const r = rabbits.find(rb => rb.id == id);
@@ -2415,11 +2405,11 @@ function updateTranscriptUI(newEntry, speakerId) {
     const speaker = rabbits.find(r => r.id === speakerId);
     const speakerPart = speaker ? `<span class="animal-mention" data-id="${speaker.id}" style="color: ${getHSL(speaker)}; cursor: pointer;">${speaker.firstName}</span>: ` : "";
     const parsedText = parseText(newEntry);
-
+    
     // Trigger portrait animation
     portraitAnim.active = true;
     portraitAnim.timer = 0;
-
+    
     const entryEl = document.createElement('div');
     entryEl.className = 'transcript-entry';
     if (speaker) {
@@ -2521,7 +2511,7 @@ function showGameOver(isWin) {
   const gCanvas = document.getElementById('gameOverCanvas');
   if (!gCanvas) return;
   const gCtx = gCanvas.getContext('2d');
-
+  
   // Reset scroll state for this step
   if (scrollContainer) scrollContainer.dataset.hasScrolled = 'false';
 
@@ -2579,15 +2569,15 @@ function showGameOver(isWin) {
 
   // Only set endTime if not already finished (prevents overwriting on view-farm re-entry)
   if (!gameState.isFinished) {
-    gameState.isFinished = true;
-    gameState.wasSuccess = isWin;
+  gameState.isFinished = true;
+  gameState.wasSuccess = isWin;
     gameState.endTime = Date.now();
-    saveGame();
+  saveGame();
   }
 
   modal.style.display = 'flex';
   if (gameOverHandle) cancelAnimationFrame(gameOverHandle);
-
+  
   const killer = rabbits.find(r => r.id === killerId);
   if (!killerQuote) {
     const rawQuote = pick(VILLAIN_QUOTES);
@@ -2652,14 +2642,14 @@ function showGameOver(isWin) {
       title.style.color = "#ff4444";
       const innocent = selectedHare ? selectedHare.rabbit : { firstName: "The suspect", species: "animal", tint: { hue: 0, saturate: 0, brightness: 50 } };
       msg.innerHTML = `<span style="color: ${getHSL(innocent)}; font-weight: bold;">${innocent.firstName}</span> was innocent. It was <span style="color: ${getHSL(killer)}; font-weight: bold;">${killer.firstName}</span>!${timeStr}${statsLine}`;
-
+      
       gameOverAnimTimer += 0.1;
       const frame = Math.floor(gameOverAnimTimer) % 6;
       gCtx.save();
       gCtx.filter = `hue-rotate(${killer.tint.hue}deg) saturate(${killer.tint.saturate}%) brightness(${killer.tint.brightness}%)`;
       gCtx.drawImage(sprites[killer.species].walk, frame * 32, 0, 32, 32, centerX - 32, centerY - 32, 64, 64);
       gCtx.restore();
-
+      
       nextBtn.style.display = "none";
       viewFarmBtn.style.display = "block";
 
@@ -2695,12 +2685,12 @@ function showGameOver(isWin) {
       else if (det === 'marmot') detName = "MISS MARMOT";
 
       msg.innerHTML = `${titlePrefix} ${detName} has found the killer! <span style="color: ${getHSL(killer)}; font-weight: bold;">${killer.firstName}</span> has been apprehended.${timeStr}${statsLine}`;
-
+      
       gCtx.save();
       gCtx.filter = `hue-rotate(${killer.tint.hue}deg) saturate(${killer.tint.saturate}%) brightness(${killer.tint.brightness}%)`;
       gCtx.drawImage(sprites[killer.species].idle, 0, 0, 32, 32, centerX - 32, centerY - 32, 64, 64);
       gCtx.restore();
-
+      
       nextBtn.textContent = "NEXT";
       nextBtn.style.display = "block";
       viewFarmBtn.style.display = "none";
@@ -2710,7 +2700,7 @@ function showGameOver(isWin) {
     } else if (gameOverStep === 1) {
       title.textContent = "THE CONFESSION";
       msg.innerHTML = `<span style="color: ${getHSL(killer)}; font-weight: bold;">${killer.firstName}</span>: "${killerQuote}"${timeStr}${statsLine}`;
-
+      
       gCtx.save();
       gCtx.filter = `hue-rotate(${killer.tint.hue}deg) saturate(${killer.tint.saturate}%) brightness(${killer.tint.brightness}%)`;
       gCtx.drawImage(sprites[killer.species].idle, 0, 0, 32, 32, centerX - 32, centerY - 32, 64, 64);
@@ -2762,26 +2752,38 @@ function showGameOver(isWin) {
         const timeSinceImpact = gameOverAnimTimer - impactTime;
         if (bloodTrails.length === 0) {
           // Initialize individual drippy trails with randomized offsets and clusters
+          // Coordinates and dimensions are in "sprite pixels" (1/2 of world units)
           for (let i = 0; i < 6; i++) {
             bloodTrails.push({
-              x: centerX - 25 + Math.random() * 50,
-              y: neckY + 15,
+              relX: -12 + Math.random() * 25, // Offset from centerX in sprite pixels
               length: 0,
-              speed: 0.15 + Math.random() * 0.35,
+              speed: 0.07 + Math.random() * 0.18,
               delay: Math.random() * 40,
-              width: 2 + Math.random() * 4
+              width: Math.floor(1 + Math.random() * 2)
             });
           }
         }
 
-        gCtx.fillStyle = '#b00'; // Darker "drippy" blood red
+        gCtx.imageSmoothingEnabled = false;
         bloodTrails.forEach(trail => {
           if (timeSinceImpact > trail.delay) {
-            trail.length = Math.min(140, trail.length + trail.speed);
-            gCtx.fillRect(trail.x, trail.y, trail.width, trail.length);
-            gCtx.beginPath();
-            gCtx.arc(trail.x + trail.width / 2, trail.y + trail.length, (trail.width / 2 + 1) + Math.sin(gameOverAnimTimer / 15), 0, Math.PI * 2);
-            gCtx.fill();
+            trail.length = Math.min(70, trail.length + trail.speed);
+            
+            // Draw trail on scratch canvas at 1:1
+            pCtx.clearRect(0, 0, 10, 80);
+            pCtx.fillStyle = '#b00';
+            pCtx.fillRect(0, 0, trail.width, Math.floor(trail.length));
+            
+            // Draw "drip" head block
+            const dripSize = trail.width + (Math.sin(gameOverAnimTimer / 10) > 0 ? 1 : 0);
+            pCtx.fillRect(Math.floor((trail.width - dripSize) / 2), Math.floor(trail.length), dripSize, 1);
+
+            // Upscale to main canvas
+            gCtx.drawImage(pixelCanvas,
+              0, 0, 10, 80,
+              Math.floor(centerX + trail.relX * 2), Math.floor(neckY + 15),
+              20, 160
+            );
           }
         });
       }
@@ -2792,38 +2794,68 @@ function showGameOver(isWin) {
       // Draw from spriteNeckY down to the bottom of the sprite (32px)
       gCtx.drawImage(spr, 0, spriteNeckY, 32, 32 - spriteNeckY, bodyX, neckY, 64, (32 - spriteNeckY) * 2);
       gCtx.restore();
+      
+      // 4. Draw the Slanted Blade (Pixel-perfect on scratch canvas)
+      pCtx.clearRect(0, 0, 64, 64);
+      pCtx.imageSmoothingEnabled = false;
+      
+      const bW = 40, bH = 15;
+      pCtx.fillStyle = '#aaa';
+      pCtx.beginPath();
+      pCtx.moveTo(0, 0);
+      pCtx.lineTo(bW, 0);
+      pCtx.lineTo(bW, 5);
+      pCtx.lineTo(0, 15);
+      pCtx.closePath();
+      pCtx.fill();
+      
+      pCtx.strokeStyle = '#fff';
+      pCtx.lineWidth = 1;
+      pCtx.beginPath();
+      pCtx.moveTo(bW, 5);
+      pCtx.lineTo(0, 15);
+      pCtx.stroke();
+      
+      const snapBladeY = Math.floor(bladeY / 2) * 2;
+      gCtx.imageSmoothingEnabled = false;
+      gCtx.drawImage(pixelCanvas,
+        0, 0, bW, bH,
+        Math.floor(centerX - bW), snapBladeY,
+        bW * 2, bH * 2
+      );
 
-      // 4. Draw the Slanted Blade (Inside the frame)
-      gCtx.fillStyle = '#aaa'; // Metal
-      gCtx.beginPath();
-      gCtx.moveTo(centerX - 40, bladeY);
-      gCtx.lineTo(centerX + 40, bladeY);
-      gCtx.lineTo(centerX + 40, bladeY + 10);
-      gCtx.lineTo(centerX - 40, bladeY + 30);
-      gCtx.closePath();
-      gCtx.fill();
-
-      gCtx.strokeStyle = '#fff';
-      gCtx.lineWidth = 2;
-      gCtx.beginPath();
-      gCtx.moveTo(centerX + 40, bladeY + 10);
-      gCtx.lineTo(centerX - 40, bladeY + 30);
-      gCtx.stroke();
-
-      // 5. Draw THE STOCKS (Front face with cutout) - Covers the body and blade
+      // 5. Draw THE STOCKS (Front face with pixelated circle cutout)
       gCtx.save();
-      gCtx.fillStyle = '#4a2c12';
-      gCtx.beginPath();
-      gCtx.rect(centerX - 40, neckY, 80, 30);
-      gCtx.rect(centerX - 40, neckY - 20, 80, 20);
-      gCtx.arc(centerX, neckY, 15, 0, Math.PI * 2, true);
-      gCtx.fill();
-
-      gCtx.strokeStyle = 'rgba(0,0,0,0.3)';
-      gCtx.lineWidth = 2;
-      gCtx.beginPath();
-      gCtx.arc(centerX, neckY, 15, 0, Math.PI * 2);
-      gCtx.stroke();
+      
+      pCtx.clearRect(0, 0, 64, 64);
+      const boardW = 40, boardH = 25;
+      const holeR = 7.5;
+      
+      pCtx.fillStyle = '#4a2c12';
+      pCtx.fillRect(0, 0, boardW, boardH);
+      
+      // Punch a "pixel-hard" circle hole
+      pCtx.globalCompositeOperation = 'destination-out';
+      pCtx.beginPath();
+      pCtx.arc(boardW / 2, boardH / 2, holeR, 0, Math.PI * 2);
+      pCtx.fill();
+      
+      // Draw a chunky 1px inner shadow border
+      pCtx.globalCompositeOperation = 'source-over';
+      pCtx.strokeStyle = 'rgba(0,0,0,0.4)';
+      pCtx.lineWidth = 1;
+      pCtx.beginPath();
+      pCtx.arc(boardW / 2, boardH / 2, holeR, 0, Math.PI * 2);
+      pCtx.stroke();
+      
+      // Nearest-neighbor upscale the board
+      gCtx.imageSmoothingEnabled = false;
+      gCtx.drawImage(pixelCanvas,
+        0, 0, boardW, boardH,
+        Math.floor(centerX - boardW), Math.floor(neckY - boardH),
+        boardW * 2, boardH * 2
+      );
+      
       gCtx.restore();
 
       // 6. Draw Animal Head (Top half) - ON TOP OF THE STOCKS
@@ -2879,18 +2911,25 @@ function showGameOver(isWin) {
         if (timeSinceImpact < 60) {
           gCtx.fillStyle = '#ff0000';
           for (let i = 0; i < 8; i++) {
-            const bx = bodyX + 20 + Math.random() * 25;
-            const by = neckY + Math.random() * 5;
-            gCtx.fillRect(bx, by, 3, 3);
+            // Snap to the same 2x pixel grid as the animals
+            const bx = Math.floor((bodyX + 20 + Math.random() * 25) / 2) * 2;
+            const by = Math.floor((neckY + Math.random() * 5) / 2) * 2;
+            gCtx.fillRect(bx, by, 2, 2);
           }
         }
       }
 
-      // 8. Draw Guillotine Frame (Posts and Top) - Drip trails go behind posts
+      // 8. Draw Guillotine Frame (Posts and Top) - Pixel-perfect scaling
       gCtx.fillStyle = '#5d3a1a'; // Dark wood
-      gCtx.fillRect(centerX - 50, centerY - 80, 10, 160); // Left post
-      gCtx.fillRect(centerX + 40, centerY - 80, 10, 160); // Right post
-      gCtx.fillRect(centerX - 50, centerY - 90, 100, 15); // Top crossbar
+      gCtx.imageSmoothingEnabled = false;
+      
+      // Draw frame elements using discrete blocks to match animal pixel size
+      const postW = 10, postH = 160;
+      const topW = 100, topH = 15;
+      
+      gCtx.fillRect(Math.floor(centerX - 50), Math.floor(centerY - 80), postW, postH); // Left post
+      gCtx.fillRect(Math.floor(centerX + 40), Math.floor(centerY - 80), postW, postH); // Right post
+      gCtx.fillRect(Math.floor(centerX - 50), Math.floor(centerY - 90), topW, topH); // Top crossbar
 
       gameOverAnimTimer += 1;
       if (isCut && headPhysics.vx === 0) {
@@ -3000,12 +3039,18 @@ function showGameOver(isWin) {
           gCtx.drawImage(baseSpr, 0, 0, 64, 64, centerX - 48, centerY - 48, 96, 96);
           gCtx.restore();
         } else {
-          gCtx.font = "40px Arial";
-          gCtx.textAlign = "center";
-          gCtx.fillText("🏆", centerX, centerY);
+      gCtx.font = "40px Silkscreen";
+      gCtx.textAlign = "center";
+      gCtx.fillStyle = "#FFD700";
+      // Simple 8-bit star shape
+      const sz = 16;
+      gCtx.fillRect(centerX - sz/2, centerY - sz*1.5, sz, sz);
+      gCtx.fillRect(centerX - sz*1.5, centerY - sz/2, sz*3, sz);
+      gCtx.fillRect(centerX - sz/2, centerY + sz/2, sz, sz);
+      gCtx.fillRect(centerX - sz, centerY + sz, sz*2, sz);
         }
       }
-
+      
       gameOverAnimTimer += 1;
       nextBtn.style.display = "none";
       viewFarmBtn.style.display = "block";
@@ -3023,7 +3068,7 @@ function showGameOver(isWin) {
 
       updateScrollHint();
     }
-
+    
     gameOverHandle = requestAnimationFrame(gLoop);
   }
   gLoop();
@@ -3156,9 +3201,11 @@ function showDNAModal(animal) {
 
     // Phase 1: Animation (first 180 frames = 3 seconds at 60fps)
     if (dnaAnimTimer < 180) {
-      // Update loading bar
-      const progress = (dnaAnimTimer / 180) * 100;
-      progressBar.style.width = `${progress}%`;
+      // Update loading bar in discrete pixel-sized steps (88 steps for 352px width with 4px pixels)
+      const steps = 88;
+      const progressSteps = Math.floor((dnaAnimTimer / 180) * steps);
+      const progressPercent = (progressSteps / steps) * 100;
+      progressBar.style.width = `${progressPercent}%`;
 
       // Draw detective in lab coat
       if (labSpr && labSpr.complete) {
@@ -3197,8 +3244,10 @@ function showDNAModal(animal) {
 
       // Top Label (DNA connection)
       const fuzzyRel = getDNARelationshipLabel(isKiller ? "self" : rel);
-      const dnaLabel = `🧬 ${fuzzyRel}`;
-      dCtx.font = "bold 14px Arial";
+      const dnaLabel = fuzzyRel;
+      dCtx.font = "bold 14px Silkscreen";
+      const iconSize = 14;
+      const iconGap = 6;
 
       const words = dnaLabel.split(' ');
       let line = '';
@@ -3216,32 +3265,36 @@ function showDNAModal(animal) {
       }
       lines.push(line);
 
-      const lineH = 18;
-      const dH = lines.length * lineH + 6;
-      const dW = Math.max(...lines.map(l => dCtx.measureText(l).width)) + 12;
       const dY = centerY200 - 65;
+      
+      // Manual multi-line pixel-perfect plate
+      const lineH = 18;
+      const dH = lines.length * lineH + 10;
+      const textW = Math.max(...lines.map(l => dCtx.measureText(l).width));
+      const dW = textW + 16 + iconSize + iconGap;
+      const bx = Math.floor(centerX350 - dW / 2);
+      const by = Math.floor(dY - dH);
 
-      dCtx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-      dCtx.beginPath();
-      dCtx.roundRect(centerX350 - dW / 2, dY - dH, dW, dH, 4);
-      dCtx.fill();
+      dCtx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+      dCtx.fillRect(bx, by, dW, dH);
+      dCtx.strokeStyle = 'rgba(68, 255, 68, 0.2)';
+      dCtx.lineWidth = 1;
+      dCtx.strokeRect(bx, by, dW, dH);
 
       dCtx.fillStyle = '#44ff44';
-      dCtx.textBaseline = 'middle';
+      dCtx.textBaseline = 'top';
+      dCtx.textAlign = 'left';
+      
+      const contentX = bx + 8;
+      drawDnaIcon(dCtx, contentX, by + 5 + (lineH - iconSize) / 2, iconSize, '#44ff44');
+      
       lines.forEach((l, i) => {
-        dCtx.fillText(l.trim(), centerX350, dY - dH + (i + 0.5) * lineH + 3);
+        dCtx.fillText(l.trim(), contentX + iconSize + iconGap, by + 5 + i * lineH);
       });
 
       // Bottom Label (Name)
       const nameLabel = `${animal.rabbit.firstName} (${CURRENT_YEAR - animal.rabbit.birthYear})`;
-      const nMetrics = dCtx.measureText(nameLabel);
-      const nW = nMetrics.width + 12, nH = 20;
-      dCtx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-      dCtx.beginPath();
-      dCtx.roundRect(centerX350 - nW / 2, centerY200 + 40, nW, nH, 4);
-      dCtx.fill();
-      dCtx.fillStyle = getHSL(animal.rabbit);
-      dCtx.fillText(nameLabel, centerX350, centerY200 + 55);
+      drawLabelPlate(dCtx, centerX350, centerY200 + 40, nameLabel, getHSL(animal.rabbit), 14, 'rgba(0, 0, 0, 0.75)');
 
       cancelAnimationFrame(dnaHandle);
       return;
@@ -3288,17 +3341,17 @@ function toggleTranscript() {
   const container = document.getElementById('transcript-container');
   const list = document.getElementById('transcript-list');
   const toggle = document.getElementById('transcript-toggle');
-
+  
   isTranscriptOpen = !isTranscriptOpen;
   if (isTranscriptOpen) {
     container.classList.add('open');
     container.style.transform = 'translateX(-50%) translateY(0)';
-    toggle.textContent = '▼ CLOSE CASE LOG';
+    toggle.innerHTML = `<div class="pixel-scroll-hint" style="width: 16px; height: 10px; margin: 0;"></div> CLOSE CASE LOG`;
   } else {
     container.classList.remove('open');
     // Use calc to slide down so exactly 120px remains visible
     container.style.transform = 'translateX(-50%) translateY(calc(100% - 120px))';
-    toggle.textContent = '▲ OPEN CASE LOG';
+    toggle.innerHTML = `<div class="pixel-scroll-hint" style="transform: rotate(180deg); width: 16px; height: 10px; margin: 0;"></div> OPEN CASE LOG`;
   }
 }
 
@@ -3352,7 +3405,7 @@ function showIntro(isMidGameChangeParam = false) {
 
   // Reset scroll state for this step
   if (scrollContainer) scrollContainer.dataset.hasScrolled = 'false';
-
+  
   modal.style.display = 'flex';
   updateScrollHint(); // Initial check
 
@@ -3398,9 +3451,9 @@ function showIntro(isMidGameChangeParam = false) {
     });
     scrollContainer.dataset.listenerAttached = 'true';
   }
-
+  
   if (introHandle) cancelAnimationFrame(introHandle);
-
+  
   const killer = rabbits.find(r => r.id === killerId);
   const relatives = rabbits.filter(r => r.dnaRelation).map(r => ({
     ...r,
@@ -3417,7 +3470,7 @@ function showIntro(isMidGameChangeParam = false) {
     iCtx.fillStyle = '#151515';
     iCtx.fillRect(0, 0, iCanvas.width, iCanvas.height);
     iCtx.imageSmoothingEnabled = false;
-
+    
     const centerX = iCanvas.width / 2;
     const centerY = iCanvas.height / 2;
 
@@ -3456,134 +3509,140 @@ function showIntro(isMidGameChangeParam = false) {
       const step = needsSelection ? introStep - 1 : introStep;
 
       if (step === 0) {
-        title.textContent = "A HEINOUS CRIME";
-        textContainer.innerHTML = `<span style="color: ${getHSL(victim)}; font-weight: bold;">${victim.name}</span> the ${victim.species.replace('_', ' ')} was found dead in the clover field.${consentText}`;
-
-        // Animate victim death (play once and stay)
-        introAnimTimer += 0.08;
-        const frame = Math.min(5, Math.floor(introAnimTimer));
-        const spr = sprites[victim.species].death;
-        // Draw at 2x size on the higher res canvas
-        iCtx.save();
-        iCtx.filter = `hue-rotate(${victim.tint.hue}deg) saturate(${victim.tint.saturate}%) brightness(${victim.tint.brightness}%)`;
-        iCtx.drawImage(spr, frame * 32, 0, 32, 32, centerX - 32, centerY - 32, 64, 64);
-        iCtx.restore();
-        btn.textContent = "NEXT";
+      title.textContent = "A HEINOUS CRIME";
+      textContainer.innerHTML = `<span style="color: ${getHSL(victim)}; font-weight: bold;">${victim.name}</span> the ${victim.species.replace('_', ' ')} was found dead in the clover field.${consentText}`;
+      
+      // Animate victim death (play once and stay)
+      introAnimTimer += 0.08;
+      const frame = Math.min(5, Math.floor(introAnimTimer));
+      const spr = sprites[victim.species].death;
+      // Draw at 2x size on the higher res canvas
+      iCtx.save();
+      iCtx.filter = `hue-rotate(${victim.tint.hue}deg) saturate(${victim.tint.saturate}%) brightness(${victim.tint.brightness}%)`;
+      iCtx.drawImage(spr, frame * 32, 0, 32, 32, centerX - 32, centerY - 32, 64, 64);
+      iCtx.restore();
+      btn.textContent = "NEXT";
       } else if (step === 1) {
-        title.textContent = "MURDER MOST FOUL!";
-        textContainer.textContent = `DNA testing on the murder weapon reveals that the killer is a ${killer.sex === 'M' ? 'male' : 'female'} ${killer.species.replace('_', ' ')}.`;
-
-        // Silhouette of killer
-        const spr = sprites[killer.species].idle;
-        iCtx.save();
-        // Light background circle for silhouette
-        iCtx.fillStyle = 'rgba(255,255,255,0.1)';
-        iCtx.beginPath();
-        iCtx.arc(centerX, centerY, 60, 0, Math.PI * 2);
-        iCtx.fill();
-
-        iCtx.filter = 'brightness(0)';
-        iCtx.drawImage(spr, 0, 0, 32, 32, centerX - 32, centerY - 32, 64, 64);
-        iCtx.restore();
-
-        // Red question mark
-        iCtx.fillStyle = '#ff4444';
-        iCtx.font = 'bold 48px Arial';
-        iCtx.textAlign = 'center';
-        iCtx.textBaseline = 'middle';
-        iCtx.fillText('?', centerX, centerY - 5);
-        btn.textContent = "NEXT";
+      title.textContent = "MURDER MOST FOUL!";
+      textContainer.textContent = `DNA testing on the murder weapon reveals that the killer is a ${killer.sex === 'M' ? 'male' : 'female'} ${killer.species.replace('_', ' ')}.`;
+      
+      // Silhouette of killer
+      const spr = sprites[killer.species].idle;
+      iCtx.save();
+      // Light background circle for silhouette
+      iCtx.fillStyle = 'rgba(255,255,255,0.1)';
+      iCtx.beginPath();
+      iCtx.arc(centerX, centerY, 60, 0, Math.PI * 2);
+      iCtx.fill();
+      
+      iCtx.filter = 'brightness(0)';
+      iCtx.drawImage(spr, 0, 0, 32, 32, centerX - 32, centerY - 32, 64, 64);
+      iCtx.restore();
+      
+      // Red question mark
+      iCtx.fillStyle = '#ff4444';
+      iCtx.font = 'bold 48px Silkscreen';
+      iCtx.textAlign = 'center';
+      iCtx.textBaseline = 'middle';
+      iCtx.fillText('?', centerX, centerY - 5);
+      btn.textContent = "NEXT";
       } else if (step === 2) {
-        title.textContent = "DNA EVIDENCE";
-        textContainer.textContent = "The killer has two distant relatives in the DNA database.";
+      title.textContent = "DNA EVIDENCE";
+      textContainer.textContent = "The killer has two distant relatives in the DNA database.";
         updateScrollHint();
-
-        // Draw two relatives side-by-side
-        relatives.forEach((rel, idx) => {
-          const rx = idx === 0 ? centerX - 110 : centerX + 45; // Spread them slightly more
-          const ry = centerY - 10;
-
-          // DNA text ABOVE (matching game UI) - with wrapping
-          iCtx.fillStyle = '#44ff44';
-          iCtx.font = 'bold 11px Arial';
-          iCtx.textAlign = 'center';
-
-          const label = `🧬 ${rel.dnaRelation}`;
-          const words = label.split(' ');
-          let line = '';
-          const lines = [];
-          const maxWidth = 125; // Slightly wider for fuzzy labels
-
-          for (let n = 0; n < words.length; n++) {
-            const testLine = line + words[n] + ' ';
-            const metrics = iCtx.measureText(testLine);
-            if (metrics.width > maxWidth && n > 0) {
-              lines.push(line);
-              line = words[n] + ' ';
-            } else {
-              line = testLine;
-            }
+      
+      // Draw two relatives side-by-side
+      relatives.forEach((rel, idx) => {
+        const rx = idx === 0 ? centerX - 110 : centerX + 45; // Spread them slightly more
+        const ry = centerY - 10;
+        
+        // DNA text ABOVE (matching game UI) - with wrapping
+        iCtx.fillStyle = '#44ff44';
+        iCtx.font = 'bold 11px Silkscreen';
+        iCtx.textAlign = 'center';
+        
+        const label = rel.dnaRelation;
+        const words = label.split(' ');
+        let line = '';
+        const lines = [];
+        const maxWidth = 125; 
+        const iconSize = 11;
+        const iconGap = 4;
+        
+        for (let n = 0; n < words.length; n++) {
+          const testLine = line + words[n] + ' ';
+          const metrics = iCtx.measureText(testLine);
+          if (metrics.width > maxWidth && n > 0) {
+            lines.push(line);
+            line = words[n] + ' ';
+          } else {
+            line = testLine;
           }
-          lines.push(line);
+        }
+        lines.push(line);
 
-          lines.forEach((l, i) => {
-            iCtx.fillText(l.trim(), rx + 32, ry - 15 - (lines.length - 1 - i) * 14);
-          });
+        const textW = Math.max(...lines.map(l => iCtx.measureText(l).width));
+        const totalW = textW + iconSize + iconGap;
+        const startX = rx + 32 - totalW / 2;
 
-          // Sprite at 2x
-          iCtx.save();
-          iCtx.filter = `hue-rotate(${rel.tint.hue}deg) saturate(${rel.tint.saturate}%) brightness(${rel.tint.brightness}%)`;
-          iCtx.drawImage(sprites[rel.species].idle, 0, 0, 32, 32, rx, ry, 64, 64);
-          iCtx.restore();
+        drawDnaIcon(iCtx, startX, ry - 15 - (lines.length - 1) * 14 + (11 - iconSize) / 2, iconSize, '#44ff44');
 
-          // Name BELOW
-          iCtx.fillStyle = getHSL(rel);
-          iCtx.font = 'bold 14px monospace';
-          iCtx.textAlign = 'center';
-          iCtx.fillText(rel.firstName, rx + 32, ry + 80);
+        lines.forEach((l, i) => {
+          iCtx.textAlign = 'left';
+          iCtx.fillText(l.trim(), startX + iconSize + iconGap, ry - 15 - (lines.length - 1 - i) * 14);
         });
-        btn.textContent = "NEXT";
-      } else if (step === 3) {
-        title.textContent = "SOLVE THE CASE";
-        textContainer.innerHTML = "Click the speech bubbles to talk to animals for clues. Use your 3 DNA tests wisely.<br><br>Click one animal and then another to record a parent/child relationship and build your family tree.";
 
-        // Draw a sample animal with a speech bubble
-        const sample = rabbits.find(r => r.id !== killerId) || rabbits[0];
-        const rx = centerX - 32;
-        const ry = centerY - 20;
-
+        // Sprite at 2x
         iCtx.save();
-        iCtx.filter = `hue-rotate(${sample.tint.hue}deg) saturate(${sample.tint.saturate}%) brightness(${sample.tint.brightness}%)`;
-        iCtx.drawImage(sprites[sample.species].idle, 0, 0, 32, 32, rx, ry, 64, 64);
+        iCtx.filter = `hue-rotate(${rel.tint.hue}deg) saturate(${rel.tint.saturate}%) brightness(${rel.tint.brightness}%)`;
+        iCtx.drawImage(sprites[rel.species].idle, 0, 0, 32, 32, rx, ry, 64, 64);
         iCtx.restore();
+        
+        // Name BELOW
+        iCtx.fillStyle = getHSL(rel);
+        iCtx.font = 'bold 14px Silkscreen';
+        iCtx.textAlign = 'center';
+        iCtx.fillText(rel.firstName, rx + 32, ry + 80);
+      });
+      btn.textContent = "NEXT";
+      } else if (step === 3) {
+      title.textContent = "SOLVE THE CASE";
+      textContainer.innerHTML = "Click the speech bubbles to talk to animals for clues. Use your 3 DNA tests wisely.<br><br>Click one animal and then another to record a parent/child relationship and build your family tree.";
+      
+      // Draw a sample animal with a speech bubble
+      const sample = rabbits.find(r => r.id !== killerId) || rabbits[0];
+      const rx = centerX - 32;
+      const ry = centerY - 20;
 
-        // Speech bubble
-        const bx = rx + 50, by = ry - 10, bw = 30, bh = 25, r = 5;
-        const s = Math.max(0, Math.min(100, sample.tint.saturate)), l = Math.max(0, Math.min(100, sample.tint.brightness));
-        iCtx.fillStyle = `hsla(${sample.tint.hue}, ${s}%, ${l}%, 0.9)`;
-        iCtx.beginPath(); iCtx.moveTo(bx + r, by - bh); iCtx.lineTo(bx + bw - r, by - bh); iCtx.quadraticCurveTo(bx + bw, by - bh, bx + bw, by - bh + r); iCtx.lineTo(bx + bw, by - r); iCtx.quadraticCurveTo(bx + bw, by, bx + bw - r, by); iCtx.lineTo(bx + r, by); iCtx.quadraticCurveTo(bx, by, bx, by - r); iCtx.lineTo(bx, by - bh + r); iCtx.quadraticCurveTo(bx, by - bh, bx + r, by - bh); iCtx.closePath(); iCtx.fill();
-        iCtx.beginPath(); iCtx.moveTo(bx + 5, by); iCtx.lineTo(bx + 15, by); iCtx.lineTo(bx + 10, by + 5); iCtx.fill();
-        iCtx.fillStyle = 'white'; iCtx.font = "bold 14px Arial"; iCtx.textAlign = "center";
-        iCtx.fillText('?', bx + bw / 2, by - bh / 2 + 5);
+      iCtx.save();
+      iCtx.filter = `hue-rotate(${sample.tint.hue}deg) saturate(${sample.tint.saturate}%) brightness(${sample.tint.brightness}%)`;
+      iCtx.drawImage(sprites[sample.species].idle, 0, 0, 32, 32, rx, ry, 64, 64);
+      iCtx.restore();
 
-        btn.textContent = "START INVESTIGATION";
-      } else {
-        modal.style.display = 'none';
-        localStorage.setItem('mysteryFarm_consent', 'true'); // Save consent when they finish the intro
+      // Speech bubble (using shared pixel-perfect helper)
+      const bx = rx + 50, by = ry - 10;
+      const s = Math.max(0, Math.min(100, sample.tint.saturate)), l = Math.max(0, Math.min(100, sample.tint.brightness));
+      const bubbleColor = `hsla(${sample.tint.hue}, ${s}%, ${l}%, 0.9)`;
+      drawSpeechBubble(iCtx, bx, by, bubbleColor, 1.0, false);
+
+      btn.textContent = "START INVESTIGATION";
+    } else {
+      modal.style.display = 'none';
+      localStorage.setItem('mysteryFarm_consent', 'true'); // Save consent when they finish the intro
         gameState.introFinished = true;
         if (!gameState.startTime) {
           gameState.startTime = Date.now();
           saveGame();
         }
-        introStep = 0;
-        introAnimTimer = 0;
-        return;
+      introStep = 0;
+      introAnimTimer = 0;
+      return;
       }
     }
-
+    
     introHandle = requestAnimationFrame(introLoop);
   }
-
+  
   introLoop();
 }
 
@@ -3629,7 +3688,7 @@ function init() {
   rngState = seedInfo.seed;
   currentCaseIdx = gameState.caseIndex;
   runSimulation();
-
+  
   // 3. Try loading saved game progress (DNA tests, connections, etc.)
   // This depends on rabbits being already populated by runSimulation()
   const wasLoaded = loadGame();
@@ -3691,15 +3750,15 @@ function init() {
         // World coordinates for bubble hitbox
         const sz = FRAME_SIZE * 2;
         const bx = h.x + sz * 0.8, by = h.y - (15 * camera.zoom) / camera.zoom; // approximate
-
+        
         // Accurate screen-to-world hitbox check for scaled bubbles
         const sx = (h.x - camera.x) * camera.zoom, sy = (h.y - camera.y) * camera.zoom;
         const ssz = sz * camera.zoom;
         const sbx = sx + ssz * 0.8, sby = sy - 15 * camera.zoom;
-
-        if (cx >= sbx - 5 && cx <= sbx + bw + 5 && cy >= sby - bh - 5 && cy <= sby + 5) {
+        
+        if (cx >= sbx - 5 && cx <= sbx + bw + 5 && cy >= sby - bh - 5 && cy <= sby + 5) { 
           if (!isR) {
-            clue.isRead = true;
+            clue.isRead = true; 
             clue.generatedText = generateClueText(clue, h.rabbit.id);
 
             // Clear previous highlights and set new ones
@@ -3717,10 +3776,10 @@ function init() {
             hideSmartHint();
             saveGame();
           }
-          notifications.push({ text: clue.generatedText, x: cx, y: cy - 20, timer: 360, timerMax: 360, color: '#fff' });
+          notifications.push({ text: clue.generatedText, x: cx, y: cy - 20, timer: 360, timerMax: 360, color: '#fff' }); 
           // Disappear after click
           activeClues.delete(h.rabbit.id);
-          return true;
+          return true; 
         }
       }
     }
@@ -3731,10 +3790,10 @@ function init() {
         const conn = playerConnections.find(c => c.parentId === btn.pId && c.childId === btn.cId);
         if (conn) {
           playerConnections.splice(playerConnections.indexOf(conn), 1);
-          updateTreeDiagram();
+          updateTreeDiagram(); 
           saveGame();
-          notifications.push({ text: "Removed", x: cx, y: cy - 20, timer: 60, timerMax: 60, color: '#f44' });
-          return true;
+          notifications.push({ text: "Removed", x: cx, y: cy - 20, timer: 60, timerMax: 60, color: '#f44' }); 
+          return true; 
         }
       }
     }
@@ -3743,13 +3802,13 @@ function init() {
       if (selectedHare && selectedHare !== clicked) {
         const p = selectedHare.rabbit.birthYear <= clicked.rabbit.birthYear ? selectedHare : clicked, c = p === selectedHare ? clicked : selectedHare;
         if (playerConnections.some(conn => conn.childId === c.rabbit.id && rabbits.find(r => r.id === conn.parentId).sex === p.rabbit.sex)) notifications.push({ text: `${c.rabbit.firstName} already has a ${p.rabbit.sex === 'M' ? 'father' : 'mother'}!`, x: cx, y: cy, timer: 120, timerMax: 120 });
-        else if (!playerConnections.some(conn => conn.parentId === p.rabbit.id && conn.childId === c.rabbit.id)) {
-          playerConnections.push({ parentId: p.rabbit.id, childId: c.rabbit.id });
+        else if (!playerConnections.some(conn => conn.parentId === p.rabbit.id && conn.childId === c.rabbit.id)) { 
+          playerConnections.push({ parentId: p.rabbit.id, childId: c.rabbit.id }); 
           gameState.hasCreatedConnection = true;
           hideSmartHint();
-          updateTreeDiagram();
+          updateTreeDiagram(); 
           saveGame();
-          notifications.push({ text: "Linked!", x: cx, y: cy - 20, timer: 60, timerMax: 60, color: '#44ff44' });
+          notifications.push({ text: "Linked!", x: cx, y: cy - 20, timer: 60, timerMax: 60, color: '#44ff44' }); 
           // Clear highlights when relationships are added
           highlightedAnimalIds.clear();
         }
@@ -3779,17 +3838,17 @@ function init() {
     updateUI();
   });
 
-  canvas.addEventListener('mousedown', e => {
-    const p = getPos(e);
-    input.isDragging = true;
-    input.startX = p.cx;
+  canvas.addEventListener('mousedown', e => { 
+    const p = getPos(e); 
+    input.isDragging = true; 
+    input.startX = p.cx; 
     input.startY = p.cy;
-    input.lastMouseX = p.cx;
+    input.lastMouseX = p.cx; 
     input.lastMouseY = p.cy;
     input.hasMoved = false;
   });
 
-  window.addEventListener('mousemove', e => {
+  window.addEventListener('mousemove', e => { 
     const p = getPos(e);
     let foundBubble = null;
     let foundX = null;
@@ -3829,21 +3888,21 @@ function init() {
       canvas.style.cursor = (hoveredBubbleId || hoveredXButton) ? 'pointer' : 'default';
     }
 
-    if (input.isDragging) {
+    if (input.isDragging) { 
       const dx = e.clientX - input.lastMouseX;
       const dy = e.clientY - input.lastMouseY;
       if (Math.hypot(e.clientX - input.startX, e.clientY - input.startY) > 5) {
         input.hasMoved = true;
       }
-      camera.x -= dx / camera.zoom;
-      camera.y -= dy / camera.zoom;
-      input.lastMouseX = e.clientX;
-      input.lastMouseY = e.clientY;
-      constrainCamera();
-    }
+      camera.x -= dx / camera.zoom; 
+      camera.y -= dy / camera.zoom; 
+      input.lastMouseX = e.clientX; 
+      input.lastMouseY = e.clientY; 
+      constrainCamera(); 
+    } 
   });
 
-  window.addEventListener('mouseup', e => {
+  window.addEventListener('mouseup', e => { 
     if (input.isDragging && !input.hasMoved) {
       const p = getPos(e);
       if (!handleAct(p.x, p.y, p.cx, p.cy)) {
@@ -3851,47 +3910,47 @@ function init() {
         updateUI();
       }
     }
-    input.isDragging = false;
+    input.isDragging = false; 
   });
 
   canvas.addEventListener('wheel', e => { e.preventDefault(); const p = getPos(e), oldZ = camera.zoom; camera.zoom = Math.max(camera.minZoom, Math.min(camera.maxZoom, camera.zoom * Math.pow(1.1, -e.deltaY / 100))); camera.x += (p.x - camera.x) * (1 - oldZ / camera.zoom); camera.y += (p.y - camera.y) * (1 - oldZ / camera.zoom); constrainCamera(); }, { passive: false });
 
-  canvas.addEventListener('touchstart', e => {
-    e.preventDefault();
-    if (e.touches.length === 1) {
-      const p = getPos(e);
-      input.isDragging = true;
-      input.startX = p.cx;
+  canvas.addEventListener('touchstart', e => { 
+    e.preventDefault(); 
+    if (e.touches.length === 1) { 
+      const p = getPos(e); 
+      input.isDragging = true; 
+      input.startX = p.cx; 
       input.startY = p.cy;
-      input.lastMouseX = p.cx;
+      input.lastMouseX = p.cx; 
       input.lastMouseY = p.cy;
       input.hasMoved = false;
-    } else if (e.touches.length === 2) {
-      input.isDragging = false;
-      input.lastTouchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
-    }
+    } else if (e.touches.length === 2) { 
+      input.isDragging = false; 
+      input.lastTouchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); 
+    } 
   }, { passive: false });
 
-  canvas.addEventListener('touchmove', e => {
-    e.preventDefault();
-    if (e.touches.length === 1 && input.isDragging) {
-      const p = getPos(e);
+  canvas.addEventListener('touchmove', e => { 
+    e.preventDefault(); 
+    if (e.touches.length === 1 && input.isDragging) { 
+      const p = getPos(e); 
       const dx = p.cx - input.lastMouseX;
       const dy = p.cy - input.lastMouseY;
       if (Math.hypot(p.cx - input.startX, p.cy - input.startY) > 10) {
         input.hasMoved = true;
       }
-      camera.x -= dx / camera.zoom;
-      camera.y -= dy / camera.zoom;
-      input.lastMouseX = p.cx;
-      input.lastMouseY = p.cy;
-      constrainCamera();
-    } else if (e.touches.length === 2) {
-      const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY), midX = (e.touches[0].clientX + e.touches[1].clientX) / 2, midY = (e.touches[0].clientY + e.touches[1].clientY) / 2, rect = canvas.getBoundingClientRect(), wx = (midX - rect.left) / camera.zoom + camera.x, wy = (midY - rect.top) / camera.zoom + camera.y, oldZ = camera.zoom; camera.zoom = Math.max(camera.minZoom, Math.min(camera.maxZoom, camera.zoom * (d / input.lastTouchDist))); camera.x += (wx - camera.x) * (1 - oldZ / camera.zoom); camera.y += (wy - camera.y) * (1 - oldZ / camera.zoom); input.lastTouchDist = d; constrainCamera();
-    }
+      camera.x -= dx / camera.zoom; 
+      camera.y -= dy / camera.zoom; 
+      input.lastMouseX = p.cx; 
+      input.lastMouseY = p.cy; 
+      constrainCamera(); 
+    } else if (e.touches.length === 2) { 
+      const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY), midX = (e.touches[0].clientX + e.touches[1].clientX) / 2, midY = (e.touches[0].clientY + e.touches[1].clientY) / 2, rect = canvas.getBoundingClientRect(), wx = (midX - rect.left) / camera.zoom + camera.x, wy = (midY - rect.top) / camera.zoom + camera.y, oldZ = camera.zoom; camera.zoom = Math.max(camera.minZoom, Math.min(camera.maxZoom, camera.zoom * (d / input.lastTouchDist))); camera.x += (wx - camera.x) * (1 - oldZ / camera.zoom); camera.y += (wy - camera.y) * (1 - oldZ / camera.zoom); input.lastTouchDist = d; constrainCamera(); 
+    } 
   }, { passive: false });
 
-  canvas.addEventListener('touchend', e => {
+  canvas.addEventListener('touchend', e => { 
     if (input.isDragging && !input.hasMoved) {
       const rect = canvas.getBoundingClientRect();
       const p = { x: (input.lastMouseX - rect.left) / camera.zoom + camera.x, y: (input.lastMouseY - rect.top) / camera.zoom + camera.y, cx: input.lastMouseX, cy: input.lastMouseY };
@@ -3900,20 +3959,20 @@ function init() {
         updateUI();
       }
     }
-    input.isDragging = false;
-    input.lastTouchDist = 0;
+    input.isDragging = false; 
+    input.lastTouchDist = 0; 
   });
   if (dnaBtn) {
-    dnaBtn.addEventListener('pointerdown', e => e.stopPropagation());
-    dnaBtn.addEventListener('click', e => {
-      e.preventDefault(); if (gameState.isFinished || !selectedHare || dnaTestsRemaining <= 0 || selectedHare.rabbit.isTested) return;
+  dnaBtn.addEventListener('pointerdown', e => e.stopPropagation());
+  dnaBtn.addEventListener('click', e => {
+    e.preventDefault(); if (gameState.isFinished || !selectedHare || dnaTestsRemaining <= 0 || selectedHare.rabbit.isTested) return;
       showDNAModal(selectedHare);
     });
   }
 
   if (accBtn) {
-    accBtn.addEventListener('pointerdown', e => e.stopPropagation());
-    accBtn.addEventListener('click', e => {
+  accBtn.addEventListener('pointerdown', e => e.stopPropagation());
+  accBtn.addEventListener('click', e => {
       e.preventDefault();
       if (gameState.isFinished || !selectedHare || dnaTestsRemaining > 0) return;
 
@@ -3934,7 +3993,7 @@ function init() {
 
       accConfirm.onclick = () => {
         accModal.style.display = 'none';
-        showGameOver(selectedHare.rabbit.id === killerId);
+    showGameOver(selectedHare.rabbit.id === killerId);
       };
     });
   }
@@ -4035,7 +4094,7 @@ function init() {
           gameOverStep = 0;
           introStep = 0;
           killerQuote = "";
-          gameOverAnimTimer = 0;
+    gameOverAnimTimer = 0;
           isDnaSuccess = false;
 
           // Clear existing state
@@ -4066,7 +4125,7 @@ function init() {
           if (container) container.classList.remove('open');
           isTranscriptOpen = false;
           const toggle = document.getElementById('transcript-toggle');
-          if (toggle) toggle.textContent = '▲ OPEN CASE LOG';
+          if (toggle) toggle.innerHTML = '<div class="pixel-scroll-hint" style="transform: rotate(180deg); width: 16px; height: 10px; margin: 0;"></div> OPEN CASE LOG';
 
           // Hide game over modal if open
           const gameOverModal = document.getElementById('game-over');
@@ -4199,10 +4258,10 @@ function init() {
           modal.style.display = 'none';
           if (introHandle) cancelAnimationFrame(introHandle);
           gameState.isMidGameChange = false;
-          introStep = 0;
+    introStep = 0;
           introAnimTimer = 0;
         } else {
-          showIntro();
+    showIntro();
         }
         updateUI();
         saveGame();
@@ -4323,7 +4382,7 @@ function init() {
       }
     }
     cheatBuffer = (cheatBuffer + e.key.toLowerCase()).slice(-10);
-
+    
     // "killer" - Reveals the culprit in the log
     if (cheatBuffer.endsWith("killer")) {
       const k = rabbits.find(r => r.id === killerId);
@@ -4331,7 +4390,7 @@ function init() {
       updateTranscriptUI(msg, k.id);
       cheatBuffer = "";
     }
-
+    
     // "reset" - Wipes EVERYTHING and reloads
     if (cheatBuffer.endsWith("reset")) {
       localStorage.removeItem('mysteryFarm_current');
@@ -4383,13 +4442,13 @@ function init() {
     const isActuallyMidGame = (!gameState.detective || gameState.detective === "null") && (gameState.introFinished || gameState.isMidGameChange);
     showIntro(isActuallyMidGame);
   }
-
+  
   loop();
 }
 
 function constrainCamera() {
   const vw = canvas.width / camera.zoom, vh = canvas.height / camera.zoom;
-
+  
   // Define fixed padding in world units to allow centering animals at edges.
   // We allow the camera to see up to half a screen width/height past the edge.
   const padX = vw / 2;
@@ -4400,7 +4459,7 @@ function constrainCamera() {
   const minY = -padY;
   const maxY = FIELD_HEIGHT - vh + padY;
 
-  camera.x = Math.max(minX, Math.min(maxX, camera.x));
+    camera.x = Math.max(minX, Math.min(maxX, camera.x));
   camera.y = Math.max(minY, Math.min(maxY, camera.y));
 }
 
@@ -4451,7 +4510,7 @@ function loop() {
         ...clueQueue.map(c => c.id),
         ...globallyIssuedClueIds
       ]);
-
+      
       // If queue is empty, pick a new clue/group from pool
       if (clueQueue.length === 0) {
         const getRelevant = (onlyUnissued) => {
@@ -4459,26 +4518,26 @@ function loop() {
             if (onlyUnissued && issuedIds.has(c.id)) return false;
             // Even if re-issuing, don't pick one currently on screen or in queue
             if (!onlyUnissued && (Array.from(activeClues.values()).some(ac => ac.id === c.id) || clueQueue.some(cq => cq.id === c.id))) return false;
-
-            const conn = c.conn;
-            if (conn.parentId && conn.childId) {
-              if (playerConnections.some(pc => pc.parentId === conn.parentId && pc.childId === conn.childId)) return false;
-            } else if (conn.type === 'couple') {
-              const c1 = playerConnections.filter(pc => pc.parentId === conn.p1).map(pc => pc.childId);
-              const c2 = playerConnections.filter(pc => pc.parentId === conn.p2).map(pc => pc.childId);
-              if (c1.some(id => c2.includes(id))) return false;
-            } else if (conn.type === 'sibling') {
-              const p1 = playerConnections.filter(pc => pc.childId === conn.a).map(pc => pc.parentId);
-              const p2 = playerConnections.filter(pc => pc.childId === conn.b).map(pc => pc.parentId);
-              if (p1.some(id => p2.includes(id))) return false;
-            } else if (conn.type === 'grandparent') {
-              const parents = playerConnections.filter(pc => pc.childId === conn.gc).map(pc => pc.parentId);
-              if (parents.some(pid => playerConnections.some(pc => pc.parentId === conn.gp && pc.childId === pid))) return false;
+          
+          const conn = c.conn;
+          if (conn.parentId && conn.childId) {
+            if (playerConnections.some(pc => pc.parentId === conn.parentId && pc.childId === conn.childId)) return false;
+          } else if (conn.type === 'couple') {
+            const c1 = playerConnections.filter(pc => pc.parentId === conn.p1).map(pc => pc.childId);
+            const c2 = playerConnections.filter(pc => pc.parentId === conn.p2).map(pc => pc.childId);
+            if (c1.some(id => c2.includes(id))) return false;
+          } else if (conn.type === 'sibling') {
+            const p1 = playerConnections.filter(pc => pc.childId === conn.a).map(pc => pc.parentId);
+            const p2 = playerConnections.filter(pc => pc.childId === conn.b).map(pc => pc.parentId);
+            if (p1.some(id => p2.includes(id))) return false;
+          } else if (conn.type === 'grandparent') {
+            const parents = playerConnections.filter(pc => pc.childId === conn.gc).map(pc => pc.parentId);
+            if (parents.some(pid => playerConnections.some(pc => pc.parentId === conn.gp && pc.childId === pid))) return false;
             } else if (conn.type === 'onlyChild') {
               if (playerConnections.some(pc => pc.parentId === conn.parentId && pc.childId === conn.childId)) return false;
-            }
-            return true;
-          });
+          }
+          return true;
+        });
         };
 
         let avail = getRelevant(true);
@@ -4497,7 +4556,7 @@ function loop() {
           // Prioritize necessary clues over extra clues (3:1 weight)
           const necessary = avail.filter(c => c.type === 'necessary');
           const extra = avail.filter(c => c.type === 'extra');
-
+          
           let choice;
           if (necessary.length > 0 && (extra.length === 0 || random() < 0.75)) {
             choice = pick(necessary);
@@ -4557,9 +4616,9 @@ function loop() {
     );
   }
 
-  ctx.save();
-  ctx.font = 'bold 24px monospace';
-  ctx.fillStyle = 'rgba(255,255,255,0.2)';
+  ctx.save(); 
+  ctx.font = 'bold 24px Silkscreen';
+  ctx.fillStyle = 'rgba(255,255,255,0.2)'; 
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
 
@@ -4574,7 +4633,7 @@ function loop() {
 
   ctx.fillText('mystery.farm', 20, watermarkY);
   ctx.restore();
-
+  
   ctx.save();
 
   // Group connections into "Family Units" (Unions)
@@ -4719,46 +4778,46 @@ function loop() {
 
   // Update stopwatch display in real-time
   updateUI();
-
+  
   // 4. Draw recorded "X" buttons on TOP of animals/labels
   if (!gameState.isFinished) {
-    xButtons.forEach(btn => {
+  xButtons.forEach(btn => {
       const isHovered = hoveredXButton === btn;
       drawPixelX(ctx, btn.x, btn.y, camera.zoom, isHovered);
     });
   }
-
+  
   // Render notifications/rich text
   for (let i = notifications.length - 1; i >= 0; i--) {
-    const n = notifications[i];
-    ctx.font = 'bold 18px Arial';
-    ctx.textAlign = 'center';
-    ctx.shadowBlur = 4;
+    const n = notifications[i]; 
+    ctx.font = 'bold 18px Silkscreen'; 
+    ctx.textAlign = 'center'; 
+    ctx.shadowBlur = 4; 
     ctx.shadowColor = 'black';
     ctx.globalAlpha = Math.min(1, n.timer / 30);
-
+    
     const maxT = n.timerMax || 360, fO = (maxT - n.timer) * 0.2, tY = n.y - fO;
     let cY = Math.max(40, tY);
-
+    
     // Allow room for transcript at bottom
     const transcriptEl = document.getElementById('transcript-container');
     const visibleTranscriptHeight = isTranscriptOpen ? (transcriptEl.offsetHeight) : 120;
     const bottomLimit = canvas.height - visibleTranscriptHeight - 20;
     cY = Math.min(cY, bottomLimit);
-
+    
     // Simple rich text drawing for canvas
     const text = n.text;
     const cleanText = text.replace(/\[\[\d+:(.*?)\]\]/g, '$1');
     const totalWidth = ctx.measureText(cleanText).width;
-
+    
     // Horizontal clamping
     const padding = 20;
     let currentX = n.x - totalWidth / 2;
     if (currentX < padding) currentX = padding;
     if (currentX + totalWidth > canvas.width - padding) currentX = canvas.width - padding - totalWidth;
-
+    
     const parts = text.split(/(\[\[\d+:.*?\]\])/g);
-
+    
     parts.forEach(part => {
       const match = part.match(/\[\[(\d+):(.*?)\]\]/);
       if (match) {

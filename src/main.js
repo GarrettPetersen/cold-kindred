@@ -1508,6 +1508,39 @@ function runSimulation() {
   victimRecord.initialY = victimY;
 
   rabbits.push(victimRecord);
+
+  // Final age-gap correction pass
+  // Sort rabbits by generation (0 to 4) to ensure parents are processed before children
+  const sortedRabbits = [...rabbits].sort((a, b) => a.generation - b.generation);
+  sortedRabbits.forEach(child => {
+    if (child.id === -1) return; // Skip victim
+    const parents = rabbits.filter(r => r.id === child.fatherId || r.id === child.motherId);
+    if (parents.length > 0) {
+      const parentMaxBirthYear = Math.max(...parents.map(p => p.birthYear));
+      // Ensure child is at least 18 years younger than the youngest parent
+      if (child.birthYear < parentMaxBirthYear + 18) {
+        child.birthYear = parentMaxBirthYear + 18 + Math.floor(random() * 5);
+      }
+    }
+    // Cap birthYear at CURRENT_YEAR - 1 to avoid future births, 
+    // but ensure at least a minimal gap if parent is also very young.
+    if (child.birthYear >= CURRENT_YEAR) {
+      child.birthYear = CURRENT_YEAR - 1;
+      const parents = rabbits.filter(r => r.id === child.fatherId || r.id === child.motherId);
+      if (parents.length > 0) {
+        const parentMaxBirthYear = Math.max(...parents.map(p => p.birthYear));
+        if (child.birthYear <= parentMaxBirthYear) {
+          // This should be extremely rare given generation logic, but as a last resort:
+          child.birthYear = parentMaxBirthYear + 1;
+        }
+      }
+    }
+  });
+
+  // Re-calculate name labels after age shifts (if hares already populated)
+  hares.forEach(h => {
+    h.nameLabel = `${h.rabbit.firstName} (${CURRENT_YEAR - h.rabbit.birthYear})`;
+  });
 }
 
 // --- Sprite Tinting Cache ---
@@ -3799,7 +3832,7 @@ function init() {
     }
     const clicked = hares.find(h => wx >= h.x && wx <= h.x + FRAME_SIZE * 2 && wy >= h.y && wy <= h.y + FRAME_SIZE * 2);
     if (clicked) {
-      if (selectedHare && selectedHare !== clicked) {
+      if (selectedHare && selectedHare !== clicked && !clicked.rabbit.isVictim && !selectedHare.rabbit.isVictim) {
         const p = selectedHare.rabbit.birthYear <= clicked.rabbit.birthYear ? selectedHare : clicked, c = p === selectedHare ? clicked : selectedHare;
         if (playerConnections.some(conn => conn.childId === c.rabbit.id && rabbits.find(r => r.id === conn.parentId).sex === p.rabbit.sex)) notifications.push({ text: `${c.rabbit.firstName} already has a ${p.rabbit.sex === 'M' ? 'father' : 'mother'}!`, x: cx, y: cy, timer: 120, timerMax: 120 });
         else if (!playerConnections.some(conn => conn.parentId === p.rabbit.id && conn.childId === c.rabbit.id)) { 

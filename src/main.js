@@ -1234,6 +1234,33 @@ function showTransitionModal(onBegin) {
 }
 
 // --- Simulation ---
+function getBirthYearForGeneration(gen, parentBirthYear = null) {
+  // Enforce strictly non-overlapping age ranges for generations
+  // CURRENT_YEAR is 2025.
+  const ranges = [
+    { start: CURRENT_YEAR - 105, end: CURRENT_YEAR - 81 }, // Gen 0: 81-105
+    { start: CURRENT_YEAR - 80,  end: CURRENT_YEAR - 61 }, // Gen 1: 61-80
+    { start: CURRENT_YEAR - 60,  end: CURRENT_YEAR - 41 }, // Gen 2: 41-60
+    { start: CURRENT_YEAR - 40,  end: CURRENT_YEAR - 21 }, // Gen 3: 21-40
+    { start: CURRENT_YEAR - 20,  end: CURRENT_YEAR - 1  }, // Gen 4: 1-20
+  ];
+  
+  const r = ranges[gen];
+  let minYear = r.start;
+  if (parentBirthYear !== null) {
+    // Allow parents to be as young as 18 when having children
+    minYear = Math.max(minYear, parentBirthYear + 18);
+  }
+  
+  // Safety: if minYear somehow exceeds r.end, clamp it but ensure it's still at least 1 year after parent.
+  if (minYear > r.end) {
+    if (parentBirthYear !== null) return Math.max(r.end, parentBirthYear + 1);
+    return r.end;
+  }
+  
+  return minYear + Math.floor(random() * (r.end - minYear + 1));
+}
+
 function runSimulation() {
   tintCache.clear(); // Clear sprite cache for the new game
   rabbits.length = 0;
@@ -1262,7 +1289,7 @@ function runSimulation() {
     if (pool.length === 0) break;
     const name = pool.pop();
     usedNames.add(name);
-    const r = new AnimalRecord(name, sex, CURRENT_YEAR - 150 + Math.floor(random() * 20), 0, pick(SPECIES));
+    const r = new AnimalRecord(name, sex, getBirthYearForGeneration(0), 0, pick(SPECIES));
     g0.push(r); rabbits.push(r);
   }
   let prev = g0;
@@ -1272,14 +1299,14 @@ function runSimulation() {
     let fs = shuffle(prev.filter(r => r.sex === 'F'));
     
     // Pairing logic to avoid ALL shared parents (full and half siblings) and parent/child
-    // Also enforce reproductive maturity (age 20+)
+    // Also enforce reproductive maturity (age 18+)
     const usedF = new Set();
     const pairs = [];
     for (const m of ms) {
-      if (CURRENT_YEAR - m.birthYear < 20) continue; 
+      if (CURRENT_YEAR - m.birthYear < 18) continue; 
       const f = fs.find(f => {
         if (usedF.has(f.id)) return false;
-        if (CURRENT_YEAR - f.birthYear < 20) return false;
+        if (CURRENT_YEAR - f.birthYear < 18) return false;
         const mP = [m.fatherId, m.motherId].filter(id => id !== null);
         const fP = [f.fatherId, f.motherId].filter(id => id !== null);
         if (mP.some(id => fP.includes(id))) return false;
@@ -1302,26 +1329,17 @@ function runSimulation() {
         for (let c = 0; c < children; c++) {
           const pool = (c === 0) ? (firstSex === 'M' ? mPool : fPool) : 
           (c === 1) ? (firstSex === 'M' ? fPool : mPool) :
-                       (random() < 0.5 ? mPool : fPool);
+          (random() < 0.5 ? mPool : fPool);
           
           if (pool.length === 0) continue;
           const sex = (pool === mPool) ? 'M' : 'F';
           const name = pool.pop();
           usedNames.add(name);
           
-        // Parents are 20-35 years older than kids (tighter range to avoid future births)
-        let bYear = f.birthYear + 20 + Math.floor(random() * 15);
-        if (bYear >= CURRENT_YEAR) {
-          // If the child would be born in the future, push them to the most recent possible year
-          // while still trying to maintain as much of a gap as possible.
-          bYear = CURRENT_YEAR - 1 - Math.floor(random() * 3);
-          // Absolute safety: ensure child is at least 15 years younger than parent 
-          // (allowing some flexibility if 20 isn't possible due to CURRENT_YEAR)
-          if (bYear < f.birthYear + 15) bYear = f.birthYear + 15;
-        }
-        
-          const child = new AnimalRecord(name, sex, bYear, gen, random() < 0.5 ? m.species : f.species, m.id, f.id);
-          next.push(child); rabbits.push(child);
+        // Use the birth year of the younger parent (higher birth year value)
+        const youngerParentBirthYear = Math.max(m.birthYear, f.birthYear);
+        const child = new AnimalRecord(name, sex, getBirthYearForGeneration(gen, youngerParentBirthYear), gen, random() < 0.5 ? m.species : f.species, m.id, f.id);
+        next.push(child); rabbits.push(child);
         }
     });
 
@@ -1337,10 +1355,8 @@ function runSimulation() {
         const sex = (pool === mPool) ? 'M' : 'F';
         const name = pool.pop();
         usedNames.add(name);
-        let bYear = pair.f.birthYear + 22 + Math.floor(random() * 12);
-        if (bYear >= CURRENT_YEAR) bYear = CURRENT_YEAR - 1;
-        if (bYear < pair.f.birthYear + 15) bYear = pair.f.birthYear + 15;
-        const bonusChild = new AnimalRecord(name, sex, bYear, gen, random() < 0.5 ? pair.m.species : pair.f.species, pair.m.id, pair.f.id);
+        const youngerParentBirthYear = Math.max(pair.m.birthYear, pair.f.birthYear);
+        const bonusChild = new AnimalRecord(name, sex, getBirthYearForGeneration(gen, youngerParentBirthYear), gen, random() < 0.5 ? pair.m.species : pair.f.species, pair.m.id, pair.f.id);
         next.push(bonusChild); rabbits.push(bonusChild);
       }
     }
@@ -1508,34 +1524,6 @@ function runSimulation() {
   victimRecord.initialY = victimY;
 
   rabbits.push(victimRecord);
-
-  // Final age-gap correction pass
-  // Sort rabbits by generation (0 to 4) to ensure parents are processed before children
-  const sortedRabbits = [...rabbits].sort((a, b) => a.generation - b.generation);
-  sortedRabbits.forEach(child => {
-    if (child.id === -1) return; // Skip victim
-    const parents = rabbits.filter(r => r.id === child.fatherId || r.id === child.motherId);
-    if (parents.length > 0) {
-      const parentMaxBirthYear = Math.max(...parents.map(p => p.birthYear));
-      // Ensure child is at least 18 years younger than the youngest parent
-      if (child.birthYear < parentMaxBirthYear + 18) {
-        child.birthYear = parentMaxBirthYear + 18 + Math.floor(random() * 5);
-      }
-    }
-    // Cap birthYear at CURRENT_YEAR - 1 to avoid future births, 
-    // but ensure at least a minimal gap if parent is also very young.
-    if (child.birthYear >= CURRENT_YEAR) {
-      child.birthYear = CURRENT_YEAR - 1;
-      const parents = rabbits.filter(r => r.id === child.fatherId || r.id === child.motherId);
-      if (parents.length > 0) {
-        const parentMaxBirthYear = Math.max(...parents.map(p => p.birthYear));
-        if (child.birthYear <= parentMaxBirthYear) {
-          // This should be extremely rare given generation logic, but as a last resort:
-          child.birthYear = parentMaxBirthYear + 1;
-        }
-      }
-    }
-  });
 
   // Re-calculate name labels after age shifts (if hares already populated)
   hares.forEach(h => {

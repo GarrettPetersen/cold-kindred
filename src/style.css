@@ -471,11 +471,7 @@ a {
   }
 }
 
-@media (max-width: 600px) {
-  #transcript-container {
-    /* No longer overriding height here, transform handles it */
-  }
-}
+
 
 #transcript-header {
   padding: 5px 15px 5px 60px; /* Smaller padding */
@@ -682,19 +678,28 @@ a {
   to { top: 100px; opacity: 1; }
 }
 
-/* App Store Badge */
-.app-store-badge {
+/* Store Badges */
+.store-badge-container {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 15px;
+}
+
+.store-badge {
   display: inline-block;
   height: 40px;
   transition: transform 0.2s;
   pointer-events: auto;
 }
 
-.app-store-badge:hover {
+.store-badge:hover {
   transform: scale(1.05);
 }
 
-.app-store-badge img {
+.store-badge img {
   height: 100%;
   width: auto;
 }

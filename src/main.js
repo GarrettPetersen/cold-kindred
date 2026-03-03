@@ -39,6 +39,68 @@ function getDailySeed(caseIdx = 0) {
   return { seed: Math.abs(hash), dateStr, caseIdx };
 }
 
+// Setting (environment/theme) for the mystery. Each uses forest sprites in a botanically coherent way.
+const SETTINGS = ['blossom_grove', 'midsummer_wood', 'harvest_wood', 'frost_wood'];
+function getSettingForMystery(seedInfo) {
+  return SETTINGS[seedInfo.seed % SETTINGS.length];
+}
+
+// Setting-specific intro/location text (replaces "clover field" / "clover patch")
+const SETTING_LOCATION = {
+  blossom_grove: { field: 'orchard', patch: 'prime blossom patch' },
+  midsummer_wood: { field: 'meadow', patch: 'sunny clover patch' },
+  harvest_wood: { field: 'harvest field', patch: 'best hay patch' },
+  frost_wood: { field: 'frosty clearing', patch: 'sheltered patch' }
+};
+function getSettingField() {
+  const s = gameState.setting && SETTING_LOCATION[gameState.setting];
+  return s ? s.field : 'clover field';
+}
+function getSettingPatch() {
+  const s = gameState.setting && SETTING_LOCATION[gameState.setting];
+  return s ? s.patch : 'clover patch';
+}
+
+// Setting-specific background (grass) colour
+const SETTING_BG = {
+  blossom_grove: '#4d9e4d',
+  midsummer_wood: '#3e8948',
+  harvest_wood: '#6b8e23',
+  frost_wood: '#4a5c3a'
+};
+function getSettingBgColor() {
+  return (gameState.setting && SETTING_BG[gameState.setting]) || '#3e8948';
+}
+
+// Asset lists per setting (trees/bushes = 32×48, small = 16×16 in source). All drawn at 64px to match animals.
+const SETTING_ASSETS = {
+  blossom_grove: {
+    trees: ['cherry_blossom_tree', 'apple_tree', 'plum_tree', 'pear_tree'],
+    bushes: ['raspberry_bush', 'hydrangea', 'daphne_odora', 'camelia', 'azalea'],
+    small: ['apple_tree_leaf', 'dandelion', 'common_hedgenettle', 'common_knapweed', 'poppy', 'chamomille', 'lady_bug', 'bee', 'monarch_butterfly', 'peacock_butterfly']
+  },
+  midsummer_wood: {
+    trees: ['apple_tree', 'orange_tree', 'birch_tree', 'pear_tree', 'plum_tree', 'dragon_tree'],
+    bushes: ['raspberry_bush', 'hydrangea', 'juniper_blue_star', 'dog_wood', 'camelia', 'azalea'],
+    small: ['apple_tree_leaf', 'birch_tree_leaf', 'poppy', 'purple_foxglove', 'musk_mallow', 'tansy', 'bee', 'dragonfly', 'grass_hopper', 'roly_poly']
+  },
+  harvest_wood: {
+    trees: ['birch_tree', 'dead_old_oaktree', 'apple_tree', 'pear_tree', 'plum_tree'],
+    bushes: ['winter_creeper', 'dog_wood', 'azalea'],
+    small: ['autumn_leaf_1', 'autumn_leaf_2', 'autumn_leaf_3', 'hazelnut', 'walnut', 'chanterelle', 'morel', 'death_cap', 'monarch_butterfly', 'mourning_cloak']
+  },
+  frost_wood: {
+    trees: ['pine_tree', 'cursed_tree', 'dead_old_oaktree', 'dwarf_norway_spruce'],
+    bushes: ['winter_creeper', 'juniper_blue_star', 'dwarf_norway_spruce'],
+    small: ['pine_tree_leaf', 'pine_nut', 'white_button_mushroom', 'chalk', 'mudstone', 'rose_quartz', 'quartz', 'roly_poly', 'earth_worm']
+  }
+};
+
+const settingSprites = {};
+const SETTING_SPRITE_NAMES = [...new Set(
+  Object.values(SETTING_ASSETS).flatMap(s => [...s.trees, ...s.bushes, ...s.small])
+)];
+
 let { seed, dateStr: currentDateStr, caseIdx: currentCaseIdx } = getDailySeed(0);
 let rngState = seed;
 function random() {
@@ -126,7 +188,7 @@ const detectiveSprites = {
 };
 
 let assetsLoaded = 0;
-const TOTAL_ASSETS = SPECIES.length * 4 + 6 + 15 + 1; // +1 for the font
+const TOTAL_ASSETS = SPECIES.length * 4 + 6 + 15 + 1 + SETTING_SPRITE_NAMES.length; // +1 font, +setting sprites
 
 function onAssetLoad() { 
   assetsLoaded++;
@@ -205,6 +267,15 @@ SPECIES.forEach(s => {
   sprites[s].death.src = `/assets/${s}/${s}_Death_with_shadow.png`;
 });
 
+// Setting environment sprites (forest)
+SETTING_SPRITE_NAMES.forEach(name => {
+  const img = new Image();
+  img.onload = onAssetLoad;
+  img.onerror = onAssetLoad;
+  img.src = `/assets/environment/forest/sprites/${name}.png`;
+  settingSprites[name] = img;
+});
+
 // --- Ranks ---
 const RANKS = [
   { title: 'RECRUIT', minWins: 0, hue: 0, sat: 0, bri: 0 },          // No badge
@@ -265,14 +336,193 @@ let xButtons = []; // Shared list of relationship-removal buttons
 let hoveredBubbleId = null;
 let hoveredXButton = null;
 const envDetails = [];
+let settingDecor = []; // { type: 'tree'|'bush'|'small', x, y, spriteName, baseY } for draw-order rendering
 let clueQueue = [];
 let globallyIssuedClueIds = new Set();
 let caseLog = []; // Stores strings like "Name: Clue text"
 let staticCanvas = null;
+let forestCanvas = null;
 const pixelCanvas = document.createElement('canvas');
 pixelCanvas.width = 64;
 pixelCanvas.height = 64;
 const pCtx = pixelCanvas.getContext('2d');
+
+const WALKABLE_MARGIN = 200;
+const TREE_DRAW_W = 64;
+const TREE_DRAW_H = 96;
+// Tree source is 48px tall; visual base (where trunk meets ground) is 32px from top, rest is shadow → 64px at draw scale
+const TREE_BASE_OFFSET = 64;
+const SMALL_DRAW_SIZE = 64;
+// Same as animals: source sprites at 32px scale, drawn at 2x (64px) to match FRAME_SIZE * 2
+const DECOR_SPRITE_SCALE = 2;
+
+// Forest extends this far beyond play area (0..FIELD_WIDTH, 0..FIELD_HEIGHT). Camera can scroll into it.
+const FOREST_EXTENT = 1200;
+// Forest may extend this far into the play area so it meets the field with no gap; grass is not drawn in this band.
+const FOREST_EDGE_OVERLAP = 64;
+
+function buildForestLayer(seedForForest) {
+  const setting = gameState.setting;
+  if (!setting || !SETTING_ASSETS[setting]) return;
+  const assets = SETTING_ASSETS[setting];
+  const treeList = assets.trees;
+  const bushList = assets.bushes;
+  if (treeList.length === 0 && bushList.length === 0) return;
+
+  const savedRng = rngState;
+  if (seedForForest != null) {
+    let h = seedForForest;
+    for (let i = 0; i < 15; i++) h = (h * 1664525 + 1013904223) % 4294967296;
+    rngState = Math.abs(h);
+  }
+
+  const totalW = FIELD_WIDTH + 2 * FOREST_EXTENT;
+  const totalH = FIELD_HEIGHT + 2 * FOREST_EXTENT;
+  if (!forestCanvas || forestCanvas.width !== totalW || forestCanvas.height !== totalH) {
+    forestCanvas = document.createElement('canvas');
+    forestCanvas.width = totalW;
+    forestCanvas.height = totalH;
+  }
+  const fCtx = forestCanvas.getContext('2d');
+  fCtx.imageSmoothingEnabled = false;
+  fCtx.clearRect(0, 0, totalW, totalH);
+
+  const forestBg = getSettingBgColor();
+  const toCanvasX = (wx) => wx + FOREST_EXTENT;
+  const toCanvasY = (wy) => wy + FOREST_EXTENT;
+
+  // Fill background; then draw all trees/bushes in depth order (single pre-rendered image).
+  fCtx.fillStyle = forestBg;
+  fCtx.fillRect(0, 0, totalW, totalH);
+
+  // World bounds for the full forest (play area excluded from placement)
+  const worldMinX = -FOREST_EXTENT;
+  const worldMaxX = FIELD_WIDTH + FOREST_EXTENT - TREE_DRAW_W;
+  const worldMinY = -FOREST_EXTENT;
+  const worldMaxY = FIELD_HEIGHT + FOREST_EXTENT - TREE_DRAW_H;
+  const bushWorldMaxX = FIELD_WIDTH + FOREST_EXTENT - SMALL_DRAW_SIZE;
+  const bushWorldMaxY = FIELD_HEIGHT + FOREST_EXTENT - SMALL_DRAW_SIZE;
+
+  const overlapsPlayArea = (wx, wy, drawW, drawH) =>
+    wx + drawW > FOREST_EDGE_OVERLAP && wx < FIELD_WIDTH - FOREST_EDGE_OVERLAP &&
+    wy + drawH > FOREST_EDGE_OVERLAP && wy < FIELD_HEIGHT - FOREST_EDGE_OVERLAP;
+
+  const innerW = FIELD_WIDTH - 2 * FOREST_EDGE_OVERLAP;
+  const innerH = FIELD_HEIGHT - 2 * FOREST_EDGE_OVERLAP;
+  const forestArea = totalW * totalH - innerW * innerH;
+  const numTrees = Math.floor(forestArea / (50 * 60));
+  const numBushes = Math.floor(forestArea / (35 * 35));
+
+  const list = [];
+  for (let i = 0; i < numBushes && bushList.length > 0; i++) {
+    let wx, wy;
+    do {
+      wx = Math.floor(worldMinX + random() * (bushWorldMaxX - worldMinX + 1));
+      wy = Math.floor(worldMinY + random() * (bushWorldMaxY - worldMinY + 1));
+    } while (overlapsPlayArea(wx, wy, SMALL_DRAW_SIZE, SMALL_DRAW_SIZE));
+    list.push({ type: 'bush', wx, wy, spriteName: pick(bushList), baseY: wy + SMALL_DRAW_SIZE });
+  }
+  for (let i = 0; i < numTrees && treeList.length > 0; i++) {
+    let wx, wy;
+    do {
+      wx = Math.floor(worldMinX + random() * (worldMaxX - worldMinX + 1));
+      wy = Math.floor(worldMinY + random() * (worldMaxY - worldMinY + 1));
+    } while (overlapsPlayArea(wx, wy, TREE_DRAW_W, TREE_DRAW_H));
+    list.push({ type: 'tree', wx, wy, spriteName: pick(treeList), baseY: wy + TREE_DRAW_H });
+  }
+
+  // Draw in depth order: smaller baseY (base higher on screen) first = behind; larger baseY last = in front.
+  list.sort((a, b) => a.baseY - b.baseY);
+  list.forEach((d) => {
+    const img = settingSprites[d.spriteName];
+    if (!img || !img.complete) return;
+    const iw = img.width || img.naturalWidth || (d.type === 'tree' ? TREE_DRAW_W / DECOR_SPRITE_SCALE : SMALL_DRAW_SIZE / DECOR_SPRITE_SCALE);
+    const ih = img.height || img.naturalHeight || (d.type === 'tree' ? TREE_DRAW_H / DECOR_SPRITE_SCALE : SMALL_DRAW_SIZE / DECOR_SPRITE_SCALE);
+    fCtx.drawImage(img, 0, 0, iw, ih, toCanvasX(d.wx), toCanvasY(d.wy), iw * DECOR_SPRITE_SCALE, ih * DECOR_SPRITE_SCALE);
+  });
+
+  if (seedForForest != null) rngState = savedRng;
+}
+
+const PLAY_EDGE_TREE_PX = 100;  // trees in outer 100px of play area
+const PLAY_EDGE_BUSH_PX = 200; // bushes in outer 200px
+
+function buildSettingDecor(seedForDecor) {
+  settingDecor.length = 0;
+  const setting = gameState.setting;
+  if (!setting || !SETTING_ASSETS[setting]) return;
+  const assets = SETTING_ASSETS[setting];
+  const treeList = assets.trees;
+  const bushList = assets.bushes;
+  const smallOnly = assets.small;
+  if (treeList.length === 0 && bushList.length === 0 && smallOnly.length === 0) return;
+  const savedRng = rngState;
+  if (seedForDecor != null) {
+    let h = seedForDecor;
+    for (let i = 0; i < 10; i++) h = (h * 1664525 + 1013904223) % 4294967296;
+    rngState = Math.abs(h);
+  }
+
+  const placeEdgeTree = () => {
+    const side = Math.floor(random() * 4);
+    let x, y;
+    if (side === 0) {
+      x = Math.floor(random() * Math.max(1, PLAY_EDGE_TREE_PX - TREE_DRAW_W));
+      y = Math.floor(random() * (FIELD_HEIGHT - TREE_DRAW_H));
+    } else if (side === 1) {
+      x = FIELD_WIDTH - TREE_DRAW_W - Math.floor(random() * Math.max(1, PLAY_EDGE_TREE_PX - TREE_DRAW_W));
+      y = Math.floor(random() * (FIELD_HEIGHT - TREE_DRAW_H));
+    } else if (side === 2) {
+      x = Math.floor(random() * (FIELD_WIDTH - TREE_DRAW_W));
+      y = Math.floor(random() * Math.min(PLAY_EDGE_TREE_PX, FIELD_HEIGHT - TREE_DRAW_H));
+    } else {
+      x = Math.floor(random() * (FIELD_WIDTH - TREE_DRAW_W));
+      y = FIELD_HEIGHT - TREE_DRAW_H - Math.floor(random() * Math.min(PLAY_EDGE_TREE_PX, FIELD_HEIGHT - TREE_DRAW_H));
+    }
+    settingDecor.push({ type: 'tree', x, y, spriteName: pick(treeList), baseY: y + TREE_BASE_OFFSET });
+  };
+  const placeEdgeBush = () => {
+    const side = Math.floor(random() * 4);
+    let x, y;
+    if (side === 0) {
+      x = Math.floor(random() * Math.max(1, PLAY_EDGE_BUSH_PX - SMALL_DRAW_SIZE));
+      y = Math.floor(random() * (FIELD_HEIGHT - SMALL_DRAW_SIZE));
+    } else if (side === 1) {
+      x = FIELD_WIDTH - SMALL_DRAW_SIZE - Math.floor(random() * Math.max(1, PLAY_EDGE_BUSH_PX - SMALL_DRAW_SIZE));
+      y = Math.floor(random() * (FIELD_HEIGHT - SMALL_DRAW_SIZE));
+    } else if (side === 2) {
+      x = Math.floor(random() * (FIELD_WIDTH - SMALL_DRAW_SIZE));
+      y = Math.floor(random() * Math.min(PLAY_EDGE_BUSH_PX, FIELD_HEIGHT - SMALL_DRAW_SIZE));
+    } else {
+      x = Math.floor(random() * (FIELD_WIDTH - SMALL_DRAW_SIZE));
+      y = FIELD_HEIGHT - SMALL_DRAW_SIZE - Math.floor(random() * Math.min(PLAY_EDGE_BUSH_PX, FIELD_HEIGHT - SMALL_DRAW_SIZE));
+    }
+    settingDecor.push({ type: 'bush', x, y, spriteName: pick(bushList), baseY: y + SMALL_DRAW_SIZE });
+  };
+
+  const numEdgeTrees = 100;
+  const numEdgeBushes = 200;
+  for (let i = 0; i < numEdgeTrees && treeList.length > 0; i++) placeEdgeTree();
+  for (let i = 0; i < numEdgeBushes && bushList.length > 0; i++) placeEdgeBush();
+
+  const numSmall = 28;
+  const innerMinX = WALKABLE_MARGIN;
+  const innerMaxX = FIELD_WIDTH - WALKABLE_MARGIN - SMALL_DRAW_SIZE;
+  const innerMinY = WALKABLE_MARGIN;
+  const innerMaxY = FIELD_HEIGHT - WALKABLE_MARGIN - SMALL_DRAW_SIZE;
+  for (let i = 0; i < numSmall && smallOnly.length > 0; i++) {
+    const x = Math.floor(innerMinX + random() * (innerMaxX - innerMinX));
+    const y = Math.floor(innerMinY + random() * (innerMaxY - innerMinY));
+    settingDecor.push({ type: 'small', x, y, spriteName: pick(smallOnly), baseY: y + SMALL_DRAW_SIZE });
+  }
+
+  // Sort by base (bottom of sprite) so draw order = depth; tie-break by type so order is deterministic
+  settingDecor.sort((a, b) => {
+    if (a.baseY !== b.baseY) return a.baseY - b.baseY;
+    return (a.type === 'tree' ? 0 : a.type === 'bush' ? 1 : 2) - (b.type === 'tree' ? 0 : b.type === 'bush' ? 1 : 2);
+  });
+  if (seedForDecor != null) rngState = savedRng;
+}
 
 function renderStaticLayer() {
   if (!staticCanvas) {
@@ -294,18 +544,24 @@ function renderStaticLayer() {
     sCtx.beginPath(); sCtx.moveTo(0, y); sCtx.lineTo(FIELD_WIDTH, y); sCtx.stroke();
   }
 
-  // Draw walkable area boundary
-  sCtx.strokeStyle = 'rgba(255,255,255,0.2)';
-  sCtx.lineWidth = 4;
-  sCtx.strokeRect(0, 0, FIELD_WIDTH, FIELD_HEIGHT);
-
-  // Draw grass sprites
+  // Draw grass sprites, palette-swapped to match setting grass colour (keeps luminosity, applies hue)
+  const grassTint = getSettingBgColor();
   envDetails.forEach(d => {
     const img = grassSprites[d.spriteIndex];
     if (!img || !img.complete) return;
     const sw = img.width, sh = img.height;
     const szW = sw * d.scale, szH = sh * d.scale;
-    sCtx.drawImage(img, Math.floor(d.x), Math.floor(d.y), Math.floor(szW), Math.floor(szH));
+    const dx = Math.floor(d.x);
+    const dy = Math.floor(d.y);
+    const dw = Math.floor(szW);
+    const dh = Math.floor(szH);
+    sCtx.drawImage(img, 0, 0, sw, sh, dx, dy, dw, dh);
+    sCtx.save();
+    sCtx.globalCompositeOperation = 'color';
+    sCtx.fillStyle = grassTint;
+    sCtx.globalAlpha = 0.65;
+    sCtx.fillRect(dx, dy, dw, dh);
+    sCtx.restore();
   });
 }
 
@@ -322,7 +578,8 @@ let gameState = {
   hint2Shown: false,
   isMidGameChange: false,
   statsUpdated: false,
-  caseIndex: 0
+  caseIndex: 0,
+  setting: null
 };
 
 let portraitAnim = {
@@ -561,6 +818,7 @@ function saveGame() {
     isMidGameChange: gameState.isMidGameChange,
     statsUpdated: gameState.statsUpdated,
     caseIndex: gameState.caseIndex,
+    setting: gameState.setting,
     globallyIssuedClueIds: Array.from(globallyIssuedClueIds),
     clueQueueIds: clueQueue.map(c => c.id),
     testedAnimals: rabbits.filter(r => r.isTested).map(r => ({ id: r.id, rel: r.dnaRelation, pct: r.dnaMatchPct })),
@@ -665,6 +923,7 @@ function loadGame() {
   gameState.hint2Shown = data.hint2Shown || false;
   gameState.isMidGameChange = data.isMidGameChange || false;
   gameState.statsUpdated = data.statsUpdated || (data.isFinished && data.date === currentDateStr) || false;
+  gameState.setting = data.setting || getSettingForMystery(loadedSeed);
   globallyIssuedClueIds = new Set(data.globallyIssuedClueIds || []);
 
   if (data.testedAnimals) {
@@ -2602,7 +2861,7 @@ function showGameOver(isWin) {
   const killer = rabbits.find(r => r.id === killerId);
   if (!killerQuote) {
     const rawQuote = pick(VILLAIN_QUOTES);
-    killerQuote = rawQuote.replace(/{victim}/g, victim.name);
+    killerQuote = rawQuote.replace(/{victim}/g, victim.name).replace(/clover field/g, getSettingField()).replace(/clover patch/g, getSettingPatch());
   }
 
   const stats = calculateStreaks();
@@ -3531,7 +3790,7 @@ function showIntro(isMidGameChangeParam = false) {
 
       if (step === 0) {
       title.textContent = "A HEINOUS CRIME";
-      textContainer.innerHTML = `<span style="color: ${getHSL(victim)}; font-weight: bold;">${victim.name}</span> the ${victim.species.replace('_', ' ')} was found dead in the clover field.${consentText}`;
+      textContainer.innerHTML = `<span style="color: ${getHSL(victim)}; font-weight: bold;">${victim.name}</span> the ${victim.species.replace('_', ' ')} was found dead in the ${getSettingField()}.${consentText}`;
       
       // Animate victim death (play once and stay)
       introAnimTimer += 0.08;
@@ -3708,6 +3967,7 @@ function init() {
   const seedInfo = getDailySeed(gameState.caseIndex);
   rngState = seedInfo.seed;
   currentCaseIdx = gameState.caseIndex;
+  gameState.setting = getSettingForMystery(seedInfo);
   runSimulation();
   
   // 3. Try loading saved game progress (DNA tests, connections, etc.)
@@ -3733,6 +3993,9 @@ function init() {
       scale: 2.0 + random() * 1.0
     });
   }
+
+  buildSettingDecor(seedInfo.seed);
+  buildForestLayer(seedInfo.seed);
 
   window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; constrainCamera(); });
 
@@ -4128,6 +4391,7 @@ function init() {
           const seedInfo = getDailySeed(gameState.caseIndex);
           rngState = seedInfo.seed;
           currentCaseIdx = gameState.caseIndex;
+          gameState.setting = getSettingForMystery(seedInfo);
 
           // Reset world
           hares.length = 0;
@@ -4140,6 +4404,8 @@ function init() {
 
           runSimulation();
           rabbits.forEach(r => hares.push(new Animal(r)));
+          buildSettingDecor(seedInfo.seed);
+          buildForestLayer(seedInfo.seed);
 
           // Reset transcript UI classes
           const container = document.getElementById('transcript-container');
@@ -4468,19 +4734,19 @@ function init() {
 }
 
 function constrainCamera() {
-  const vw = canvas.width / camera.zoom, vh = canvas.height / camera.zoom;
-  
-  // Define fixed padding in world units to allow centering animals at edges.
-  // We allow the camera to see up to half a screen width/height past the edge.
-  const padX = vw / 2;
-  const padY = vh / 2;
+  // Don't allow zooming out so far that the viewport is larger than the forest (would show empty area)
+  const forestW = FIELD_WIDTH + 2 * FOREST_EXTENT;
+  const forestH = FIELD_HEIGHT + 2 * FOREST_EXTENT;
+  const effectiveMinZoom = Math.max(canvas.width / forestW, canvas.height / forestH);
+  camera.zoom = Math.max(effectiveMinZoom, Math.min(camera.maxZoom, camera.zoom));
 
-  const minX = -padX;
-  const maxX = FIELD_WIDTH - vw + padX;
-  const minY = -padY;
-  const maxY = FIELD_HEIGHT - vh + padY;
-
-    camera.x = Math.max(minX, Math.min(maxX, camera.x));
+  const vw = canvas.width / camera.zoom;
+  const vh = canvas.height / camera.zoom;
+  const minX = -FOREST_EXTENT;
+  const maxX = FIELD_WIDTH + FOREST_EXTENT - vw;
+  const minY = -FOREST_EXTENT;
+  const maxY = FIELD_HEIGHT + FOREST_EXTENT - vh;
+  camera.x = Math.max(minX, Math.min(maxX, camera.x));
   camera.y = Math.max(minY, Math.min(maxY, camera.y));
 }
 
@@ -4622,18 +4888,31 @@ function loop() {
       }
     }
   }
-  ctx.fillStyle = '#3e8948';
+  ctx.fillStyle = getSettingBgColor();
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.imageSmoothingEnabled = false;
 
-  // Draw static background layer (grid, grass, and boundaries)
+  // Draw pre-rendered forest layer (one image, extends beyond play area; animals stop at boundary because of the forest)
+  if (forestCanvas) {
+    const fx = (-FOREST_EXTENT - camera.x) * camera.zoom;
+    const fy = (-FOREST_EXTENT - camera.y) * camera.zoom;
+    const fw = forestCanvas.width * camera.zoom;
+    const fh = forestCanvas.height * camera.zoom;
+    ctx.drawImage(forestCanvas, 0, 0, forestCanvas.width, forestCanvas.height, Math.floor(fx), Math.floor(fy), Math.floor(fw), Math.floor(fh));
+  }
+
+  // Draw static layer (grid, grass) inset so outer FOREST_EDGE_OVERLAP shows forest and no gap
   if (staticCanvas) {
+    const overlap = FOREST_EDGE_OVERLAP;
+    const innerW = FIELD_WIDTH - 2 * overlap;
+    const innerH = FIELD_HEIGHT - 2 * overlap;
     ctx.drawImage(
       staticCanvas,
-      Math.floor(-camera.x * camera.zoom),
-      Math.floor(-camera.y * camera.zoom),
-      Math.floor(FIELD_WIDTH * camera.zoom),
-      Math.floor(FIELD_HEIGHT * camera.zoom)
+      overlap, overlap, innerW, innerH,
+      Math.floor((-camera.x + overlap) * camera.zoom),
+      Math.floor((-camera.y + overlap) * camera.zoom),
+      Math.floor(innerW * camera.zoom),
+      Math.floor(innerH * camera.zoom)
     );
   }
 
@@ -4790,8 +5069,27 @@ function loop() {
 
   hares.forEach(h => h.update());
 
-  // Pass 1: Draw sprites sorted by Y
-  hares.slice().sort((a, b) => a.y - b.y).forEach(h => h.drawSprite());
+  // Pass 1: Draw sprites and play-area decor sorted by base Y (depth order). Forest is already a single pre-rendered image.
+  const animalDrawables = hares.map(h => ({ baseY: h.y + 64, draw: () => h.drawSprite() }));
+  const decorDrawables = settingDecor.map(d => {
+    return {
+      baseY: d.baseY,
+      draw: () => {
+        const img = settingSprites[d.spriteName];
+        if (!img || !img.complete) return;
+        const sx = (d.x - camera.x) * camera.zoom;
+        const sy = (d.y - camera.y) * camera.zoom;
+        if (sx < -100 || sx > canvas.width + 100 || sy < -100 || sy > canvas.height + 100) return;
+        ctx.save();
+        ctx.imageSmoothingEnabled = false;
+        const iw = img.width || img.naturalWidth || (d.type === 'tree' ? TREE_DRAW_W / DECOR_SPRITE_SCALE : SMALL_DRAW_SIZE / DECOR_SPRITE_SCALE);
+        const ih = img.height || img.naturalHeight || (d.type === 'tree' ? TREE_DRAW_H / DECOR_SPRITE_SCALE : SMALL_DRAW_SIZE / DECOR_SPRITE_SCALE);
+        ctx.drawImage(img, 0, 0, iw, ih, Math.floor(sx), Math.floor(sy), Math.floor(iw * DECOR_SPRITE_SCALE * camera.zoom), Math.floor(ih * DECOR_SPRITE_SCALE * camera.zoom));
+        ctx.restore();
+      }
+    };
+  });
+  [...animalDrawables, ...decorDrawables].sort((a, b) => b.baseY - a.baseY).forEach(o => o.draw());
 
   // Pass 2: Draw labels sorted by X ascending (so rightmost labels sit on top)
   // This ensures that the start of every name remains visible even if overlapped.

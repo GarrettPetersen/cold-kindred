@@ -380,8 +380,8 @@ const pCtx = pixelCanvas.getContext('2d');
 const WALKABLE_MARGIN = 200;
 const TREE_DRAW_W = 64;
 const TREE_DRAW_H = 96;
-// Tree visual base (where trunk meets ground) for depth ordering: 32px from top of sprite (shadow below).
-const TREE_DEPTH_BASE_PX = 32;
+// Tree visual base (where trunk meets ground) for depth ordering: 32px from top in source (32×48), so 64px when drawn at 2x.
+const TREE_DEPTH_BASE_PX = 64;
 const SMALL_DRAW_SIZE = 64; // used for forest/farm outer layer placement
 // Bush/small in play area are 16×16 source, drawn at 2x = 32px; use this for their depth base (bottom).
 const BUSH_SMALL_DRAWN_H = 32;

@@ -489,7 +489,9 @@ const FARM_OUTER_GRASS_COUNT = 1200; // little grass sprites outside play area f
 const FARM_GARDEN_BED_COLOR = FARM_DIRT; // brown fill for garden beds
 const FARM_GARDEN_BED_MIN_W = 220; // bigger than a house (FARM_GRID_CELL 160)
 const FARM_GARDEN_BED_MIN_H = 200;
-const FARM_NUM_GARDEN_BEDS = 28; // grid-aligned beds; many for significant farmland outside play area
+// Beds must be entirely outside (0,0)-(FIELD_WIDTH,FIELD_HEIGHT). Max bed draw size (5 cells + grass border) so no bed can extend into play area.
+const FARM_GARDEN_BED_MAX_DRAW_EXTENT = 5 * FARM_GRID_CELL + 128; // 928; grass border ~2*64
+const FARM_NUM_GARDEN_BEDS = 52; // plenty of beds for a lush farm; grid-aligned outside play area
 const FARM_CROP_TILE_SIZE = CROP_CELL * 2; // 32, same scale as other farm sprites
 
 // Cached non-empty crop cells: cropFilled[row][col] (row=plant, col=growth). Built once when sheet is ready.
@@ -608,19 +610,30 @@ function buildFarmTownLayer(seedForFarm) {
     bottom: d.wy + d.buildingH + FARM_DECOR_BUILDING_MARGIN
   }));
 
-  // Garden beds on the same grid as buildings: pick several grid rectangles (1x1, 2x1, 1x2, 2x2), no overlap with buildings.
+  // Garden beds on the same grid as buildings: mark every grid cell each building's footprint overlaps (buildings can span multiple cells).
   const usedGrid = new Set();
   list.filter(d => d.type === 'building').forEach(d => {
-    const gx = Math.round((d.wx - worldMinX) / cellW);
-    const gy = Math.round((d.wy - worldMinY) / cellH);
-    usedGrid.add(`${gx},${gy}`);
+    const gxStart = Math.max(0, Math.floor((d.wx - worldMinX) / cellW));
+    const gyStart = Math.max(0, Math.floor((d.wy - worldMinY) / cellH));
+    const gxEnd = Math.min(numCols - 1, Math.floor((d.wx + d.buildingW - worldMinX) / cellW));
+    const gyEnd = Math.min(numRows - 1, Math.floor((d.wy + d.buildingH - worldMinY) / cellH));
+    for (let gy = gyStart; gy <= gyEnd; gy++) {
+      for (let gx = gxStart; gx <= gxEnd; gx++) {
+        usedGrid.add(`${gx},${gy}`);
+      }
+    }
   });
+  // Beds must be entirely outside the play area: exclude any cell where the largest possible bed would overlap (0,0)-(FIELD_WIDTH,FIELD_HEIGHT).
+  const overlapsPlayAreaForBeds = (wx, wy, drawW, drawH) =>
+    wx + drawW > 0 && wx < FIELD_WIDTH && wy + drawH > 0 && wy < FIELD_HEIGHT;
+
   const freeGrid = [];
   for (let gy = 0; gy < numRows; gy++) {
     for (let gx = 0; gx < numCols; gx++) {
       const wx = worldMinX + gx * cellW;
       const wy = worldMinY + gy * cellH;
       if (overlapsPlayAreaFence(wx, wy, cellW, cellH)) continue;
+      if (overlapsPlayAreaForBeds(wx, wy, FARM_GARDEN_BED_MAX_DRAW_EXTENT, FARM_GARDEN_BED_MAX_DRAW_EXTENT)) continue;
       if (usedGrid.has(`${gx},${gy}`)) continue;
       freeGrid.push({ gx, gy });
     }
@@ -628,7 +641,12 @@ function buildFarmTownLayer(seedForFarm) {
   const usedForBed = new Set();
   const bedRects = [];
   // Mix of small and large beds so the outer area has substantial farmland.
-  const sizes = [[1, 1], [2, 1], [1, 2], [2, 2], [3, 1], [1, 3], [3, 2], [2, 3], [3, 3], [4, 2], [2, 4], [4, 3], [3, 4]];
+  // Favor bigger beds (2x2 and up) for a lush look; include some 4x4 and 5x3 etc.
+  const sizes = [
+    [2, 2], [2, 2], [3, 2], [2, 3], [3, 3], [3, 3], [4, 2], [2, 4], [4, 3], [3, 4], [4, 4],
+    [5, 2], [2, 5], [5, 3], [3, 5], [5, 4], [4, 5], [5, 5],
+    [1, 1], [2, 1], [1, 2], [3, 1], [1, 3]
+  ];
   for (let b = 0; b < FARM_NUM_GARDEN_BEDS && freeGrid.length > 0; b++) {
     for (let tries = 0; tries < 120; tries++) {
       const idx = Math.floor(random() * freeGrid.length);

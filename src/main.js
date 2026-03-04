@@ -42,7 +42,7 @@ function getDailySeed(caseIdx = 0) {
 // Setting (environment/theme) for the mystery. Each uses forest sprites in a botanically coherent way (farm uses fence/grass).
 const SETTINGS = ['farm', 'blossom_grove', 'midsummer_wood', 'harvest_wood', 'frost_wood'];
 function getSettingForMystery(seedInfo) {
-  return 'farm'; // TODO: rotate with forests — SETTINGS[seedInfo.seed % SETTINGS.length]
+  return SETTINGS[Math.abs(seedInfo.seed) % SETTINGS.length];
 }
 
 // Setting-specific intro/location text (replaces "clover field" / "clover patch")
@@ -107,7 +107,12 @@ const SETTING_SPRITE_NAMES = [...new Set(
 )].filter(Boolean);
 
 const FARM_SPRITE_NAMES = ['top_fence', 'side_fence', 'gate', 'top_left_corner_fence', 'top_right_corner_fence', 'bottom_left_fence', 'bottom_right_fence'];
+const FARM_TOWN_SPRITE_NAMES = ['barn', 'house', 'house_sun', 'house_with_fence', 'house_brick', 'cottage', 'hospital', 'market', 'museum', 'windmill_base', 'windmill_blades'];
+const FARM_GRASS_EDGE_SPRITE_NAMES = ['top_left_inner_grass_corner', 'top_outer_grass_edge'];
 const farmSprites = {};
+// Crops sprite sheet: 16x16 cells, rows = plant types, cols = growth (0=seed → right=biggest). Loaded separately.
+let cropSheet = null;
+const CROP_CELL = 16;
 
 let { seed, dateStr: currentDateStr, caseIdx: currentCaseIdx } = getDailySeed(0);
 let rngState = seed;
@@ -196,7 +201,7 @@ const detectiveSprites = {
 };
 
 let assetsLoaded = 0;
-const TOTAL_ASSETS = SPECIES.length * 4 + 6 + 15 + 1 + SETTING_SPRITE_NAMES.length + FARM_SPRITE_NAMES.length; // +1 font, +setting sprites, +farm fence
+const TOTAL_ASSETS = SPECIES.length * 4 + 6 + 15 + 1 + SETTING_SPRITE_NAMES.length + FARM_SPRITE_NAMES.length + FARM_TOWN_SPRITE_NAMES.length + FARM_GRASS_EDGE_SPRITE_NAMES.length + 1; // +1 font, +setting, +farm fence, +farm town, +grass edge, +crops sheet
 
 function onAssetLoad() { 
   assetsLoaded++;
@@ -284,14 +289,19 @@ SETTING_SPRITE_NAMES.forEach(name => {
   settingSprites[name] = img;
 });
 
-// Farm fence sprites
-FARM_SPRITE_NAMES.forEach(name => {
+// Farm fence, town, and grass-edge sprites (for garden beds)
+[...FARM_SPRITE_NAMES, ...FARM_TOWN_SPRITE_NAMES, ...FARM_GRASS_EDGE_SPRITE_NAMES].forEach(name => {
   const img = new Image();
   img.onload = onAssetLoad;
   img.onerror = onAssetLoad;
   img.src = `/assets/environment/farm/${name}.png`;
   farmSprites[name] = img;
 });
+// Crops sprite sheet (16x16 grid: rows = plants, cols = growth stages)
+cropSheet = new Image();
+cropSheet.onload = onAssetLoad;
+cropSheet.onerror = onAssetLoad;
+cropSheet.src = '/assets/environment/farm/crops.png';
 
 // --- Ranks ---
 const RANKS = [
@@ -359,6 +369,9 @@ let globallyIssuedClueIds = new Set();
 let caseLog = []; // Stores strings like "Name: Clue text"
 let staticCanvas = null;
 let forestCanvas = null;
+let farmTownCanvas = null;
+let farmWindmills = []; // { wx, wy } for drawing rotating blades in loop (base drawn on farmTownCanvas)
+let windmillAngle = 0; // updated every frame so blades spin
 const pixelCanvas = document.createElement('canvas');
 pixelCanvas.width = 64;
 pixelCanvas.height = 64;
@@ -459,6 +472,384 @@ function buildForestLayer(seedForForest) {
   });
 
   if (seedForForest != null) rngState = savedRng;
+}
+
+// Farm setting: procedurally generated town on a grid (unique buildings 1 each, house types 2 each). Windmill blades drawn in loop with rotation.
+const FARM_GRID_CELL = 160;
+// Margin so no building intersects the play-area fence (0..FIELD_WIDTH, 0..FIELD_HEIGHT).
+const FARM_FENCE_MARGIN = 4;
+// Summer trees/bushes between buildings: keep clear of fence and buildings.
+const FARM_DECOR_FENCE_MARGIN = 24;
+const FARM_DECOR_BUILDING_MARGIN = 16;
+const FARM_NUM_TREES = 10;
+const FARM_NUM_BUSHES = 14;
+const FARM_OUTER_GRASS_COUNT = 1200; // little grass sprites outside play area for consistency
+const FARM_GARDEN_BED_COLOR = FARM_DIRT; // brown fill for garden beds
+const FARM_GARDEN_BED_MIN_W = 220; // bigger than a house (FARM_GRID_CELL 160)
+const FARM_GARDEN_BED_MIN_H = 200;
+const FARM_NUM_GARDEN_BEDS = 28; // grid-aligned beds; many for significant farmland outside play area
+const FARM_CROP_TILE_SIZE = CROP_CELL * 2; // 32, same scale as other farm sprites
+
+// Cached non-empty crop cells: cropFilled[row][col] (row=plant, col=growth). Built once when sheet is ready.
+let cropFilled = null;
+function getCropFilled(img) {
+  if (cropFilled) return cropFilled;
+  const w = img.naturalWidth || img.width;
+  const h = img.naturalHeight || img.height;
+  const cols = w ? Math.floor(w / CROP_CELL) : 0;
+  const rows = h ? Math.floor(h / CROP_CELL) : 0;
+  if (cols < 1 || rows < 1) return (cropFilled = []);
+  const check = document.createElement('canvas');
+  check.width = CROP_CELL;
+  check.height = CROP_CELL;
+  const cctx = check.getContext('2d');
+  cropFilled = [];
+  for (let r = 0; r < rows; r++) {
+    cropFilled[r] = [];
+    for (let col = 0; col < cols; col++) {
+      cctx.clearRect(0, 0, CROP_CELL, CROP_CELL);
+      cctx.drawImage(img, col * CROP_CELL, r * CROP_CELL, CROP_CELL, CROP_CELL, 0, 0, CROP_CELL, CROP_CELL);
+      const data = cctx.getImageData(0, 0, CROP_CELL, CROP_CELL).data;
+      let hasPixel = false;
+      for (let i = 3; i < data.length; i += 4) {
+        if (data[i] > 0) { hasPixel = true; break; }
+      }
+      cropFilled[r][col] = hasPixel;
+    }
+  }
+  return cropFilled;
+}
+
+function buildFarmTownLayer(seedForFarm) {
+  if (gameState.setting !== 'farm') return;
+  farmWindmills.length = 0;
+  const savedRng = rngState;
+  if (seedForFarm != null) {
+    let h = seedForFarm;
+    for (let i = 0; i < 12; i++) h = (h * 1664525 + 1013904223) % 4294967296;
+    rngState = Math.abs(h);
+  }
+
+  const totalW = FIELD_WIDTH + 2 * FOREST_EXTENT;
+  const totalH = FIELD_HEIGHT + 2 * FOREST_EXTENT;
+  if (!farmTownCanvas || farmTownCanvas.width !== totalW || farmTownCanvas.height !== totalH) {
+    farmTownCanvas = document.createElement('canvas');
+    farmTownCanvas.width = totalW;
+    farmTownCanvas.height = totalH;
+  }
+  const fCtx = farmTownCanvas.getContext('2d');
+  fCtx.imageSmoothingEnabled = false;
+  fCtx.fillStyle = getSettingBgColor();
+  fCtx.fillRect(0, 0, totalW, totalH);
+
+  const toCanvasX = (wx) => wx + FOREST_EXTENT;
+  const toCanvasY = (wy) => wy + FOREST_EXTENT;
+  const scale = FARM_FENCE_SCALE;
+
+  const worldMinX = -FOREST_EXTENT;
+  const worldMinY = -FOREST_EXTENT;
+  // Reject any cell whose building would intersect the play area fence (keep buildings fully outside).
+  const overlapsPlayAreaFence = (wx, wy, drawW, drawH) =>
+    wx + drawW > FARM_FENCE_MARGIN && wx < FIELD_WIDTH - FARM_FENCE_MARGIN &&
+    wy + drawH > FARM_FENCE_MARGIN && wy < FIELD_HEIGHT - FARM_FENCE_MARGIN;
+
+  const cellW = FARM_GRID_CELL;
+  const cellH = FARM_GRID_CELL;
+  const numCols = Math.floor(totalW / cellW);
+  const numRows = Math.floor(totalH / cellH);
+  const validCells = [];
+  for (let gy = 0; gy < numRows; gy++) {
+    for (let gx = 0; gx < numCols; gx++) {
+      const wx = worldMinX + gx * cellW;
+      const wy = worldMinY + gy * cellH;
+      if (!overlapsPlayAreaFence(wx, wy, cellW, cellH)) validCells.push({ wx, wy });
+    }
+  }
+  shuffle(validCells);
+
+  const roster = [
+    'hospital', 'market', 'windmill_base', 'museum', 'barn',
+    'house', 'house', 'house_sun', 'house_sun', 'house_with_fence', 'house_with_fence',
+    'house_brick', 'house_brick', 'cottage', 'cottage'
+  ];
+  const list = [];
+  for (let i = 0; i < roster.length && i < validCells.length; i++) {
+    const spriteName = roster[i];
+    const { wx, wy } = validCells[i];
+    if (spriteName === 'windmill_base') {
+      farmWindmills.push({ wx, wy });
+    }
+    list.push({ spriteName, wx, wy });
+  }
+
+  list.forEach((d) => {
+    const img = farmSprites[d.spriteName];
+    if (!img || !img.complete) return;
+    const iw = (img.naturalWidth || img.width || 64) * scale;
+    const ih = (img.naturalHeight || img.height || 64) * scale;
+    d.type = 'building';
+    d.buildingW = iw;
+    d.buildingH = ih;
+    d.baseY = d.wy + ih;
+  });
+
+  // Summer trees and bushes between buildings (not touching fence or buildings).
+  const summerTrees = SETTING_ASSETS.midsummer_wood.trees;
+  const summerBushes = SETTING_ASSETS.midsummer_wood.bushes;
+  const overlapsFenceForDecor = (wx, wy, drawW, drawH) =>
+    wx + drawW > FARM_DECOR_FENCE_MARGIN && wx < FIELD_WIDTH - FARM_DECOR_FENCE_MARGIN &&
+    wy + drawH > FARM_DECOR_FENCE_MARGIN && wy < FIELD_HEIGHT - FARM_DECOR_FENCE_MARGIN;
+  const buildingRects = list.filter(d => d.type === 'building').map(d => ({
+    left: d.wx - FARM_DECOR_BUILDING_MARGIN,
+    top: d.wy - FARM_DECOR_BUILDING_MARGIN,
+    right: d.wx + d.buildingW + FARM_DECOR_BUILDING_MARGIN,
+    bottom: d.wy + d.buildingH + FARM_DECOR_BUILDING_MARGIN
+  }));
+
+  // Garden beds on the same grid as buildings: pick several grid rectangles (1x1, 2x1, 1x2, 2x2), no overlap with buildings.
+  const usedGrid = new Set();
+  list.filter(d => d.type === 'building').forEach(d => {
+    const gx = Math.round((d.wx - worldMinX) / cellW);
+    const gy = Math.round((d.wy - worldMinY) / cellH);
+    usedGrid.add(`${gx},${gy}`);
+  });
+  const freeGrid = [];
+  for (let gy = 0; gy < numRows; gy++) {
+    for (let gx = 0; gx < numCols; gx++) {
+      const wx = worldMinX + gx * cellW;
+      const wy = worldMinY + gy * cellH;
+      if (overlapsPlayAreaFence(wx, wy, cellW, cellH)) continue;
+      if (usedGrid.has(`${gx},${gy}`)) continue;
+      freeGrid.push({ gx, gy });
+    }
+  }
+  const usedForBed = new Set();
+  const bedRects = [];
+  // Mix of small and large beds so the outer area has substantial farmland.
+  const sizes = [[1, 1], [2, 1], [1, 2], [2, 2], [3, 1], [1, 3], [3, 2], [2, 3], [3, 3], [4, 2], [2, 4], [4, 3], [3, 4]];
+  for (let b = 0; b < FARM_NUM_GARDEN_BEDS && freeGrid.length > 0; b++) {
+    for (let tries = 0; tries < 120; tries++) {
+      const idx = Math.floor(random() * freeGrid.length);
+      const { gx, gy } = freeGrid[idx];
+      if (usedForBed.has(`${gx},${gy}`)) continue;
+      const [sx, sy] = pick(sizes);
+      let ok = true;
+      for (let dy = 0; dy < sy && ok; dy++) {
+        for (let dx = 0; dx < sx && ok; dx++) {
+          const key = `${gx + dx},${gy + dy}`;
+          if (usedForBed.has(key) || usedGrid.has(key)) ok = false;
+        }
+      }
+      if (!ok) continue;
+      for (let dy = 0; dy < sy; dy++) {
+        for (let dx = 0; dx < sx; dx++) usedForBed.add(`${gx + dx},${gy + dy}`);
+      }
+      bedRects.push({ gx, gy, sizeX: sx, sizeY: sy });
+      break;
+    }
+  }
+  bedRects.forEach(b => {
+    const wx = worldMinX + b.gx * cellW;
+    const wy = worldMinY + b.gy * cellH;
+    const bw = b.sizeX * cellW;
+    const bh = b.sizeY * cellH;
+    buildingRects.push({
+      left: wx - FARM_DECOR_BUILDING_MARGIN,
+      top: wy - FARM_DECOR_BUILDING_MARGIN,
+      right: wx + bw + FARM_DECOR_BUILDING_MARGIN,
+      bottom: wy + bh + FARM_DECOR_BUILDING_MARGIN
+    });
+  });
+
+  const overlapsBuilding = (wx, wy, drawW, drawH) =>
+    buildingRects.some(r =>
+      wx + drawW > r.left && wx < r.right && wy + drawH > r.top && wy < r.bottom);
+
+  const worldMaxX = FIELD_WIDTH + FOREST_EXTENT - TREE_DRAW_W;
+  const worldMaxY = FIELD_HEIGHT + FOREST_EXTENT - TREE_DRAW_H;
+  const bushMaxX = FIELD_WIDTH + FOREST_EXTENT - SMALL_DRAW_SIZE;
+  const bushMaxY = FIELD_HEIGHT + FOREST_EXTENT - SMALL_DRAW_SIZE;
+
+  for (let i = 0; i < FARM_NUM_BUSHES && summerBushes.length > 0; i++) {
+    for (let tries = 0; tries < 80; tries++) {
+      const wx = Math.floor(worldMinX + random() * (bushMaxX - worldMinX + 1));
+      const wy = Math.floor(worldMinY + random() * (bushMaxY - worldMinY + 1));
+      if (overlapsFenceForDecor(wx, wy, SMALL_DRAW_SIZE, SMALL_DRAW_SIZE)) continue;
+      if (overlapsBuilding(wx, wy, SMALL_DRAW_SIZE, SMALL_DRAW_SIZE)) continue;
+      list.push({ type: 'bush', wx, wy, spriteName: pick(summerBushes), baseY: wy + SMALL_DRAW_SIZE });
+      break;
+    }
+  }
+  for (let i = 0; i < FARM_NUM_TREES && summerTrees.length > 0; i++) {
+    for (let tries = 0; tries < 80; tries++) {
+      const wx = Math.floor(worldMinX + random() * (worldMaxX - worldMinX + 1));
+      const wy = Math.floor(worldMinY + random() * (worldMaxY - worldMinY + 1));
+      if (overlapsFenceForDecor(wx, wy, TREE_DRAW_W, TREE_DRAW_H)) continue;
+      if (overlapsBuilding(wx, wy, TREE_DRAW_W, TREE_DRAW_H)) continue;
+      list.push({ type: 'tree', wx, wy, spriteName: pick(summerTrees), baseY: wy + TREE_DRAW_H });
+      break;
+    }
+  }
+
+  list.sort((a, b) => (a.baseY || 0) - (b.baseY || 0));
+
+  // Draw little grass sprites in the outer area (same style as play area) so farm looks consistent.
+  const grassTint = getSettingBgColor();
+  const outerGrassW = FIELD_WIDTH + 2 * FOREST_EXTENT;
+  const outerGrassH = FIELD_HEIGHT + 2 * FOREST_EXTENT;
+  const isOutsideFence = (wx, wy) =>
+    wx <= FARM_DECOR_FENCE_MARGIN || wx >= FIELD_WIDTH - FARM_DECOR_FENCE_MARGIN ||
+    wy <= FARM_DECOR_FENCE_MARGIN || wy >= FIELD_HEIGHT - FARM_DECOR_FENCE_MARGIN;
+  let grassPlaced = 0;
+  for (let tries = 0; grassPlaced < FARM_OUTER_GRASS_COUNT && tries < FARM_OUTER_GRASS_COUNT * 3; tries++) {
+    const wx = worldMinX + random() * outerGrassW;
+    const wy = worldMinY + random() * outerGrassH;
+    if (!isOutsideFence(wx, wy)) continue;
+    grassPlaced++;
+    const spriteIndex = Math.floor(random() * 6);
+    const img = grassSprites[spriteIndex];
+    if (!img || !img.complete) continue;
+    const sw = img.width || img.naturalWidth || 32;
+    const sh = img.height || img.naturalHeight || 32;
+    const scale = 2.0 + random() * 1.0;
+    const dx = toCanvasX(wx);
+    const dy = toCanvasY(wy);
+    const dw = Math.floor(sw * scale);
+    const dh = Math.floor(sh * scale);
+    fCtx.drawImage(img, 0, 0, sw, sh, dx, dy, dw, dh);
+    fCtx.save();
+    fCtx.globalCompositeOperation = 'color';
+    fCtx.fillStyle = grassTint;
+    fCtx.globalAlpha = 0.65;
+    fCtx.fillRect(dx, dy, dw, dh);
+    fCtx.restore();
+  }
+
+  // Garden beds (grid-aligned): brown + grass border + flecks + orderly crop rows per bed.
+  const cornerImg = farmSprites.top_left_inner_grass_corner;
+  const edgeImg = farmSprites.top_outer_grass_edge;
+  const haveBorders = cornerImg && edgeImg && cornerImg.complete && edgeImg.complete;
+  const cW = haveBorders ? (cornerImg.naturalWidth || cornerImg.width || 32) * scale : 0;
+  const cH = haveBorders ? (cornerImg.naturalHeight || cornerImg.height || 32) * scale : 0;
+  const eW = haveBorders ? (edgeImg.naturalWidth || edgeImg.width || 32) * scale : 0;
+  const eH = haveBorders ? (edgeImg.naturalHeight || edgeImg.height || 32) * scale : 0;
+  const cornerSrcW = haveBorders ? (cornerImg.naturalWidth || cornerImg.width || 32) : 0;
+  const cornerSrcH = haveBorders ? (cornerImg.naturalHeight || cornerImg.height || 32) : 0;
+  const edgeSrcW = haveBorders ? (edgeImg.naturalWidth || edgeImg.width || 32) : 0;
+  const edgeSrcH = haveBorders ? (edgeImg.naturalHeight || edgeImg.height || 32) : 0;
+  const filled = (cropSheet && cropSheet.complete) ? getCropFilled(cropSheet) : [];
+  const cropRows = filled.length;
+  const cropCols = filled[0] ? filled[0].length : 0;
+
+  const drawOneBed = (wx, wy, bedW, bedH, tilesX, tilesY, plantRow, growthColMin, growthColMax) => {
+    const gx = toCanvasX(wx);
+    const gy = toCanvasY(wy);
+    const innerX = gx + cW;
+    const innerY = gy + cH;
+    const innerW = bedW - 2 * cW;
+    const innerH = bedH - 2 * cH;
+    const soilOverlapX = Math.max(1, Math.floor(Math.max(cW, eH)) - 1);
+    const soilOverlapY = Math.max(1, Math.floor(Math.max(cH, eH)) - 1);
+    fCtx.fillStyle = FARM_GARDEN_BED_COLOR;
+    fCtx.fillRect(innerX - soilOverlapX, innerY - soilOverlapY, innerW + 2 * soilOverlapX, innerH + 2 * soilOverlapY);
+    const soilX = innerX - soilOverlapX;
+    const soilY = innerY - soilOverlapY;
+    const soilW = innerW + 2 * soilOverlapX;
+    const soilH = innerH + 2 * soilOverlapY;
+    const fleckCount = Math.floor((soilW * soilH) / 1800);
+    fCtx.fillStyle = FARM_DIRT_DOTS;
+    for (let i = 0; i < fleckCount; i++) {
+      const sz = random() < 0.8 ? 1 : 2;
+      fCtx.fillRect(Math.floor(soilX + random() * soilW), Math.floor(soilY + random() * soilH), sz, sz);
+    }
+    if (!haveBorders) return;
+    const drawCorner = (x, y, rotDeg) => {
+      let tx = x, ty = y;
+      if (rotDeg === 90) tx += cH;
+      else if (rotDeg === 180) { tx += cW; ty += cH; }
+      else if (rotDeg === 270) ty += cW;
+      fCtx.save();
+      fCtx.translate(tx, ty);
+      fCtx.rotate((rotDeg * Math.PI) / 180);
+      fCtx.drawImage(cornerImg, 0, 0, cornerSrcW, cornerSrcH, 0, 0, cW, cH);
+      fCtx.restore();
+    };
+    const drawEdgeTile = (cx, cy, angle) => {
+      fCtx.save();
+      fCtx.translate(cx, cy);
+      fCtx.rotate(angle);
+      fCtx.drawImage(edgeImg, 0, 0, edgeSrcW, edgeSrcH, -eW / 2, -eH / 2, eW, eH);
+      fCtx.restore();
+    };
+    drawCorner(gx, gy, 0);
+    drawCorner(gx + bedW - cW, gy, 90);
+    drawCorner(gx + bedW - cW, gy + bedH - cH, 180);
+    drawCorner(gx, gy + bedH - cH, 270);
+    for (let i = 0; i < tilesX; i++) drawEdgeTile(innerX + eW / 2 + i * eW, innerY - eH / 2, Math.PI);
+    for (let i = 0; i < tilesX; i++) drawEdgeTile(innerX + eW / 2 + i * eW, innerY + innerH + eH / 2, 0);
+    for (let i = 0; i < tilesY; i++) {
+      const y = innerY + eW / 2 + i * eW;
+      drawEdgeTile(innerX - eH / 2, y, 0.5 * Math.PI);
+      drawEdgeTile(innerX + innerW + eH / 2, y, -0.5 * Math.PI);
+    }
+    // Orderly rows of crops inside the inner rect.
+    if (!cropSheet || !cropSheet.complete || cropRows === 0 || cropCols === 0 || plantRow < 0 || plantRow >= cropRows) return;
+    const numCropsX = Math.floor(innerW / FARM_CROP_TILE_SIZE);
+    const numCropsY = Math.floor(innerH / FARM_CROP_TILE_SIZE);
+    for (let row = 0; row < numCropsY; row++) {
+      for (let col = 0; col < numCropsX; col++) {
+        const colIndex = growthColMin + (growthColMax > growthColMin && random() < 0.4 ? 1 : 0);
+        if (colIndex >= cropCols || !filled[plantRow][colIndex]) continue;
+        const sx = colIndex * CROP_CELL;
+        const sy = plantRow * CROP_CELL;
+        fCtx.drawImage(cropSheet, sx, sy, CROP_CELL, CROP_CELL, innerX + col * FARM_CROP_TILE_SIZE, innerY + row * FARM_CROP_TILE_SIZE, FARM_CROP_TILE_SIZE, FARM_CROP_TILE_SIZE);
+      }
+    }
+  };
+
+  bedRects.forEach(b => {
+    const wx = worldMinX + b.gx * cellW;
+    const wy = worldMinY + b.gy * cellH;
+    const maxW = b.sizeX * cellW;
+    const maxH = b.sizeY * cellH;
+    if (!haveBorders) return;
+    const tilesX = Math.max(1, Math.floor((maxW - 2 * cW) / eW));
+    const tilesY = Math.max(1, Math.floor((maxH - 2 * cH) / eW));
+    const bedW = 2 * cW + tilesX * eW;
+    const bedH = 2 * cH + tilesY * eW;
+    const plantRow = cropRows > 0 ? Math.floor(random() * cropRows) : 0;
+    let growthColMin = 0;
+    let growthColMax = 0;
+    if (cropCols > 0 && filled[plantRow]) {
+      let maxCol = -1;
+      for (let col = 0; col < cropCols; col++) {
+        if (filled[plantRow][col]) maxCol = col;
+      }
+      growthColMax = Math.max(0, maxCol);
+      growthColMin = growthColMax > 0 ? growthColMax - 1 : 0;
+    }
+    drawOneBed(wx, wy, bedW, bedH, tilesX, tilesY, plantRow, growthColMin, growthColMax);
+  });
+
+  list.forEach((d) => {
+    if (d.type === 'building') {
+      const img = farmSprites[d.spriteName];
+      if (!img || !img.complete) return;
+      const iw = img.naturalWidth || img.width || 64;
+      const ih = img.naturalHeight || img.height || 64;
+      fCtx.drawImage(img, 0, 0, iw, ih, toCanvasX(d.wx), toCanvasY(d.wy), iw * scale, ih * scale);
+    } else {
+      const img = settingSprites[d.spriteName];
+      if (!img || !img.complete) return;
+      const iw = img.width || img.naturalWidth || (d.type === 'tree' ? TREE_DRAW_W / DECOR_SPRITE_SCALE : SMALL_DRAW_SIZE / DECOR_SPRITE_SCALE);
+      const ih = img.height || img.naturalHeight || (d.type === 'tree' ? TREE_DRAW_H / DECOR_SPRITE_SCALE : SMALL_DRAW_SIZE / DECOR_SPRITE_SCALE);
+      const drawW = d.type === 'tree' ? TREE_DRAW_W : SMALL_DRAW_SIZE;
+      const drawH = d.type === 'tree' ? TREE_DRAW_H : SMALL_DRAW_SIZE;
+      fCtx.drawImage(img, 0, 0, iw, ih, toCanvasX(d.wx), toCanvasY(d.wy), drawW, drawH);
+    }
+  });
+
+  if (seedForFarm != null) rngState = savedRng;
 }
 
 const PLAY_EDGE_TREE_PX = 100;  // trees in outer 100px of play area
@@ -4162,7 +4553,11 @@ function init() {
   }
 
   buildSettingDecor(seedInfo.seed);
-  buildForestLayer(seedInfo.seed);
+  if (gameState.setting === 'farm') {
+    buildFarmTownLayer(seedInfo.seed);
+  } else {
+    buildForestLayer(seedInfo.seed);
+  }
 
   window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; constrainCamera(); });
 
@@ -4572,7 +4967,11 @@ function init() {
           runSimulation();
           rabbits.forEach(r => hares.push(new Animal(r)));
           buildSettingDecor(seedInfo.seed);
-          buildForestLayer(seedInfo.seed);
+          if (gameState.setting === 'farm') {
+            buildFarmTownLayer(seedInfo.seed);
+          } else {
+            buildForestLayer(seedInfo.seed);
+          }
 
           // Reset transcript UI classes
           const container = document.getElementById('transcript-container');
@@ -5061,13 +5460,14 @@ function loop() {
 
   const isFarm = gameState.setting === 'farm';
 
-  // Draw pre-rendered forest layer (one image, extends beyond play area). Skip for farm — fence is on static layer.
-  if (!isFarm && forestCanvas) {
+  // Draw pre-rendered outer layer (forest or farm town), one image extending beyond play area.
+  const outerCanvas = isFarm ? farmTownCanvas : forestCanvas;
+  if (outerCanvas) {
     const fx = (-FOREST_EXTENT - camera.x) * camera.zoom;
     const fy = (-FOREST_EXTENT - camera.y) * camera.zoom;
-    const fw = forestCanvas.width * camera.zoom;
-    const fh = forestCanvas.height * camera.zoom;
-    ctx.drawImage(forestCanvas, 0, 0, forestCanvas.width, forestCanvas.height, Math.floor(fx), Math.floor(fy), Math.floor(fw), Math.floor(fh));
+    const fw = outerCanvas.width * camera.zoom;
+    const fh = outerCanvas.height * camera.zoom;
+    ctx.drawImage(outerCanvas, 0, 0, outerCanvas.width, outerCanvas.height, Math.floor(fx), Math.floor(fy), Math.floor(fw), Math.floor(fh));
   }
 
   // Draw static layer (grid, grass; for farm includes full field + fence; for forest inset so FOREST_EDGE_OVERLAP shows forest)
@@ -5093,6 +5493,33 @@ function loop() {
         Math.floor(innerW * camera.zoom),
         Math.floor(innerH * camera.zoom)
       );
+    }
+  }
+
+  // Farm: draw windmill blades as sprites (saved at build time), rotating every frame; base is on farmTownCanvas.
+  if (isFarm && farmWindmills.length > 0) {
+    windmillAngle += 0.01; // 1/3 of previous speed
+    if (windmillAngle > Math.PI * 2) windmillAngle -= Math.PI * 2;
+    const baseImg = farmSprites.windmill_base;
+    const bladeImg = farmSprites.windmill_blades;
+    if (baseImg && bladeImg && bladeImg.complete) {
+      const scale = FARM_FENCE_SCALE;
+      const baseW = (baseImg.naturalWidth || baseImg.width) * scale;
+      const baseH = (baseImg.naturalHeight || baseImg.height) * scale;
+      const bladeNatW = Math.max(1, bladeImg.naturalWidth || bladeImg.width);
+      const bladeNatH = Math.max(1, bladeImg.naturalHeight || bladeImg.height);
+      const bw = bladeNatW * scale * camera.zoom;
+      const bh = bladeNatH * scale * camera.zoom;
+      ctx.imageSmoothingEnabled = false;
+      farmWindmills.forEach(({ wx, wy }) => {
+        const cx = (wx + baseW / 2 - camera.x) * camera.zoom;
+        const cy = (wy + baseH / 2 - 10 - camera.y) * camera.zoom; // 10px up on the mill
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(windmillAngle);
+        ctx.drawImage(bladeImg, 0, 0, bladeNatW, bladeNatH, -bw / 2, -bh / 2, bw, bh);
+        ctx.restore();
+      });
     }
   }
 

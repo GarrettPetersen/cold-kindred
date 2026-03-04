@@ -614,10 +614,24 @@ function drawFarmFence(sCtx) {
     sCtx.drawImage(topFence, 0, 0, tw, th, x, 0, tileW, tileH);
     x += tileW;
   }
-  sCtx.drawImage(tr, 0, 0, trW, trH, FIELD_WIDTH - trW2, 0, trW2, trH2);
+  // Right corner at natural size; only stretch its left-edge strip to bridge any gap to the fence
+  const topRightX = FIELD_WIDTH - trW2;
+  const topGapW = topRightX - x;
+  const EDGE_STRIP_SRC = 2; // source pixels to stretch (only the edge), not the whole sprite
+  if (topGapW > 0) {
+    sCtx.drawImage(tr, 0, 0, EDGE_STRIP_SRC, trH, x, 0, topGapW, trH2);
+  }
+  sCtx.drawImage(tr, 0, 0, trW, trH, topRightX, 0, trW2, trH2);
 
   // Bottom row
   const bottomY = FIELD_HEIGHT - blH2;
+  // Bottom-left corner: stretch only its top-edge strip to meet the left side fence above
+  const leftSideTiles = Math.floor((FIELD_HEIGHT - blH2 - tlH2) / sh2);
+  const leftSideEndY = tlH2 + leftSideTiles * sh2;
+  const leftGapH = bottomY - leftSideEndY;
+  if (leftGapH > 0) {
+    sCtx.drawImage(bl, 0, 0, blW, EDGE_STRIP_SRC, 0, leftSideEndY, blW2, leftGapH);
+  }
   sCtx.drawImage(bl, 0, 0, blW, blH, 0, bottomY, blW2, blH2);
   x = blW2;
   for (let i = 0; i < numTopSegments; i++) {
@@ -638,7 +652,19 @@ function drawFarmFence(sCtx) {
     sCtx.drawImage(topFence, 0, 0, tw, th, x, bottomY, tileW, tileH);
     x += tileW;
   }
-  sCtx.drawImage(br, 0, 0, brW, brH, FIELD_WIDTH - brW2, bottomY, brW2, brH2);
+  // Bottom-right corner at natural size; only stretch edge strips to bridge gaps (left edge horizontally, top edge vertically)
+  const rightSideTiles = Math.floor((FIELD_HEIGHT - brH2 - trH2) / sh2);
+  const rightSideEndY = trH2 + rightSideTiles * sh2;
+  const bottomRightX = FIELD_WIDTH - brW2;
+  const bottomGapW = bottomRightX - x;
+  const bottomGapH = (FIELD_HEIGHT - brH2) - rightSideEndY;
+  if (bottomGapW > 0) {
+    sCtx.drawImage(br, 0, 0, EDGE_STRIP_SRC, brH, x, bottomY, bottomGapW, brH2);
+  }
+  if (bottomGapH > 0) {
+    sCtx.drawImage(br, 0, 0, brW, EDGE_STRIP_SRC, bottomRightX, rightSideEndY, brW2, bottomGapH);
+  }
+  sCtx.drawImage(br, 0, 0, brW, brH, bottomRightX, bottomY, brW2, brH2);
 
   // Left side: vertical tiles from below top-left corner to above bottom-left corner
   const leftX = 0;

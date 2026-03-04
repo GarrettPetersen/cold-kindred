@@ -5089,6 +5089,19 @@ function init() {
             localStorage.removeItem('mysteryFarm_consent');
             localStorage.removeItem('mysteryFarm_detective');
             location.reload(true);
+          } else if (c === "setting" || c === "settings") {
+            const idx = SETTINGS.indexOf(gameState.setting);
+            const nextIdx = (idx + 1) % SETTINGS.length;
+            gameState.setting = SETTINGS[nextIdx];
+            const seedInfo = getDailySeed(gameState.caseIndex);
+            buildSettingDecor(seedInfo.seed);
+            if (gameState.setting === 'farm') {
+              buildFarmTownLayer(seedInfo.seed);
+            } else {
+              buildForestLayer(seedInfo.seed);
+            }
+            renderStaticLayer();
+            notifications.push({ text: `SETTING: ${gameState.setting}`, x: canvas.width / 2, y: canvas.height / 2, timer: 120, timerMax: 120, color: '#44ff44' });
           }
         }
         cheatInput.value = '';
@@ -5286,6 +5299,23 @@ function init() {
       saveStats(stats);
       notifications.push({ text: `TOTAL WINS: ${stats.lifetimeWins} (+25)`, x: canvas.width / 2, y: canvas.height / 2, timer: 120, timerMax: 120, color: '#44ff44' });
       updateUI();
+      cheatBuffer = "";
+    }
+
+    // "setting" - Cycle environment (farm / forest themes) and re-generate
+    if (cheatBuffer.endsWith("setting")) {
+      const idx = SETTINGS.indexOf(gameState.setting);
+      const nextIdx = (idx + 1) % SETTINGS.length;
+      gameState.setting = SETTINGS[nextIdx];
+      const seedInfo = getDailySeed(gameState.caseIndex);
+      buildSettingDecor(seedInfo.seed);
+      if (gameState.setting === 'farm') {
+        buildFarmTownLayer(seedInfo.seed);
+      } else {
+        buildForestLayer(seedInfo.seed);
+      }
+      renderStaticLayer();
+      notifications.push({ text: `SETTING: ${gameState.setting}`, x: canvas.width / 2, y: canvas.height / 2, timer: 120, timerMax: 120, color: '#44ff44' });
       cheatBuffer = "";
     }
   });

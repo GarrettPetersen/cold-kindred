@@ -380,9 +380,11 @@ const pCtx = pixelCanvas.getContext('2d');
 const WALKABLE_MARGIN = 200;
 const TREE_DRAW_W = 64;
 const TREE_DRAW_H = 96;
-// Tree source is 48px tall; visual base (where trunk meets ground) is 32px from top, rest is shadow → 64px at draw scale
-const TREE_BASE_OFFSET = 64;
-const SMALL_DRAW_SIZE = 64;
+// Tree visual base (where trunk meets ground) for depth ordering: 32px from top of sprite (shadow below).
+const TREE_DEPTH_BASE_PX = 32;
+const SMALL_DRAW_SIZE = 64; // used for forest/farm outer layer placement
+// Bush/small in play area are 16×16 source, drawn at 2x = 32px; use this for their depth base (bottom).
+const BUSH_SMALL_DRAWN_H = 32;
 // Same as animals: source sprites at 32px scale, drawn at 2x (64px) to match FRAME_SIZE * 2
 const DECOR_SPRITE_SCALE = 2;
 
@@ -887,7 +889,7 @@ function buildSettingDecor(seedForDecor) {
       x = Math.floor(random() * (FIELD_WIDTH - TREE_DRAW_W));
       y = FIELD_HEIGHT - TREE_DRAW_H - Math.floor(random() * Math.min(PLAY_EDGE_TREE_PX, FIELD_HEIGHT - TREE_DRAW_H));
     }
-    settingDecor.push({ type: 'tree', x, y, spriteName: pick(treeList), baseY: y + TREE_BASE_OFFSET });
+    settingDecor.push({ type: 'tree', x, y, spriteName: pick(treeList), baseY: y + TREE_DEPTH_BASE_PX });
   };
   const placeEdgeBush = () => {
     const side = Math.floor(random() * 4);
@@ -905,7 +907,7 @@ function buildSettingDecor(seedForDecor) {
       x = Math.floor(random() * (FIELD_WIDTH - SMALL_DRAW_SIZE));
       y = FIELD_HEIGHT - SMALL_DRAW_SIZE - Math.floor(random() * Math.min(PLAY_EDGE_BUSH_PX, FIELD_HEIGHT - SMALL_DRAW_SIZE));
     }
-    settingDecor.push({ type: 'bush', x, y, spriteName: pick(bushList), baseY: y + SMALL_DRAW_SIZE });
+    settingDecor.push({ type: 'bush', x, y, spriteName: pick(bushList), baseY: y + BUSH_SMALL_DRAWN_H });
   };
 
   const numEdgeTrees = 100;
@@ -921,7 +923,7 @@ function buildSettingDecor(seedForDecor) {
   for (let i = 0; i < numSmall && smallOnly.length > 0; i++) {
     const x = Math.floor(innerMinX + random() * (innerMaxX - innerMinX));
     const y = Math.floor(innerMinY + random() * (innerMaxY - innerMinY));
-    settingDecor.push({ type: 'small', x, y, spriteName: pick(smallOnly), baseY: y + SMALL_DRAW_SIZE });
+    settingDecor.push({ type: 'small', x, y, spriteName: pick(smallOnly), baseY: y + BUSH_SMALL_DRAWN_H });
   }
 
   // Sort by base (bottom of sprite) so draw order = depth; tie-break by type so order is deterministic
@@ -5676,7 +5678,7 @@ function loop() {
 
   hares.forEach(h => h.update());
 
-  // Pass 1: Draw sprites and play-area decor sorted by base Y (depth order). Forest is already a single pre-rendered image.
+  // Pass 1: Draw sprites and play-area decor sorted by base Y (depth order). Use ground contact for depth: plants = bottom/trunk, animals = feet (bottom of sprite). Interleave before sort to avoid grouping on ties.
   const animalDrawables = hares.map(h => ({ baseY: h.y + 64, draw: () => h.drawSprite() }));
   const decorDrawables = settingDecor.map(d => {
     return {
@@ -5696,7 +5698,12 @@ function loop() {
       }
     };
   });
-  [...animalDrawables, ...decorDrawables].sort((a, b) => b.baseY - a.baseY).forEach(o => o.draw());
+  const interleaved = [];
+  for (let i = 0; i < Math.max(animalDrawables.length, decorDrawables.length); i++) {
+    if (i < animalDrawables.length) interleaved.push(animalDrawables[i]);
+    if (i < decorDrawables.length) interleaved.push(decorDrawables[i]);
+  }
+  interleaved.sort((a, b) => a.baseY - b.baseY).forEach(o => o.draw());
 
   // Pass 2: Draw labels sorted by X ascending (so rightmost labels sit on top)
   // This ensures that the start of every name remains visible even if overlapped.

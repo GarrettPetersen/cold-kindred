@@ -39,14 +39,15 @@ function getDailySeed(caseIdx = 0) {
   return { seed: Math.abs(hash), dateStr, caseIdx };
 }
 
-// Setting (environment/theme) for the mystery. Each uses forest sprites in a botanically coherent way.
-const SETTINGS = ['blossom_grove', 'midsummer_wood', 'harvest_wood', 'frost_wood'];
+// Setting (environment/theme) for the mystery. Each uses forest sprites in a botanically coherent way (farm uses fence/grass).
+const SETTINGS = ['farm', 'blossom_grove', 'midsummer_wood', 'harvest_wood', 'frost_wood'];
 function getSettingForMystery(seedInfo) {
-  return SETTINGS[seedInfo.seed % SETTINGS.length];
+  return 'farm'; // TODO: rotate with forests — SETTINGS[seedInfo.seed % SETTINGS.length]
 }
 
 // Setting-specific intro/location text (replaces "clover field" / "clover patch")
 const SETTING_LOCATION = {
+  farm: { field: 'farm', patch: 'pasture' },
   blossom_grove: { field: 'orchard', patch: 'prime blossom patch' },
   midsummer_wood: { field: 'meadow', patch: 'sunny clover patch' },
   harvest_wood: { field: 'harvest field', patch: 'best hay patch' },
@@ -61,19 +62,23 @@ function getSettingPatch() {
   return s ? s.patch : 'clover patch';
 }
 
-// Setting-specific background (grass) colour
+// Setting-specific background (grass) colour. Farm also uses FARM_DIRT and FARM_DIRT_DOTS for texture later.
 const SETTING_BG = {
+  farm: '#83924c',
   blossom_grove: '#4d9e4d',
   midsummer_wood: '#3e8948',
   harvest_wood: '#6b8e23',
   frost_wood: '#4a5c3a'
 };
+const FARM_DIRT = '#a8794d';
+const FARM_DIRT_DOTS = '#b58950';
 function getSettingBgColor() {
   return (gameState.setting && SETTING_BG[gameState.setting]) || '#3e8948';
 }
 
-// Asset lists per setting (trees/bushes = 32×48, small = 16×16 in source). All drawn at 64px to match animals.
+// Asset lists per setting (trees/bushes = 32×48, small = 16×16 in source). Farm uses fence sprites only, no trees/bushes/small.
 const SETTING_ASSETS = {
+  farm: { trees: [], bushes: [], small: [] },
   blossom_grove: {
     trees: ['cherry_blossom_tree', 'apple_tree', 'plum_tree', 'pear_tree'],
     bushes: ['raspberry_bush', 'hydrangea', 'daphne_odora', 'camelia', 'azalea'],
@@ -99,7 +104,10 @@ const SETTING_ASSETS = {
 const settingSprites = {};
 const SETTING_SPRITE_NAMES = [...new Set(
   Object.values(SETTING_ASSETS).flatMap(s => [...s.trees, ...s.bushes, ...s.small])
-)];
+)].filter(Boolean);
+
+const FARM_SPRITE_NAMES = ['top_fence', 'side_fence', 'gate', 'top_left_corner_fence', 'top_right_corner_fence', 'bottom_left_fence', 'bottom_right_fence'];
+const farmSprites = {};
 
 let { seed, dateStr: currentDateStr, caseIdx: currentCaseIdx } = getDailySeed(0);
 let rngState = seed;
@@ -188,7 +196,7 @@ const detectiveSprites = {
 };
 
 let assetsLoaded = 0;
-const TOTAL_ASSETS = SPECIES.length * 4 + 6 + 15 + 1 + SETTING_SPRITE_NAMES.length; // +1 font, +setting sprites
+const TOTAL_ASSETS = SPECIES.length * 4 + 6 + 15 + 1 + SETTING_SPRITE_NAMES.length + FARM_SPRITE_NAMES.length; // +1 font, +setting sprites, +farm fence
 
 function onAssetLoad() { 
   assetsLoaded++;
@@ -274,6 +282,15 @@ SETTING_SPRITE_NAMES.forEach(name => {
   img.onerror = onAssetLoad;
   img.src = `/assets/environment/forest/sprites/${name}.png`;
   settingSprites[name] = img;
+});
+
+// Farm fence sprites
+FARM_SPRITE_NAMES.forEach(name => {
+  const img = new Image();
+  img.onload = onAssetLoad;
+  img.onerror = onAssetLoad;
+  img.src = `/assets/environment/farm/${name}.png`;
+  farmSprites[name] = img;
 });
 
 // --- Ranks ---
@@ -524,6 +541,121 @@ function buildSettingDecor(seedForDecor) {
   if (seedForDecor != null) rngState = savedRng;
 }
 
+// Farm fence uses same pixel scale as animals (2x): source sprites drawn at 2x size.
+const FARM_FENCE_SCALE = 2;
+
+function drawFarmFence(sCtx) {
+  const tl = farmSprites.top_left_corner_fence;
+  const tr = farmSprites.top_right_corner_fence;
+  const bl = farmSprites.bottom_left_fence;
+  const br = farmSprites.bottom_right_fence;
+  const topFence = farmSprites.top_fence;
+  const sideFence = farmSprites.side_fence;
+  const gate = farmSprites.gate;
+  if (!tl || !tr || !bl || !br || !topFence || !sideFence || !gate ||
+      !tl.complete || !tr.complete || !bl.complete || !br.complete ||
+      !topFence.complete || !sideFence.complete || !gate.complete) return;
+
+  const scale = FARM_FENCE_SCALE;
+  const tw = topFence.naturalWidth || topFence.width;
+  const th = topFence.naturalHeight || topFence.height;
+  const sw = sideFence.naturalWidth || sideFence.width;
+  const sh = sideFence.naturalHeight || sideFence.height;
+  const tlW = tl.naturalWidth || tl.width;
+  const tlH = tl.naturalHeight || tl.height;
+  const trW = tr.naturalWidth || tr.width;
+  const trH = tr.naturalHeight || tr.height;
+  const blW = bl.naturalWidth || bl.width;
+  const blH = bl.naturalHeight || bl.height;
+  const brW = br.naturalWidth || br.width;
+  const brH = br.naturalHeight || br.height;
+
+  const tileW = tw * scale;
+  const tileH = th * scale;
+  const gateW = tw * 4 * scale;
+  const gateH = th * scale;
+  const tlW2 = tlW * scale, tlH2 = tlH * scale;
+  const trW2 = trW * scale, trH2 = trH * scale;
+  const blW2 = blW * scale, blH2 = blH * scale;
+  const brW2 = brW * scale, brH2 = brH * scale;
+  const sw2 = sw * scale, sh2 = sh * scale;
+
+  const topSegmentSpan = FIELD_WIDTH - tlW2 - trW2;
+  const numTopSegments = Math.floor(topSegmentSpan / tileW);
+  if (numTopSegments < 8) return;
+
+  sCtx.imageSmoothingEnabled = false;
+
+  const gw = gate.naturalWidth || gate.width;
+  const gh = gate.naturalHeight || gate.height;
+
+  // Top row: left corner, then segments (fence / gate), then right corner. Two gates, each replacing 4 fence tiles.
+  sCtx.drawImage(tl, 0, 0, tlW, tlH, 0, 0, tlW2, tlH2);
+  let x = tlW2;
+  const gate1Start = 1;
+  const gate1End = 5;
+  const gate2Start = numTopSegments - 5;
+  const gate2End = numTopSegments - 1;
+  for (let i = 0; i < numTopSegments; i++) {
+    if (i >= gate1Start && i < gate1End) {
+      if (i === gate1Start) {
+        sCtx.drawImage(gate, 0, 0, gw, gh, x, 0, gateW, gateH);
+        x += gateW;
+      }
+      continue;
+    }
+    if (i >= gate2Start && i < gate2End) {
+      if (i === gate2Start) {
+        sCtx.drawImage(gate, 0, 0, gw, gh, x, 0, gateW, gateH);
+        x += gateW;
+      }
+      continue;
+    }
+    sCtx.drawImage(topFence, 0, 0, tw, th, x, 0, tileW, tileH);
+    x += tileW;
+  }
+  sCtx.drawImage(tr, 0, 0, trW, trH, FIELD_WIDTH - trW2, 0, trW2, trH2);
+
+  // Bottom row
+  const bottomY = FIELD_HEIGHT - blH2;
+  sCtx.drawImage(bl, 0, 0, blW, blH, 0, bottomY, blW2, blH2);
+  x = blW2;
+  for (let i = 0; i < numTopSegments; i++) {
+    if (i >= gate1Start && i < gate1End) {
+      if (i === gate1Start) {
+        sCtx.drawImage(gate, 0, 0, gw, gh, x, bottomY, gateW, gateH);
+        x += gateW;
+      }
+      continue;
+    }
+    if (i >= gate2Start && i < gate2End) {
+      if (i === gate2Start) {
+        sCtx.drawImage(gate, 0, 0, gw, gh, x, bottomY, gateW, gateH);
+        x += gateW;
+      }
+      continue;
+    }
+    sCtx.drawImage(topFence, 0, 0, tw, th, x, bottomY, tileW, tileH);
+    x += tileW;
+  }
+  sCtx.drawImage(br, 0, 0, brW, brH, FIELD_WIDTH - brW2, bottomY, brW2, brH2);
+
+  // Left side: vertical tiles from below top-left corner to above bottom-left corner
+  const leftX = 0;
+  let y = tlH2;
+  while (y + sh2 <= FIELD_HEIGHT - blH2) {
+    sCtx.drawImage(sideFence, 0, 0, sw, sh, leftX, y, sw2, sh2);
+    y += sh2;
+  }
+  // Right side
+  const rightX = FIELD_WIDTH - sw2;
+  y = trH2;
+  while (y + sh2 <= FIELD_HEIGHT - brH2) {
+    sCtx.drawImage(sideFence, 0, 0, sw, sh, rightX, y, sw2, sh2);
+    y += sh2;
+  }
+}
+
 function renderStaticLayer() {
   if (!staticCanvas) {
     staticCanvas = document.createElement('canvas');
@@ -533,6 +665,14 @@ function renderStaticLayer() {
   const sCtx = staticCanvas.getContext('2d');
   sCtx.imageSmoothingEnabled = false;
   sCtx.clearRect(0, 0, FIELD_WIDTH, FIELD_HEIGHT);
+
+  const grassTint = getSettingBgColor();
+  const isFarm = gameState.setting === 'farm';
+
+  if (isFarm) {
+    sCtx.fillStyle = grassTint;
+    sCtx.fillRect(0, 0, FIELD_WIDTH, FIELD_HEIGHT);
+  }
 
   // Draw world grid
   sCtx.strokeStyle = 'rgba(255,255,255,0.05)';
@@ -545,7 +685,6 @@ function renderStaticLayer() {
   }
 
   // Draw grass sprites, palette-swapped to match setting grass colour (keeps luminosity, applies hue)
-  const grassTint = getSettingBgColor();
   envDetails.forEach(d => {
     const img = grassSprites[d.spriteIndex];
     if (!img || !img.complete) return;
@@ -563,6 +702,8 @@ function renderStaticLayer() {
     sCtx.fillRect(dx, dy, dw, dh);
     sCtx.restore();
   });
+
+  if (isFarm) drawFarmFence(sCtx);
 }
 
 let gameState = {
@@ -4892,8 +5033,10 @@ function loop() {
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.imageSmoothingEnabled = false;
 
-  // Draw pre-rendered forest layer (one image, extends beyond play area; animals stop at boundary because of the forest)
-  if (forestCanvas) {
+  const isFarm = gameState.setting === 'farm';
+
+  // Draw pre-rendered forest layer (one image, extends beyond play area). Skip for farm — fence is on static layer.
+  if (!isFarm && forestCanvas) {
     const fx = (-FOREST_EXTENT - camera.x) * camera.zoom;
     const fy = (-FOREST_EXTENT - camera.y) * camera.zoom;
     const fw = forestCanvas.width * camera.zoom;
@@ -4901,19 +5044,30 @@ function loop() {
     ctx.drawImage(forestCanvas, 0, 0, forestCanvas.width, forestCanvas.height, Math.floor(fx), Math.floor(fy), Math.floor(fw), Math.floor(fh));
   }
 
-  // Draw static layer (grid, grass) inset so outer FOREST_EDGE_OVERLAP shows forest and no gap
+  // Draw static layer (grid, grass; for farm includes full field + fence; for forest inset so FOREST_EDGE_OVERLAP shows forest)
   if (staticCanvas) {
-    const overlap = FOREST_EDGE_OVERLAP;
-    const innerW = FIELD_WIDTH - 2 * overlap;
-    const innerH = FIELD_HEIGHT - 2 * overlap;
-    ctx.drawImage(
-      staticCanvas,
-      overlap, overlap, innerW, innerH,
-      Math.floor((-camera.x + overlap) * camera.zoom),
-      Math.floor((-camera.y + overlap) * camera.zoom),
-      Math.floor(innerW * camera.zoom),
-      Math.floor(innerH * camera.zoom)
-    );
+    if (isFarm) {
+      ctx.drawImage(
+        staticCanvas,
+        0, 0, FIELD_WIDTH, FIELD_HEIGHT,
+        Math.floor(-camera.x * camera.zoom),
+        Math.floor(-camera.y * camera.zoom),
+        Math.floor(FIELD_WIDTH * camera.zoom),
+        Math.floor(FIELD_HEIGHT * camera.zoom)
+      );
+    } else {
+      const overlap = FOREST_EDGE_OVERLAP;
+      const innerW = FIELD_WIDTH - 2 * overlap;
+      const innerH = FIELD_HEIGHT - 2 * overlap;
+      ctx.drawImage(
+        staticCanvas,
+        overlap, overlap, innerW, innerH,
+        Math.floor((-camera.x + overlap) * camera.zoom),
+        Math.floor((-camera.y + overlap) * camera.zoom),
+        Math.floor(innerW * camera.zoom),
+        Math.floor(innerH * camera.zoom)
+      );
+    }
   }
 
   ctx.save(); 
